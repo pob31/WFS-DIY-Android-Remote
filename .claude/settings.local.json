@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Read(//d/downloads/**)"
+      "Read(//d/downloads/**)",
+      "Bash(./gradlew compileDebugKotlin:*)",
+      "Bash(git restore:*)"
     ],
     "deny": [],
     "ask": []

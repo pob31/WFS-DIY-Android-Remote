@@ -71,15 +71,21 @@ fun InputParametersTab(
     val screenHeightDp = configuration.screenHeightDp.dp
     val screenDensity = density.density
 
+    // Use physical screen size to detect phone vs tablet
+    val physicalWidthInches = screenWidthDp.value / 160f
+    val physicalHeightInches = screenHeightDp.value / 160f
+    val diagonalInches = sqrt(physicalWidthInches * physicalWidthInches + physicalHeightInches * physicalHeightInches)
+    val isPhone = diagonalInches < 6.0f
+
     // Get responsive text sizes and spacing
     val textSizes = getResponsiveTextSizes()
     val spacing = getResponsiveSpacing()
 
-    // Responsive slider dimensions
+    // Responsive slider dimensions - smaller on phones
     val horizontalSliderWidth = (screenWidthDp * 0.8f).coerceAtLeast(200.dp)
-    val horizontalSliderHeight = (40.dp * screenDensity).coerceIn(30.dp, 60.dp)
-    val verticalSliderWidth = (40.dp * screenDensity).coerceIn(30.dp, 60.dp)
-    val verticalSliderHeight = (150.dp * screenDensity).coerceIn(120.dp, 250.dp)
+    val horizontalSliderHeight = if (isPhone) 35.dp else (40.dp * screenDensity).coerceIn(30.dp, 60.dp)
+    val verticalSliderWidth = if (isPhone) 35.dp else (40.dp * screenDensity).coerceIn(30.dp, 60.dp)
+    val verticalSliderHeight = if (isPhone) 120.dp else (150.dp * screenDensity).coerceIn(120.dp, 250.dp)
 
     // State for showing grid overlay
     var showGridOverlay by remember { mutableStateOf(false) }
@@ -125,17 +131,17 @@ fun InputParametersTab(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(
-                            start = screenWidthDp * 0.1f,
-                            end = screenWidthDp * 0.1f,
+                            start = if (isPhone) screenWidthDp * 0.05f else screenWidthDp * 0.1f,
+                            end = if (isPhone) screenWidthDp * 0.05f else screenWidthDp * 0.1f,
                             bottom = spacing.largeSpacing
                         )
                 ) {
-                    // Row: Input Channel selector (30%) and Input Name (60%)
+                    // Row: Input Channel selector and Input Name
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(spacing.smallSpacing)
                     ) {
-                        // Input Channel Selector - 30%
+                        // Input Channel Selector
                         InputChannelSelector(
                             selectedInputId = inputParametersState.selectedInputId,
                             maxInputs = numberOfInputs,
@@ -144,10 +150,10 @@ fun InputParametersTab(
                                 viewModel.requestInputParameters(inputId)
                             },
                             onOpenSelector = { showGridOverlay = true },
-                            modifier = Modifier.weight(0.3f)
+                            modifier = Modifier.weight(if (isPhone) 0.25f else 0.3f)
                         )
 
-                        // Input Name - 60%
+                        // Input Name
                         ParameterTextBox(
                             label = "Input Name",
                             value = inputNameValue,
@@ -162,8 +168,8 @@ fun InputParametersTab(
                                 ))
                                 viewModel.sendInputParameterString("/remoteInput/inputName", inputId, committedValue)
                             },
-                            height = 56.dp,
-                            modifier = Modifier.weight(0.6f)
+                            height = if (isPhone) 44.dp else 56.dp,
+                            modifier = Modifier.weight(if (isPhone) 0.75f else 0.6f)
                         )
                     }
                 }
@@ -186,7 +192,8 @@ fun InputParametersTab(
             verticalSliderWidth = verticalSliderWidth,
             verticalSliderHeight = verticalSliderHeight,
             spacing = spacing,
-            screenWidthDp = screenWidthDp
+            screenWidthDp = screenWidthDp,
+            isPhone = isPhone
         )
         
         // Directivity Group (now has its own collapsible header)
@@ -363,7 +370,8 @@ private fun RenderInputSection(
     verticalSliderWidth: androidx.compose.ui.unit.Dp,
     verticalSliderHeight: androidx.compose.ui.unit.Dp,
     spacing: ResponsiveSpacing,
-    screenWidthDp: androidx.compose.ui.unit.Dp
+    screenWidthDp: androidx.compose.ui.unit.Dp,
+    isPhone: Boolean
 ) {
     val inputId by rememberUpdatedState(selectedChannel.inputId)
 
@@ -411,14 +419,18 @@ private fun RenderInputSection(
         clusterIndex = cluster.normalizedValue.roundToInt().coerceIn(0, 10)
     }
 
-    // Top Row with 10% padding: Attenuation | Delay | Minimal Latency | Cluster
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = screenWidthDp * 0.1f, end = screenWidthDp * 0.1f),
-        horizontalArrangement = Arrangement.spacedBy(spacing.smallSpacing),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    // Top Row: Attenuation | Delay | Minimal Latency | Cluster
+    // On phones: split into two rows
+    // On tablets: keep as single row
+    if (isPhone) {
+        // Phone: Row 1 - Attenuation & Delay
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = screenWidthDp * 0.05f, end = screenWidthDp * 0.05f),
+            horizontalArrangement = Arrangement.spacedBy(spacing.smallSpacing),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
         // Attenuation
         Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Attenuation", fontSize = 12.sp, color = Color.White)
@@ -505,9 +517,18 @@ private fun RenderInputSection(
                 valueTextColor = Color.White
             )
         }
+        }
 
-        // Minimal Latency
-        Column(modifier = Modifier.weight(1f)) {
+        // Phone: Row 2 - Minimal Latency & Cluster
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = screenWidthDp * 0.05f, end = screenWidthDp * 0.05f),
+            horizontalArrangement = Arrangement.spacedBy(spacing.smallSpacing),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Minimal Latency
+            Column(modifier = Modifier.weight(1f)) {
             ParameterTextButton(
                 label = "Minimal Latency",
                 selectedIndex = minLatencyIndex,
@@ -546,6 +567,144 @@ private fun RenderInputSection(
                 modifier = Modifier.fillMaxWidth()
             )
         }
+        }
+    } else {
+        // Tablet: Single row with all four controls
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = screenWidthDp * 0.1f, end = screenWidthDp * 0.1f),
+            horizontalArrangement = Arrangement.spacedBy(spacing.smallSpacing),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Attenuation
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Attenuation", fontSize = 12.sp, color = Color.White)
+                StandardSlider(
+                    value = attenuationValue,
+                    onValueChange = { newValue ->
+                        attenuationValue = newValue
+                        val definition = InputParameterDefinitions.parametersByVariableName["attenuation"]!!
+                        val actualValue = InputParameterDefinitions.applyFormula(definition, newValue)
+                        attenuationDisplayValue = String.format(Locale.US, "%.2f", actualValue)
+                        selectedChannel.setParameter("attenuation", InputParameterValue(
+                            normalizedValue = newValue,
+                            stringValue = "",
+                            displayValue = "${String.format(Locale.US, "%.2f", actualValue)}dB"
+                        ))
+                        viewModel.sendInputParameterFloat("/remoteInput/attenuation", inputId, actualValue)
+                    },
+                    modifier = Modifier.width(horizontalSliderWidth).height(horizontalSliderHeight),
+                    sliderColor = getRowColor(0),
+                    trackBackgroundColor = getRowColorLight(0),
+                    orientation = SliderOrientation.HORIZONTAL,
+                    displayedValue = attenuationDisplayValue,
+                    isValueEditable = true,
+                    onDisplayedValueChange = { /* Typing handled internally */ },
+                    onValueCommit = { committedValue ->
+                        committedValue.toFloatOrNull()?.let { value ->
+                            val definition = InputParameterDefinitions.parametersByVariableName["attenuation"]!!
+                            val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
+                            val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
+                            attenuationValue = normalized
+                            attenuationDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
+                            selectedChannel.setParameter("attenuation", InputParameterValue(
+                                normalizedValue = normalized,
+                                stringValue = "",
+                                displayValue = "${String.format(Locale.US, "%.2f", coercedValue)}dB"
+                            ))
+                            viewModel.sendInputParameterFloat("/remoteInput/attenuation", inputId, coercedValue)
+                        }
+                    },
+                    valueUnit = "dB",
+                    valueTextColor = Color.White
+                )
+            }
+
+            // Delay/Latency
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Latency compensation / Delay", fontSize = 12.sp, color = Color.White)
+                BidirectionalSlider(
+                    value = delayLatencyValue,
+                    onValueChange = { newValue ->
+                        delayLatencyValue = newValue
+                        delayLatencyDisplayValue = String.format(Locale.US, "%.2f", newValue)
+                        val normalized = (newValue + 100f) / 200f
+                        selectedChannel.setParameter("delayLatency", InputParameterValue(
+                            normalizedValue = normalized,
+                            stringValue = "",
+                            displayValue = "${String.format(Locale.US, "%.2f", newValue)}ms"
+                        ))
+                        viewModel.sendInputParameterFloat("/remoteInput/delayLatency", inputId, newValue)
+                    },
+                    modifier = Modifier.width(horizontalSliderWidth).height(horizontalSliderHeight),
+                    sliderColor = getRowColor(0),
+                    trackBackgroundColor = getRowColorLight(0),
+                    orientation = SliderOrientation.HORIZONTAL,
+                    valueRange = -100f..100f,
+                    displayedValue = delayLatencyDisplayValue,
+                    isValueEditable = true,
+                    onDisplayedValueChange = { /* Typing handled internally */ },
+                    onValueCommit = { committedValue ->
+                        committedValue.toFloatOrNull()?.let { value ->
+                            val coercedValue = value.coerceIn(-100f, 100f)
+                            delayLatencyValue = coercedValue
+                            delayLatencyDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
+                            val normalized = (coercedValue + 100f) / 200f
+                            selectedChannel.setParameter("delayLatency", InputParameterValue(
+                                normalizedValue = normalized,
+                                stringValue = "",
+                                displayValue = "${String.format(Locale.US, "%.2f", coercedValue)}ms"
+                            ))
+                            viewModel.sendInputParameterFloat("/remoteInput/delayLatency", inputId, coercedValue)
+                        }
+                    },
+                    valueUnit = "ms",
+                    valueTextColor = Color.White
+                )
+            }
+
+            // Minimal Latency
+            Column(modifier = Modifier.weight(1f)) {
+                ParameterTextButton(
+                    label = "Minimal Latency",
+                    selectedIndex = minLatencyIndex,
+                    options = listOf("Acoustic Precedence", "Minimal Latency"),
+                    onSelectionChange = { index ->
+                        minLatencyIndex = index
+                        selectedChannel.setParameter("minimalLatency", InputParameterValue(
+                            normalizedValue = index.toFloat(),
+                            stringValue = "",
+                            displayValue = listOf("Acoustic Precedence", "Minimal Latency")[index]
+                        ))
+                        viewModel.sendInputParameterInt("/remoteInput/minimalLatency", inputId, index)
+                    },
+                    activeColor = getRowColorActive(0),
+                    inactiveColor = getRowColorLight(0),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // Cluster
+            Column(modifier = Modifier.weight(1f)) {
+                ParameterDropdown(
+                    label = "Cluster",
+                    selectedIndex = clusterIndex,
+                    options = listOf("none", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5", "Cluster 6", "Cluster 7", "Cluster 8", "Cluster 9", "Cluster 10"),
+                    onSelectionChange = { index ->
+                        clusterIndex = index
+                        val options = listOf("none", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5", "Cluster 6", "Cluster 7", "Cluster 8", "Cluster 9", "Cluster 10")
+                        selectedChannel.setParameter("cluster", InputParameterValue(
+                            normalizedValue = index.toFloat(),
+                            stringValue = "",
+                            displayValue = options[index]
+                        ))
+                        viewModel.sendInputParameterInt("/remoteInput/cluster", inputId, index)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
     }
 
     Spacer(modifier = Modifier.height(spacing.largeSpacing))
@@ -577,21 +736,20 @@ private fun RenderInputSection(
         positionYValue = positionY.displayValue.replace("m", "").trim().ifEmpty { "0.00" }
         positionZValue = positionZ.displayValue.replace("m", "").trim().ifEmpty { "0.00" }
     }
-    
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = screenWidthDp * 0.1f, end = screenWidthDp * 0.1f),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // Left column: Number boxes with labels in two-column layout
+
+    if (isPhone) {
+        // Phone layout: Labels/boxes on top, joystick and slider below
         Column(
             modifier = Modifier
-                .weight(0.5f)
-                .height(verticalSliderHeight)
-                .padding(top = verticalPadding, bottom = verticalPadding),
-            verticalArrangement = Arrangement.spacedBy(verticalPadding)
+                .fillMaxWidth()
+                .padding(start = screenWidthDp * 0.05f, end = screenWidthDp * 0.05f),
+            verticalArrangement = Arrangement.spacedBy(spacing.largeSpacing)
         ) {
+            // Position X, Y, Z labels and number boxes
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
             // Position X
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -696,21 +854,19 @@ private fun RenderInputSection(
                     modifier = Modifier.weight(0.6f)
                 )
             }
-        }
-        
-        // Right column: Joystick and Z slider side by side
-        Row(
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(0.5f)
-        ) {
-            // Joystick for X and Y position control
-            Joystick(
-                modifier = Modifier
-                    .size(150.dp)
-                    .padding(start = verticalSliderWidth * 2),
-                outerCircleColor = getRowColor(1).copy(alpha = 0.3f),   // Inactive track color
-                innerThumbColor = getRowColor(1).copy(alpha = 0.75f), // Active track color (brownish)
+            }
+
+            // Joystick and Z slider below with spacing
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Joystick for X and Y position control
+                Joystick(
+                    joystickSize = 140.dp,
+                    outerCircleColor = getRowColor(1).copy(alpha = 0.3f),   // Inactive track color
+                    innerThumbColor = getRowColor(1).copy(alpha = 0.75f), // Active track color (brownish)
                 onPositionChanged = { x, y ->
                     // x and y are in range -1 to 1
                     // Speed: 10 units per second, joystick reports every 100ms
@@ -746,7 +902,7 @@ private fun RenderInputSection(
                     }
                 }
             )
-            
+
             // Auto-return vertical slider for Z position control
             var zSliderValue by remember { mutableFloatStateOf(0f) }
             
@@ -784,6 +940,212 @@ private fun RenderInputSection(
                 valueRange = -1f..1f,
                 centerValue = 0f
             )
+            }
+        }
+    } else {
+        // Tablet layout: Keep original side-by-side layout
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = screenWidthDp * 0.1f, end = screenWidthDp * 0.1f),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Left column: Number boxes with labels in two-column layout
+            Column(
+                modifier = Modifier
+                    .weight(0.5f)
+                    .height(verticalSliderHeight)
+                    .padding(top = verticalPadding, bottom = verticalPadding),
+                verticalArrangement = Arrangement.spacedBy(verticalPadding)
+            ) {
+                // Position X
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Position X",
+                        fontSize = 12.sp,
+                        color = Color.White,
+                        modifier = Modifier.weight(0.4f)
+                    )
+                    ParameterNumberBox(
+                        label = "",
+                        value = positionXValue,
+                        onValueChange = { newValue ->
+                            positionXValue = newValue
+                        },
+                        onValueCommit = { committedValue ->
+                            committedValue.toFloatOrNull()?.let { value ->
+                                val coerced = value.coerceIn(-50f, 50f)
+                                positionXValue = String.format(Locale.US, "%.2f", coerced)
+                                selectedChannel.setParameter("positionX", InputParameterValue(
+                                    normalizedValue = (coerced + 50f) / 100f,
+                                    stringValue = "",
+                                    displayValue = "${String.format(Locale.US, "%.2f", coerced)}m"
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/positionX", inputId, coerced)
+                            }
+                        },
+                        unit = "m",
+                        modifier = Modifier.weight(0.6f)
+                    )
+                }
+
+                // Position Y
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Position Y",
+                        fontSize = 12.sp,
+                        color = Color.White,
+                        modifier = Modifier.weight(0.4f)
+                    )
+                    ParameterNumberBox(
+                        label = "",
+                        value = positionYValue,
+                        onValueChange = { newValue ->
+                            positionYValue = newValue
+                        },
+                        onValueCommit = { committedValue ->
+                            committedValue.toFloatOrNull()?.let { value ->
+                                val coerced = value.coerceIn(-50f, 50f)
+                                positionYValue = String.format(Locale.US, "%.2f", coerced)
+                                selectedChannel.setParameter("positionY", InputParameterValue(
+                                    normalizedValue = (coerced + 50f) / 100f,
+                                    stringValue = "",
+                                    displayValue = "${String.format(Locale.US, "%.2f", coerced)}m"
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/positionY", inputId, coerced)
+                            }
+                        },
+                        unit = "m",
+                        modifier = Modifier.weight(0.6f)
+                    )
+                }
+
+                // Position Z
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Position Z",
+                        fontSize = 12.sp,
+                        color = Color.White,
+                        modifier = Modifier.weight(0.4f)
+                    )
+                    ParameterNumberBox(
+                        label = "",
+                        value = positionZValue,
+                        onValueChange = { newValue ->
+                            positionZValue = newValue
+                        },
+                        onValueCommit = { committedValue ->
+                            committedValue.toFloatOrNull()?.let { value ->
+                                val coerced = value.coerceIn(-50f, 50f)
+                                positionZValue = String.format(Locale.US, "%.2f", coerced)
+                                selectedChannel.setParameter("positionZ", InputParameterValue(
+                                    normalizedValue = (coerced + 50f) / 100f,
+                                    stringValue = "",
+                                    displayValue = "${String.format(Locale.US, "%.2f", coerced)}m"
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/positionZ", inputId, coerced)
+                            }
+                        },
+                        unit = "m",
+                        modifier = Modifier.weight(0.6f)
+                    )
+                }
+            }
+
+            // Right column: Joystick and Z slider side by side
+            Row(
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(0.5f)
+            ) {
+                // Joystick for X and Y position control
+                Joystick(
+                    modifier = Modifier
+                        .size(150.dp)
+                        .padding(start = verticalSliderWidth * 2),
+                    outerCircleColor = getRowColor(1).copy(alpha = 0.3f),
+                    innerThumbColor = getRowColor(1).copy(alpha = 0.75f),
+                    onPositionChanged = { x, y ->
+                        val xIncrement = x * 1.0f
+                        val yIncrement = y * 1.0f
+
+                        if (xIncrement != 0f) {
+                            positionXValue.toFloatOrNull()?.let { currentX ->
+                                val newX = (currentX + xIncrement).coerceIn(-50f, 50f)
+                                positionXValue = String.format(Locale.US, "%.2f", newX)
+                                selectedChannel.setParameter("positionX", InputParameterValue(
+                                    normalizedValue = (newX + 50f) / 100f,
+                                    stringValue = "",
+                                    displayValue = "${String.format(Locale.US, "%.2f", newX)}m"
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/positionX", inputId, newX)
+                            }
+                        }
+
+                        if (yIncrement != 0f) {
+                            positionYValue.toFloatOrNull()?.let { currentY ->
+                                val newY = (currentY + yIncrement).coerceIn(-50f, 50f)
+                                positionYValue = String.format(Locale.US, "%.2f", newY)
+                                selectedChannel.setParameter("positionY", InputParameterValue(
+                                    normalizedValue = (newY + 50f) / 100f,
+                                    stringValue = "",
+                                    displayValue = "${String.format(Locale.US, "%.2f", newY)}m"
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/positionY", inputId, newY)
+                            }
+                        }
+                    }
+                )
+
+                // Auto-return vertical slider for Z position control
+                var zSliderValueTablet by remember { mutableFloatStateOf(0f) }
+
+                LaunchedEffect(zSliderValueTablet) {
+                    while (zSliderValueTablet != 0f) {
+                        val zIncrement = zSliderValueTablet * 1.0f
+
+                        positionZValue.toFloatOrNull()?.let { currentZ ->
+                            val newZ = (currentZ + zIncrement).coerceIn(-50f, 50f)
+                            positionZValue = String.format(Locale.US, "%.2f", newZ)
+                            selectedChannel.setParameter("positionZ", InputParameterValue(
+                                normalizedValue = (newZ + 50f) / 100f,
+                                stringValue = "",
+                                displayValue = "${String.format(Locale.US, "%.2f", newZ)}m"
+                            ))
+                            viewModel.sendInputParameterFloat("/remoteInput/positionZ", inputId, newZ)
+                        }
+
+                        kotlinx.coroutines.delay(100)
+                    }
+                }
+
+                AutoCenterBidirectionalSlider(
+                    value = zSliderValueTablet,
+                    onValueChange = { newValue ->
+                        zSliderValueTablet = newValue
+                    },
+                    modifier = Modifier
+                        .height(verticalSliderHeight)
+                        .width(verticalSliderWidth),
+                    sliderColor = getRowColor(1),
+                    trackBackgroundColor = getRowColorLight(1),
+                    orientation = SliderOrientation.VERTICAL,
+                    valueRange = -1f..1f,
+                    centerValue = 0f
+                )
+            }
         }
     }
 
