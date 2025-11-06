@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -326,7 +327,8 @@ fun InputChannelSelector(
     maxInputs: Int,
     onInputSelected: (Int) -> Unit,
     onOpenSelector: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    height: Dp = 56.dp
 ) {
     // Get the marker color for the selected input
     val markerColor = getMarkerColor(selectedInputId, isClusterMarker = false)
@@ -343,7 +345,7 @@ fun InputChannelSelector(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(height)
                 .background(markerColor, shape = RoundedCornerShape(4.dp))
                 .clickable { onOpenSelector() }
                 .padding(horizontal = 16.dp),
