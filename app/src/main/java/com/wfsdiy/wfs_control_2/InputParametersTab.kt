@@ -282,64 +282,66 @@ fun InputParametersTab(
             }
         }
 
-        // Bottom-right stacked section shortcuts
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(bottom = 16.dp, end = 8.dp)
-                .width(screenWidthDp * 0.096f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            HorizontalSectionShortcutButton(
-                text = "Scroll to the Top",
-                isHighlighted = recentlyClickedShortcut == "Top",
-                onClick = {
-                    coroutineScope.launch {
-                        scrollState.animateScrollTo(0)
+        // Bottom-right stacked section shortcuts (tablet only)
+        if (!isPhone) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 16.dp, end = 8.dp)
+                    .width(screenWidthDp * 0.096f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                HorizontalSectionShortcutButton(
+                    text = "Scroll to the Top",
+                    isHighlighted = recentlyClickedShortcut == "Top",
+                    onClick = {
+                        coroutineScope.launch {
+                            scrollState.animateScrollTo(0)
+                        }
+                        recentlyClickedShortcut = "Top"
                     }
-                    recentlyClickedShortcut = "Top"
-                }
-            )
-            HorizontalSectionShortcutButton(
-                text = "Directivity",
-                isHighlighted = recentlyClickedShortcut == "Directivity",
-                onClick = {
-                    isDirectivityExpanded = true
-                    recentlyClickedShortcut = "Directivity"
-                }
-            )
-            HorizontalSectionShortcutButton(
-                text = "Live Source Attenuation",
-                isHighlighted = recentlyClickedShortcut == "Live Source Attenuation",
-                onClick = {
-                    isLiveSourceExpanded = true
-                    recentlyClickedShortcut = "Live Source Attenuation"
-                }
-            )
-            HorizontalSectionShortcutButton(
-                text = "Floor Reflections",
-                isHighlighted = recentlyClickedShortcut == "Floor Reflections",
-                onClick = {
-                    isFloorReflectionsExpanded = true
-                    recentlyClickedShortcut = "Floor Reflections"
-                }
-            )
-            HorizontalSectionShortcutButton(
-                text = "Jitter",
-                isHighlighted = recentlyClickedShortcut == "Jitter",
-                onClick = {
-                    isJitterExpanded = true
-                    recentlyClickedShortcut = "Jitter"
-                }
-            )
-            HorizontalSectionShortcutButton(
-                text = "LFO",
-                isHighlighted = recentlyClickedShortcut == "LFO",
-                onClick = {
-                    isLFOExpanded = true
-                    recentlyClickedShortcut = "LFO"
-                }
-            )
+                )
+                HorizontalSectionShortcutButton(
+                    text = "Directivity",
+                    isHighlighted = recentlyClickedShortcut == "Directivity",
+                    onClick = {
+                        isDirectivityExpanded = true
+                        recentlyClickedShortcut = "Directivity"
+                    }
+                )
+                HorizontalSectionShortcutButton(
+                    text = "Live Source Attenuation",
+                    isHighlighted = recentlyClickedShortcut == "Live Source Attenuation",
+                    onClick = {
+                        isLiveSourceExpanded = true
+                        recentlyClickedShortcut = "Live Source Attenuation"
+                    }
+                )
+                HorizontalSectionShortcutButton(
+                    text = "Floor Reflections",
+                    isHighlighted = recentlyClickedShortcut == "Floor Reflections",
+                    onClick = {
+                        isFloorReflectionsExpanded = true
+                        recentlyClickedShortcut = "Floor Reflections"
+                    }
+                )
+                HorizontalSectionShortcutButton(
+                    text = "Jitter",
+                    isHighlighted = recentlyClickedShortcut == "Jitter",
+                    onClick = {
+                        isJitterExpanded = true
+                        recentlyClickedShortcut = "Jitter"
+                    }
+                )
+                HorizontalSectionShortcutButton(
+                    text = "LFO",
+                    isHighlighted = recentlyClickedShortcut == "LFO",
+                    onClick = {
+                        isLFOExpanded = true
+                        recentlyClickedShortcut = "LFO"
+                    }
+                )
+            }
         }
 
         // Clear shortcut highlight after 1 second
