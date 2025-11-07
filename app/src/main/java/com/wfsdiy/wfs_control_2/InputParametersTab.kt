@@ -746,142 +746,137 @@ private fun RenderInputSection(
     }
 
     if (isPhone) {
-        // Phone layout: Labels/boxes on top, joystick and slider below
-        Column(
+        // Phone layout: Labels/boxes, joystick, and slider side by side
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = screenWidthDp * 0.05f, end = screenWidthDp * 0.05f),
-            verticalArrangement = Arrangement.spacedBy(spacing.largeSpacing)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             // Position X, Y, Z labels and number boxes
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-            // Position X
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Position X",
-                    fontSize = 12.sp,
-                    color = Color.White,
-                    modifier = Modifier.weight(0.4f)
-                )
-                ParameterNumberBox(
-                    label = "",
-                    value = positionXValue,
-                    onValueChange = { newValue ->
-                        positionXValue = newValue
-                    },
-                    onValueCommit = { committedValue ->
-                        committedValue.toFloatOrNull()?.let { value ->
-                            val coerced = value.coerceIn(-50f, 50f)
-                            positionXValue = String.format(Locale.US, "%.2f", coerced)
-                            selectedChannel.setParameter("positionX", InputParameterValue(
-                                normalizedValue = (coerced + 50f) / 100f,
-                                stringValue = "",
-                                displayValue = "${String.format(Locale.US, "%.2f", coerced)}m"
-                            ))
-                            viewModel.sendInputParameterFloat("/remoteInput/positionX", inputId, coerced)
-                        }
-                    },
-                    unit = "m",
-                    modifier = Modifier.weight(0.6f)
-                )
+                // Position X
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Position X",
+                        fontSize = 11.sp,
+                        color = Color.White,
+                        modifier = Modifier.weight(0.5f)
+                    )
+                    ParameterNumberBox(
+                        label = "",
+                        value = positionXValue,
+                        onValueChange = { newValue ->
+                            positionXValue = newValue
+                        },
+                        onValueCommit = { committedValue ->
+                            committedValue.toFloatOrNull()?.let { value ->
+                                val coerced = value.coerceIn(-50f, 50f)
+                                positionXValue = String.format(Locale.US, "%.2f", coerced)
+                                selectedChannel.setParameter("positionX", InputParameterValue(
+                                    normalizedValue = (coerced + 50f) / 100f,
+                                    stringValue = "",
+                                    displayValue = "${String.format(Locale.US, "%.2f", coerced)}m"
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/positionX", inputId, coerced)
+                            }
+                        },
+                        unit = "m",
+                        modifier = Modifier.weight(0.5f)
+                    )
+                }
+
+                // Position Y
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Position Y",
+                        fontSize = 11.sp,
+                        color = Color.White,
+                        modifier = Modifier.weight(0.5f)
+                    )
+                    ParameterNumberBox(
+                        label = "",
+                        value = positionYValue,
+                        onValueChange = { newValue ->
+                            positionYValue = newValue
+                        },
+                        onValueCommit = { committedValue ->
+                            committedValue.toFloatOrNull()?.let { value ->
+                                val coerced = value.coerceIn(-50f, 50f)
+                                positionYValue = String.format(Locale.US, "%.2f", coerced)
+                                selectedChannel.setParameter("positionY", InputParameterValue(
+                                    normalizedValue = (coerced + 50f) / 100f,
+                                    stringValue = "",
+                                    displayValue = "${String.format(Locale.US, "%.2f", coerced)}m"
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/positionY", inputId, coerced)
+                            }
+                        },
+                        unit = "m",
+                        modifier = Modifier.weight(0.5f)
+                    )
+                }
+
+                // Position Z
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Position Z",
+                        fontSize = 11.sp,
+                        color = Color.White,
+                        modifier = Modifier.weight(0.5f)
+                    )
+                    ParameterNumberBox(
+                        label = "",
+                        value = positionZValue,
+                        onValueChange = { newValue ->
+                            positionZValue = newValue
+                        },
+                        onValueCommit = { committedValue ->
+                            committedValue.toFloatOrNull()?.let { value ->
+                                val coerced = value.coerceIn(-50f, 50f)
+                                positionZValue = String.format(Locale.US, "%.2f", coerced)
+                                selectedChannel.setParameter("positionZ", InputParameterValue(
+                                    normalizedValue = (coerced + 50f) / 100f,
+                                    stringValue = "",
+                                    displayValue = "${String.format(Locale.US, "%.2f", coerced)}m"
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/positionZ", inputId, coerced)
+                            }
+                        },
+                        unit = "m",
+                        modifier = Modifier.weight(0.5f)
+                    )
+                }
             }
 
-            // Position Y
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Position Y",
-                    fontSize = 12.sp,
-                    color = Color.White,
-                    modifier = Modifier.weight(0.4f)
-                )
-                ParameterNumberBox(
-                    label = "",
-                    value = positionYValue,
-                    onValueChange = { newValue ->
-                        positionYValue = newValue
-                    },
-                    onValueCommit = { committedValue ->
-                        committedValue.toFloatOrNull()?.let { value ->
-                            val coerced = value.coerceIn(-50f, 50f)
-                            positionYValue = String.format(Locale.US, "%.2f", coerced)
-                            selectedChannel.setParameter("positionY", InputParameterValue(
-                                normalizedValue = (coerced + 50f) / 100f,
-                                stringValue = "",
-                                displayValue = "${String.format(Locale.US, "%.2f", coerced)}m"
-                            ))
-                            viewModel.sendInputParameterFloat("/remoteInput/positionY", inputId, coerced)
-                        }
-                    },
-                    unit = "m",
-                    modifier = Modifier.weight(0.6f)
-                )
-            }
-
-            // Position Z
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Position Z",
-                    fontSize = 12.sp,
-                    color = Color.White,
-                    modifier = Modifier.weight(0.4f)
-                )
-                ParameterNumberBox(
-                    label = "",
-                    value = positionZValue,
-                    onValueChange = { newValue ->
-                        positionZValue = newValue
-                    },
-                    onValueCommit = { committedValue ->
-                        committedValue.toFloatOrNull()?.let { value ->
-                            val coerced = value.coerceIn(-50f, 50f)
-                            positionZValue = String.format(Locale.US, "%.2f", coerced)
-                            selectedChannel.setParameter("positionZ", InputParameterValue(
-                                normalizedValue = (coerced + 50f) / 100f,
-                                stringValue = "",
-                                displayValue = "${String.format(Locale.US, "%.2f", coerced)}m"
-                            ))
-                            viewModel.sendInputParameterFloat("/remoteInput/positionZ", inputId, coerced)
-                        }
-                    },
-                    unit = "m",
-                    modifier = Modifier.weight(0.6f)
-                )
-            }
-            }
-
-            // Joystick and Z slider below with spacing
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Joystick for X and Y position control
-                Joystick(
-                    joystickSize = 140.dp,
-                    outerCircleColor = getRowColor(1).copy(alpha = 0.3f),   // Inactive track color
-                    innerThumbColor = getRowColor(1).copy(alpha = 0.75f), // Active track color (brownish)
+            // Joystick for X and Y position control
+            Joystick(
+                joystickSize = 140.dp,
+                outerCircleColor = getRowColor(1).copy(alpha = 0.3f),   // Inactive track color
+                innerThumbColor = getRowColor(1).copy(alpha = 0.75f), // Active track color (brownish)
                 onPositionChanged = { x, y ->
                     // x and y are in range -1 to 1
                     // Speed: 10 units per second, joystick reports every 100ms
                     // So increment = joystickValue * 10 * 0.1 = joystickValue * 1.0
                     val xIncrement = x * 1.0f
                     val yIncrement = y * 1.0f
-                    
+
                     // Only update if joystick is deflected
                     if (xIncrement != 0f) {
                         positionXValue.toFloatOrNull()?.let { currentX ->
@@ -895,7 +890,7 @@ private fun RenderInputSection(
                             viewModel.sendInputParameterFloat("/remoteInput/positionX", inputId, newX)
                         }
                     }
-                    
+
                     if (yIncrement != 0f) {
                         positionYValue.toFloatOrNull()?.let { currentY ->
                             val newY = (currentY + yIncrement).coerceIn(-50f, 50f)
@@ -913,12 +908,12 @@ private fun RenderInputSection(
 
             // Auto-return vertical slider for Z position control
             var zSliderValue by remember { mutableFloatStateOf(0f) }
-            
+
             LaunchedEffect(zSliderValue) {
                 // Continuously update position Z while slider is deflected
                 while (zSliderValue != 0f) {
                     val zIncrement = zSliderValue * 1.0f
-                    
+
                     positionZValue.toFloatOrNull()?.let { currentZ ->
                         val newZ = (currentZ + zIncrement).coerceIn(-50f, 50f)
                         positionZValue = String.format(Locale.US, "%.2f", newZ)
@@ -929,11 +924,11 @@ private fun RenderInputSection(
                         ))
                         viewModel.sendInputParameterFloat("/remoteInput/positionZ", inputId, newZ)
                     }
-                    
+
                     kotlinx.coroutines.delay(100) // Update every 100ms
                 }
             }
-            
+
             AutoCenterBidirectionalSlider(
                 value = zSliderValue,
                 onValueChange = { newValue ->
@@ -948,7 +943,6 @@ private fun RenderInputSection(
                 valueRange = -1f..1f,
                 centerValue = 0f
             )
-            }
         }
     } else {
         // Tablet layout: Keep original side-by-side layout
