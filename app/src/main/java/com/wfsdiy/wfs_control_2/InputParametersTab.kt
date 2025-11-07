@@ -227,7 +227,8 @@ fun InputParametersTab(
             isExpanded = isLiveSourceExpanded,
             onExpandedChange = { isLiveSourceExpanded = it },
             scrollState = scrollState,
-            coroutineScope = coroutineScope
+            coroutineScope = coroutineScope,
+            isPhone = isPhone
         )
 
         // Floor Reflections Group (now has its own collapsible header)
@@ -2029,7 +2030,8 @@ private fun RenderLiveSourceSection(
     isExpanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     scrollState: androidx.compose.foundation.ScrollState,
-    coroutineScope: kotlinx.coroutines.CoroutineScope
+    coroutineScope: kotlinx.coroutines.CoroutineScope,
+    isPhone: Boolean
 ) {
     val inputId by rememberUpdatedState(selectedChannel.inputId)
     val density = LocalDensity.current
@@ -2178,10 +2180,356 @@ private fun RenderLiveSourceSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = screenWidthDp * 0.1f, end = screenWidthDp * 0.1f)
+                .padding(
+                    start = if (isPhone) screenWidthDp * 0.05f else screenWidthDp * 0.1f,
+                    end = if (isPhone) screenWidthDp * 0.05f else screenWidthDp * 0.1f
+                )
         ) {
-            // Row 1: Active | Radius | Shape | Attenuation
-            Row(
+            if (isPhone) {
+                // Phone layout: 4 rows
+                // Row 1: Active switch + Shape dropdown
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(spacing.smallSpacing)
+                ) {
+                    // Active
+                    Column(modifier = Modifier.weight(1f)) {
+                        ParameterTextButton(
+                            label = "",
+                            selectedIndex = liveSourceActiveIndex,
+                            options = listOf("Enabled", "Disabled"),
+                            onSelectionChange = { index ->
+                                liveSourceActiveIndex = index
+                                selectedChannel.setParameter("liveSourceActive", InputParameterValue(
+                                    normalizedValue = index.toFloat(),
+                                    stringValue = "",
+                                    displayValue = listOf("Enabled", "Disabled")[index]
+                                ))
+                                viewModel.sendInputParameterInt("/remoteInput/liveSourceActive", inputId, 1 - index)
+                            },
+                            activeColor = getRowColorActive(5),
+                            inactiveColor = getRowColorLight(5),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    // Shape
+                    Column(modifier = Modifier.weight(1f)) {
+                        ParameterDropdown(
+                            label = "Shape",
+                            selectedIndex = liveSourceShapeIndex,
+                            options = listOf("linear", "log", "square d²", "sine"),
+                            onSelectionChange = { index ->
+                                liveSourceShapeIndex = index
+                                selectedChannel.setParameter("liveSourceShape", InputParameterValue(
+                                    normalizedValue = index.toFloat(),
+                                    stringValue = "",
+                                    displayValue = listOf("linear", "log", "square d²", "sine")[index]
+                                ))
+                                viewModel.sendInputParameterInt("/remoteInput/liveSourceShape", inputId, index)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = isLiveSourceEnabled
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(spacing.smallSpacing))
+
+                // Row 2: Radius slider + Attenuation slider
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(spacing.smallSpacing)
+                ) {
+                    // Radius
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Radius", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                        WidthExpansionSlider(
+                            value = radiusValue,
+                            onValueChange = { newValue ->
+                                radiusValue = newValue
+                                // Map 0-1 expansion to 0-50 meters
+                                val actualValue = newValue * 50f
+                                radiusDisplayValue = String.format(Locale.US, "%.2f", actualValue)
+                                val normalized = actualValue / 50f
+                                selectedChannel.setParameter("liveSourceRadius", InputParameterValue(
+                                    normalizedValue = normalized,
+                                    stringValue = "",
+                                    displayValue = "${String.format(Locale.US, "%.2f", actualValue)}m"
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/liveSourceRadius", inputId, actualValue)
+                            },
+                            modifier = Modifier.width(horizontalSliderWidth).height(horizontalSliderHeight),
+                            sliderColor = if (isLiveSourceEnabled) getRowColor(5) else Color.Gray,
+                            trackBackgroundColor = if (isLiveSourceEnabled) getRowColorLight(5) else Color.DarkGray,
+                            orientation = SliderOrientation.HORIZONTAL,
+                            displayedValue = radiusDisplayValue,
+                            isValueEditable = true,
+                            onDisplayedValueChange = { /* Typing handled internally */ },
+                            onValueCommit = { committedValue ->
+                                committedValue.toFloatOrNull()?.let { value ->
+                                    val coercedValue = value.coerceIn(0f, 50f)
+                                    val expansionValue = coercedValue / 50f
+                                    radiusValue = expansionValue
+                                    radiusDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
+                                    selectedChannel.setParameter("liveSourceRadius", InputParameterValue(
+                                        normalizedValue = expansionValue,
+                                        stringValue = "",
+                                        displayValue = "${String.format(Locale.US, "%.2f", coercedValue)}m"
+                                    ))
+                                    viewModel.sendInputParameterFloat("/remoteInput/liveSourceRadius", inputId, coercedValue)
+                                }
+                            },
+                            valueUnit = "m",
+                            valueTextColor = if (isLiveSourceEnabled) Color.White else Color.Gray,
+                            enabled = true
+                        )
+                    }
+
+                    // Attenuation
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Attenuation", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                        StandardSlider(
+                            value = liveSourceAttenuationValue,
+                            onValueChange = { newValue ->
+                                liveSourceAttenuationValue = newValue
+                                val definition = InputParameterDefinitions.parametersByVariableName["liveSourceAttenuation"]!!
+                                val actualValue = InputParameterDefinitions.applyFormula(definition, newValue)
+                                liveSourceAttenuationDisplayValue = String.format(Locale.US, "%.2f", actualValue)
+                                selectedChannel.setParameter("liveSourceAttenuation", InputParameterValue(
+                                    normalizedValue = newValue,
+                                    stringValue = "",
+                                    displayValue = "${String.format(Locale.US, "%.2f", actualValue)}dB"
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/liveSourceAttenuation", inputId, actualValue)
+                            },
+                            modifier = Modifier.width(horizontalSliderWidth).height(horizontalSliderHeight),
+                            sliderColor = if (isLiveSourceEnabled) getRowColor(5) else Color.Gray,
+                            trackBackgroundColor = if (isLiveSourceEnabled) getRowColorLight(5) else Color.DarkGray,
+                            orientation = SliderOrientation.HORIZONTAL,
+                            displayedValue = liveSourceAttenuationDisplayValue,
+                            isValueEditable = true,
+                            onDisplayedValueChange = { /* Typing handled internally */ },
+                            onValueCommit = { committedValue ->
+                                committedValue.toFloatOrNull()?.let { value ->
+                                    val definition = InputParameterDefinitions.parametersByVariableName["liveSourceAttenuation"]!!
+                                    val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
+                                    val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
+                                    liveSourceAttenuationValue = normalized
+                                    liveSourceAttenuationDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
+                                    selectedChannel.setParameter("liveSourceAttenuation", InputParameterValue(
+                                        normalizedValue = normalized,
+                                        stringValue = "",
+                                        displayValue = "${String.format(Locale.US, "%.2f", coercedValue)}dB"
+                                    ))
+                                    viewModel.sendInputParameterFloat("/remoteInput/liveSourceAttenuation", inputId, coercedValue)
+                                }
+                            },
+                            valueUnit = "dB",
+                            valueTextColor = if (isLiveSourceEnabled) Color.White else Color.Gray
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(spacing.smallSpacing))
+
+                // Row 3: Peak Threshold slider + Peak Ratio dial
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(spacing.smallSpacing),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Peak Threshold
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Peak Threshold", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                        StandardSlider(
+                            value = liveSourcePeakThresholdValue,
+                            onValueChange = { newValue ->
+                                liveSourcePeakThresholdValue = newValue
+                                val definition = InputParameterDefinitions.parametersByVariableName["liveSourcePeakThreshold"]!!
+                                val actualValue = InputParameterDefinitions.applyFormula(definition, newValue)
+                                liveSourcePeakThresholdDisplayValue = String.format(Locale.US, "%.2f", actualValue)
+                                selectedChannel.setParameter("liveSourcePeakThreshold", InputParameterValue(
+                                    normalizedValue = newValue,
+                                    stringValue = "",
+                                    displayValue = "${String.format(Locale.US, "%.2f", actualValue)}dB"
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/liveSourcePeakThreshold", inputId, actualValue)
+                            },
+                            modifier = Modifier.width(horizontalSliderWidth).height(horizontalSliderHeight),
+                            sliderColor = if (isLiveSourceEnabled) getRowColor(6) else Color.Gray,
+                            trackBackgroundColor = if (isLiveSourceEnabled) getRowColorLight(6) else Color.DarkGray,
+                            orientation = SliderOrientation.HORIZONTAL,
+                            displayedValue = liveSourcePeakThresholdDisplayValue,
+                            isValueEditable = true,
+                            onDisplayedValueChange = { /* Typing handled internally */ },
+                            onValueCommit = { committedValue ->
+                                committedValue.toFloatOrNull()?.let { value ->
+                                    val definition = InputParameterDefinitions.parametersByVariableName["liveSourcePeakThreshold"]!!
+                                    val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
+                                    val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
+                                    liveSourcePeakThresholdValue = normalized
+                                    liveSourcePeakThresholdDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
+                                    selectedChannel.setParameter("liveSourcePeakThreshold", InputParameterValue(
+                                        normalizedValue = normalized,
+                                        stringValue = "",
+                                        displayValue = "${String.format(Locale.US, "%.2f", coercedValue)}dB"
+                                    ))
+                                    viewModel.sendInputParameterFloat("/remoteInput/liveSourcePeakThreshold", inputId, coercedValue)
+                                }
+                            },
+                            valueUnit = "dB",
+                            valueTextColor = if (isLiveSourceEnabled) Color.White else Color.Gray
+                        )
+                    }
+
+                    // Peak Ratio
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Peak Ratio", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                        BasicDial(
+                            value = liveSourcePeakRatioValue,
+                            onValueChange = { newValue ->
+                                liveSourcePeakRatioValue = newValue
+                                val definition = InputParameterDefinitions.parametersByVariableName["liveSourcePeakRatio"]!!
+                                val actualValue = InputParameterDefinitions.applyFormula(definition, newValue)
+                                liveSourcePeakRatioDisplayValue = String.format(Locale.US, "%.2f", actualValue)
+                                selectedChannel.setParameter("liveSourcePeakRatio", InputParameterValue(
+                                    normalizedValue = newValue,
+                                    stringValue = "",
+                                    displayValue = String.format(Locale.US, "%.2f", actualValue)
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/liveSourcePeakRatio", inputId, actualValue)
+                            },
+                            dialColor = if (isLiveSourceEnabled) Color.DarkGray else Color(0xFF2A2A2A),
+                            indicatorColor = if (isLiveSourceEnabled) Color.White else Color.Gray,
+                            trackColor = if (isLiveSourceEnabled) getRowColor(6) else Color.DarkGray,
+                            displayedValue = liveSourcePeakRatioDisplayValue,
+                            valueUnit = "",
+                            isValueEditable = true,
+                            onDisplayedValueChange = {},
+                            onValueCommit = { committedValue ->
+                                committedValue.toFloatOrNull()?.let { value ->
+                                    val definition = InputParameterDefinitions.parametersByVariableName["liveSourcePeakRatio"]!!
+                                    val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
+                                    val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
+                                    liveSourcePeakRatioValue = normalized
+                                    liveSourcePeakRatioDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
+                                    selectedChannel.setParameter("liveSourcePeakRatio", InputParameterValue(
+                                        normalizedValue = normalized,
+                                        stringValue = "",
+                                        displayValue = String.format(Locale.US, "%.2f", coercedValue)
+                                    ))
+                                    viewModel.sendInputParameterFloat("/remoteInput/liveSourcePeakRatio", inputId, coercedValue)
+                                }
+                            },
+                            valueTextColor = if (isLiveSourceEnabled) Color.White else Color.Gray,
+                            enabled = true,
+                            sizeMultiplier = 0.7f
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(spacing.smallSpacing))
+
+                // Row 4: Slow Threshold slider + Slow Ratio dial
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(spacing.smallSpacing),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Slow Threshold
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Slow Threshold", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                        StandardSlider(
+                            value = liveSourceSlowThresholdValue,
+                            onValueChange = { newValue ->
+                                liveSourceSlowThresholdValue = newValue
+                                val definition = InputParameterDefinitions.parametersByVariableName["liveSourceSlowThreshold"]!!
+                                val actualValue = InputParameterDefinitions.applyFormula(definition, newValue)
+                                liveSourceSlowThresholdDisplayValue = String.format(Locale.US, "%.2f", actualValue)
+                                selectedChannel.setParameter("liveSourceSlowThreshold", InputParameterValue(
+                                    normalizedValue = newValue,
+                                    stringValue = "",
+                                    displayValue = "${String.format(Locale.US, "%.2f", actualValue)}dB"
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/liveSourceSlowThreshold", inputId, actualValue)
+                            },
+                            modifier = Modifier.width(horizontalSliderWidth).height(horizontalSliderHeight),
+                            sliderColor = if (isLiveSourceEnabled) getRowColor(6) else Color.Gray,
+                            trackBackgroundColor = if (isLiveSourceEnabled) getRowColorLight(6) else Color.DarkGray,
+                            orientation = SliderOrientation.HORIZONTAL,
+                            displayedValue = liveSourceSlowThresholdDisplayValue,
+                            isValueEditable = true,
+                            onDisplayedValueChange = { /* Typing handled internally */ },
+                            onValueCommit = { committedValue ->
+                                committedValue.toFloatOrNull()?.let { value ->
+                                    val definition = InputParameterDefinitions.parametersByVariableName["liveSourceSlowThreshold"]!!
+                                    val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
+                                    val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
+                                    liveSourceSlowThresholdValue = normalized
+                                    liveSourceSlowThresholdDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
+                                    selectedChannel.setParameter("liveSourceSlowThreshold", InputParameterValue(
+                                        normalizedValue = normalized,
+                                        stringValue = "",
+                                        displayValue = "${String.format(Locale.US, "%.2f", coercedValue)}dB"
+                                    ))
+                                    viewModel.sendInputParameterFloat("/remoteInput/liveSourceSlowThreshold", inputId, coercedValue)
+                                }
+                            },
+                            valueUnit = "dB",
+                            valueTextColor = if (isLiveSourceEnabled) Color.White else Color.Gray
+                        )
+                    }
+
+                    // Slow Ratio
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Slow Ratio", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                        BasicDial(
+                            value = liveSourceSlowRatioValue,
+                            onValueChange = { newValue ->
+                                liveSourceSlowRatioValue = newValue
+                                val definition = InputParameterDefinitions.parametersByVariableName["liveSourceSlowRatio"]!!
+                                val actualValue = InputParameterDefinitions.applyFormula(definition, newValue)
+                                liveSourceSlowRatioDisplayValue = String.format(Locale.US, "%.2f", actualValue)
+                                selectedChannel.setParameter("liveSourceSlowRatio", InputParameterValue(
+                                    normalizedValue = newValue,
+                                    stringValue = "",
+                                    displayValue = String.format(Locale.US, "%.2f", actualValue)
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/liveSourceSlowRatio", inputId, actualValue)
+                            },
+                            dialColor = if (isLiveSourceEnabled) Color.DarkGray else Color(0xFF2A2A2A),
+                            indicatorColor = if (isLiveSourceEnabled) Color.White else Color.Gray,
+                            trackColor = if (isLiveSourceEnabled) getRowColor(6) else Color.DarkGray,
+                            displayedValue = liveSourceSlowRatioDisplayValue,
+                            valueUnit = "",
+                            isValueEditable = true,
+                            onDisplayedValueChange = {},
+                            onValueCommit = { committedValue ->
+                                committedValue.toFloatOrNull()?.let { value ->
+                                    val definition = InputParameterDefinitions.parametersByVariableName["liveSourceSlowRatio"]!!
+                                    val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
+                                    val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
+                                    liveSourceSlowRatioValue = normalized
+                                    liveSourceSlowRatioDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
+                                    selectedChannel.setParameter("liveSourceSlowRatio", InputParameterValue(
+                                        normalizedValue = normalized,
+                                        stringValue = "",
+                                        displayValue = String.format(Locale.US, "%.2f", coercedValue)
+                                    ))
+                                    viewModel.sendInputParameterFloat("/remoteInput/liveSourceSlowRatio", inputId, coercedValue)
+                                }
+                            },
+                            valueTextColor = if (isLiveSourceEnabled) Color.White else Color.Gray,
+                            enabled = true,
+                            sizeMultiplier = 0.7f
+                        )
+                    }
+                }
+            } else {
+                // Tablet layout: Original 2 rows
+                // Row 1: Active | Radius | Shape | Attenuation
+                Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(spacing.smallSpacing)
             ) {
@@ -2501,6 +2849,7 @@ private fun RenderLiveSourceSection(
                         sizeMultiplier = 0.7f
                     )
                 }
+            }
             }
         }
     }
