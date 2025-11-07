@@ -4292,9 +4292,9 @@ private fun RenderLFOSection(
                 horizontalArrangement = Arrangement.spacedBy(screenWidthDp * 0.05f),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Shape X (vertically centered)
+                // Shape X (vertically centered) - Half width
                 Column(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(0.5f),
                     verticalArrangement = Arrangement.Center
                 ) {
                     ParameterDropdown(
@@ -4315,9 +4315,9 @@ private fun RenderLFOSection(
                     )
                 }
 
-                // Rate X + Amplitude X (stacked vertically)
+                // Rate X + Amplitude X (stacked vertically) - Increased width
                 Column(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1.5f),
                     verticalArrangement = Arrangement.spacedBy(spacing.smallSpacing)
                 ) {
                     // Rate X
@@ -4443,9 +4443,9 @@ private fun RenderLFOSection(
                 horizontalArrangement = Arrangement.spacedBy(screenWidthDp * 0.05f),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Shape Y (vertically centered)
+                // Shape Y (vertically centered) - Half width
                 Column(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(0.5f),
                     verticalArrangement = Arrangement.Center
                 ) {
                     ParameterDropdown(
@@ -4466,9 +4466,9 @@ private fun RenderLFOSection(
                     )
                 }
 
-                // Rate Y + Amplitude Y (stacked vertically)
+                // Rate Y + Amplitude Y (stacked vertically) - Increased width
                 Column(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1.5f),
                     verticalArrangement = Arrangement.spacedBy(spacing.smallSpacing)
                 ) {
                     // Rate Y
@@ -4594,9 +4594,9 @@ private fun RenderLFOSection(
                 horizontalArrangement = Arrangement.spacedBy(screenWidthDp * 0.05f),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Shape Z (vertically centered)
+                // Shape Z (vertically centered) - Half width
                 Column(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(0.5f),
                     verticalArrangement = Arrangement.Center
                 ) {
                     ParameterDropdown(
@@ -4617,9 +4617,9 @@ private fun RenderLFOSection(
                     )
                 }
 
-                // Rate Z + Amplitude Z (stacked vertically)
+                // Rate Z + Amplitude Z (stacked vertically) - Increased width
                 Column(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1.5f),
                     verticalArrangement = Arrangement.spacedBy(spacing.smallSpacing)
                 ) {
                     // Rate Z
