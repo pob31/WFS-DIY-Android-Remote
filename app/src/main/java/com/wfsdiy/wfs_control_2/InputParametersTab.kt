@@ -256,6 +256,7 @@ fun InputParametersTab(
             horizontalSliderHeight = horizontalSliderHeight,
             spacing = spacing,
             screenWidthDp = screenWidthDp,
+            isPhone = isPhone,
             isExpanded = isJitterExpanded,
             onExpandedChange = { isJitterExpanded = it },
             scrollState = scrollState,
@@ -3768,6 +3769,7 @@ private fun RenderJitterSection(
     horizontalSliderHeight: androidx.compose.ui.unit.Dp,
     spacing: ResponsiveSpacing,
     screenWidthDp: androidx.compose.ui.unit.Dp,
+    isPhone: Boolean,
     isExpanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     scrollState: androidx.compose.foundation.ScrollState,
@@ -3786,12 +3788,17 @@ private fun RenderJitterSection(
         }
     }
 
-    // Calculate slider width to match Rate X in LFO section
-    // LFO row has 10% padding on each side, 3 columns with weight(1), and 5% spacing between columns
-    // Available width = 80% (after 10% padding on each side)
-    // Column spacing = 10% (two 5% gaps)
-    // Each column width = (80% - 10%) / 3 = 70% / 3 ≈ 23.33%
-    val jitterSliderWidth = screenWidthDp * 0.7f / 3f
+    // Calculate slider width
+    // Phone: Half the screen width minus left/right padding (5% each side = 90% available, half = 45%)
+    // Tablet: Match Rate X in LFO section (LFO row has 10% padding on each side, 3 columns with weight(1), and 5% spacing between columns)
+    val jitterSliderWidth = if (isPhone) {
+        screenWidthDp * 0.45f
+    } else {
+        // Available width = 80% (after 10% padding on each side)
+        // Column spacing = 10% (two 5% gaps)
+        // Each column width = (80% - 10%) / 3 = 70% / 3 ≈ 23.33%
+        screenWidthDp * 0.7f / 3f
+    }
 
     // Jitter - Width Expansion Slider
     val jitter = selectedChannel.getParameter("jitter")
