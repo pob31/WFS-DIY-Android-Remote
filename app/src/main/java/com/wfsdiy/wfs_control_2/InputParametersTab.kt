@@ -273,6 +273,7 @@ fun InputParametersTab(
             verticalSliderHeight = verticalSliderHeight,
             spacing = spacing,
             screenWidthDp = screenWidthDp,
+            isPhone = isPhone,
             isExpanded = isLFOExpanded,
             onExpandedChange = { isLFOExpanded = it },
             scrollState = scrollState,
@@ -3906,6 +3907,7 @@ private fun RenderLFOSection(
     verticalSliderHeight: androidx.compose.ui.unit.Dp,
     spacing: ResponsiveSpacing,
     screenWidthDp: androidx.compose.ui.unit.Dp,
+    isPhone: Boolean,
     isExpanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     scrollState: androidx.compose.foundation.ScrollState,
@@ -4163,7 +4165,10 @@ private fun RenderLFOSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = screenWidthDp * 0.1f, end = screenWidthDp * 0.1f)
+                .padding(
+                    start = if (isPhone) screenWidthDp * 0.05f else screenWidthDp * 0.1f,
+                    end = if (isPhone) screenWidthDp * 0.05f else screenWidthDp * 0.1f
+                )
         ) {
             // Row 1: Active | Period | Phase | Gyrophone
             Row(
