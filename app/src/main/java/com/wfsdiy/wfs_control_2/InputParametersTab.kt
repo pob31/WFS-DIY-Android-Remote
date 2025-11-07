@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -746,30 +747,26 @@ private fun RenderInputSection(
     }
 
     if (isPhone) {
-        // Phone layout: Labels/boxes, joystick, and slider side by side
+        // Phone layout: Labels and boxes paired, joystick, and slider with even spacing
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = screenWidthDp * 0.05f, end = screenWidthDp * 0.05f),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Position X, Y, Z labels and number boxes
+            // Position X, Y, Z labels and boxes column
             Column(
-                modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Position X
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
                         text = "Position X",
                         fontSize = 11.sp,
-                        color = Color.White,
-                        modifier = Modifier.weight(0.5f)
+                        color = Color.White
                     )
                     ParameterNumberBox(
                         label = "",
@@ -790,21 +787,17 @@ private fun RenderInputSection(
                             }
                         },
                         unit = "m",
-                        modifier = Modifier.weight(0.5f)
+                        modifier = Modifier.width(80.dp)
                     )
                 }
-
-                // Position Y
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
                         text = "Position Y",
                         fontSize = 11.sp,
-                        color = Color.White,
-                        modifier = Modifier.weight(0.5f)
+                        color = Color.White
                     )
                     ParameterNumberBox(
                         label = "",
@@ -825,21 +818,17 @@ private fun RenderInputSection(
                             }
                         },
                         unit = "m",
-                        modifier = Modifier.weight(0.5f)
+                        modifier = Modifier.width(80.dp)
                     )
                 }
-
-                // Position Z
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
                         text = "Position Z",
                         fontSize = 11.sp,
-                        color = Color.White,
-                        modifier = Modifier.weight(0.5f)
+                        color = Color.White
                     )
                     ParameterNumberBox(
                         label = "",
@@ -860,7 +849,7 @@ private fun RenderInputSection(
                             }
                         },
                         unit = "m",
-                        modifier = Modifier.weight(0.5f)
+                        modifier = Modifier.width(80.dp)
                     )
                 }
             }
