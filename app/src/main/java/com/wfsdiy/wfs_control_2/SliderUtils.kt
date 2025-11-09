@@ -1,5 +1,6 @@
 package com.wfsdiy.wfs_control_2
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -17,6 +18,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -38,10 +41,26 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 enum class SliderOrientation {
     HORIZONTAL,
     VERTICAL
+}
+
+@Composable
+private fun isPhoneDevice(): Boolean {
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+
+    val screenWidthDp = configuration.screenWidthDp.dp
+    val screenHeightDp = configuration.screenHeightDp.dp
+
+    val physicalWidthInches = screenWidthDp.value / 160f
+    val physicalHeightInches = screenHeightDp.value / 160f
+    val diagonalInches = sqrt(physicalWidthInches * physicalWidthInches + physicalHeightInches * physicalHeightInches)
+
+    return diagonalInches < 6.0f
 }
 
 @Composable
@@ -243,13 +262,8 @@ private fun BidirectionalSliderCore(
             disabledInactiveTrackColor = Color.Transparent
         ),
         thumb = {
-            SliderDefaults.Thumb(
-                interactionSource = interactionSource,
-                colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    disabledThumbColor = Color.White.copy(alpha = ContentAlpha.disabled)
-                )
-            )
+            // Empty/invisible thumb - we'll draw our own
+            Box(modifier = Modifier.size(0.dp))
         },
         track = { sliderState ->
             BoxWithConstraints(
@@ -281,6 +295,25 @@ private fun BidirectionalSliderCore(
                         .offset(x = maxWidth * activeTrackStartFraction)
                         .background(if (enabled) sliderColor.copy(alpha = 0.75f) else sliderColor.copy(alpha = ContentAlpha.disabled * 0.75f))
                 )
+
+                // Draw custom thumb
+                val isPhone = isPhoneDevice()
+                Canvas(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    val thumbX = size.width * normalizedCurrentValue
+                    val thumbWidth = 3.dp.toPx()
+                    val thumbHeightFraction = if (isPhone) 1.0f else 0.7f // 100% on phone, 70% on tablet
+                    val thumbHeight = size.height * thumbHeightFraction
+                    val thumbOffsetY = (size.height - thumbHeight) / 2f // Center vertically
+
+                    // Thumb - vertical line
+                    drawRect(
+                        color = if (enabled) Color.White else Color.White.copy(alpha = ContentAlpha.disabled),
+                        topLeft = Offset(thumbX - thumbWidth / 2f, thumbOffsetY),
+                        size = Size(thumbWidth, thumbHeight)
+                    )
+                }
             }
         }
     )
@@ -352,13 +385,8 @@ fun AutoCenterBidirectionalSlider(
             disabledInactiveTrackColor = Color.Transparent
         ),
         thumb = {
-            SliderDefaults.Thumb(
-                interactionSource = interactionSource,
-                colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    disabledThumbColor = Color.White.copy(alpha = ContentAlpha.disabled)
-                )
-            )
+            // Empty/invisible thumb - we'll draw our own
+            Box(modifier = Modifier.size(0.dp))
         },
         track = { sliderState ->
             BoxWithConstraints(
@@ -390,6 +418,25 @@ fun AutoCenterBidirectionalSlider(
                         .offset(x = maxWidth * activeTrackStartFraction)
                         .background(if (enabled) sliderColor.copy(alpha = 0.75f) else sliderColor.copy(alpha = ContentAlpha.disabled * 0.75f))
                 )
+
+                // Draw custom thumb
+                val isPhone = isPhoneDevice()
+                Canvas(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    val thumbX = size.width * normalizedCurrentValue
+                    val thumbWidth = 3.dp.toPx()
+                    val thumbHeightFraction = if (isPhone) 1.0f else 0.7f // 100% on phone, 70% on tablet
+                    val thumbHeight = size.height * thumbHeightFraction
+                    val thumbOffsetY = (size.height - thumbHeight) / 2f // Center vertically
+
+                    // Thumb - vertical line
+                    drawRect(
+                        color = if (enabled) Color.White else Color.White.copy(alpha = ContentAlpha.disabled),
+                        topLeft = Offset(thumbX - thumbWidth / 2f, thumbOffsetY),
+                        size = Size(thumbWidth, thumbHeight)
+                    )
+                }
             }
         }
     )
@@ -617,6 +664,33 @@ private fun WidthExpansionSliderCore(
                         .offset(x = maxWidth * activeTrackStartFraction)
                         .background(if (enabled) sliderColor.copy(alpha = 0.75f) else sliderColor.copy(alpha = ContentAlpha.disabled * 0.75f))
                 )
+
+                // Draw thumbs on both ends of the active track as vertical lines
+                val isPhone = isPhoneDevice()
+                Canvas(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    val leftThumbX = size.width * activeTrackStartFraction
+                    val rightThumbX = size.width * (activeTrackStartFraction + activeTrackWidthFraction)
+                    val thumbWidth = 3.dp.toPx()
+                    val thumbHeightFraction = if (isPhone) 1.0f else 0.7f // 100% on phone, 70% on tablet
+                    val thumbHeight = size.height * thumbHeightFraction
+                    val thumbOffsetY = (size.height - thumbHeight) / 2f // Center vertically
+
+                    // Left thumb - vertical line
+                    drawRect(
+                        color = if (enabled) Color.White else Color.White.copy(alpha = ContentAlpha.disabled),
+                        topLeft = Offset(leftThumbX - thumbWidth / 2f, thumbOffsetY),
+                        size = Size(thumbWidth, thumbHeight)
+                    )
+
+                    // Right thumb - vertical line
+                    drawRect(
+                        color = if (enabled) Color.White else Color.White.copy(alpha = ContentAlpha.disabled),
+                        topLeft = Offset(rightThumbX - thumbWidth / 2f, thumbOffsetY),
+                        size = Size(thumbWidth, thumbHeight)
+                    )
+                }
             }
         }
     )
@@ -792,16 +866,11 @@ private fun StandardSliderCore(
             disabledInactiveTrackColor = Color.Transparent
         ),
         thumb = {
-            SliderDefaults.Thumb(
-                interactionSource = interactionSource,
-                colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    disabledThumbColor = Color.White.copy(alpha = ContentAlpha.disabled)
-                )
-            )
+            // Empty/invisible thumb - we'll draw our own
+            Box(modifier = Modifier.size(0.dp))
         },
         track = { sliderState ->
-    BoxWithConstraints(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
                     .height(actualTrackThickness)
@@ -817,19 +886,38 @@ private fun StandardSliderCore(
                 val activeTrackStartFraction = 0f
 
                 // Inactive track (dimmer)
-        Box(
-            modifier = Modifier
+                Box(
+                    modifier = Modifier
                         .fillMaxSize()
                         .background(if (enabled) sliderColor.copy(alpha = 0.3f) else sliderColor.copy(alpha = ContentAlpha.disabled * 0.3f))
-        )
+                )
                 // Active track (brighter)
-        Box(
-            modifier = Modifier
+                Box(
+                    modifier = Modifier
                         .fillMaxHeight()
                         .width(maxWidth * activeTrackWidthFraction)
                         .offset(x = maxWidth * activeTrackStartFraction)
                         .background(if (enabled) sliderColor.copy(alpha = 0.75f) else sliderColor.copy(alpha = ContentAlpha.disabled * 0.75f))
                 )
+
+                // Draw custom thumb
+                val isPhone = isPhoneDevice()
+                Canvas(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    val thumbX = size.width * normalizedCurrentValue
+                    val thumbWidth = 3.dp.toPx()
+                    val thumbHeightFraction = if (isPhone) 1.0f else 0.7f // 100% on phone, 70% on tablet
+                    val thumbHeight = size.height * thumbHeightFraction
+                    val thumbOffsetY = (size.height - thumbHeight) / 2f // Center vertically
+
+                    // Thumb - vertical line
+                    drawRect(
+                        color = if (enabled) Color.White else Color.White.copy(alpha = ContentAlpha.disabled),
+                        topLeft = Offset(thumbX - thumbWidth / 2f, thumbOffsetY),
+                        size = Size(thumbWidth, thumbHeight)
+                    )
+                }
             }
         }
     )

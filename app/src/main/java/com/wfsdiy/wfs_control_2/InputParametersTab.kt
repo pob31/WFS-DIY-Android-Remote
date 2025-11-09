@@ -117,6 +117,13 @@ fun InputParametersTab(
     val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
+    // Track section positions for shortcut buttons
+    var directivitySectionPosition by remember { mutableFloatStateOf(0f) }
+    var liveSourceSectionPosition by remember { mutableFloatStateOf(0f) }
+    var floorReflectionsSectionPosition by remember { mutableFloatStateOf(0f) }
+    var jitterSectionPosition by remember { mutableFloatStateOf(0f) }
+    var lfoSectionPosition by remember { mutableFloatStateOf(0f) }
+
     // Track which shortcut button was recently clicked for temporary highlight
     var recentlyClickedShortcut by remember { mutableStateOf<String?>(null) }
 
@@ -212,7 +219,8 @@ fun InputParametersTab(
             onExpandedChange = { isDirectivityExpanded = it },
             scrollState = scrollState,
             coroutineScope = coroutineScope,
-            isPhone = isPhone
+            isPhone = isPhone,
+            onPositionChanged = { directivitySectionPosition = it }
         )
 
         // Live Source Attenuation Group (now has its own collapsible header)
@@ -229,7 +237,8 @@ fun InputParametersTab(
             onExpandedChange = { isLiveSourceExpanded = it },
             scrollState = scrollState,
             coroutineScope = coroutineScope,
-            isPhone = isPhone
+            isPhone = isPhone,
+            onPositionChanged = { liveSourceSectionPosition = it }
         )
 
         // Floor Reflections Group (now has its own collapsible header)
@@ -246,7 +255,8 @@ fun InputParametersTab(
             onExpandedChange = { isFloorReflectionsExpanded = it },
             scrollState = scrollState,
             coroutineScope = coroutineScope,
-            isPhone = isPhone
+            isPhone = isPhone,
+            onPositionChanged = { floorReflectionsSectionPosition = it }
         )
 
         // Jitter Group (now has its own collapsible header)
@@ -261,9 +271,10 @@ fun InputParametersTab(
             isExpanded = isJitterExpanded,
             onExpandedChange = { isJitterExpanded = it },
             scrollState = scrollState,
-            coroutineScope = coroutineScope
+            coroutineScope = coroutineScope,
+            onPositionChanged = { jitterSectionPosition = it }
         )
-        
+
         // LFO Group (now has its own collapsible header)
         RenderLFOSection(
             selectedChannel = selectedChannel,
@@ -278,7 +289,8 @@ fun InputParametersTab(
             isExpanded = isLFOExpanded,
             onExpandedChange = { isLFOExpanded = it },
             scrollState = scrollState,
-            coroutineScope = coroutineScope
+            coroutineScope = coroutineScope,
+            onPositionChanged = { lfoSectionPosition = it }
         )
             }
         }
@@ -307,6 +319,11 @@ fun InputParametersTab(
                     isHighlighted = recentlyClickedShortcut == "Directivity",
                     onClick = {
                         isDirectivityExpanded = true
+                        if (directivitySectionPosition > 0) {
+                            coroutineScope.launch {
+                                scrollState.animateScrollTo(directivitySectionPosition.toInt())
+                            }
+                        }
                         recentlyClickedShortcut = "Directivity"
                     }
                 )
@@ -315,6 +332,11 @@ fun InputParametersTab(
                     isHighlighted = recentlyClickedShortcut == "Live Source Attenuation",
                     onClick = {
                         isLiveSourceExpanded = true
+                        if (liveSourceSectionPosition > 0) {
+                            coroutineScope.launch {
+                                scrollState.animateScrollTo(liveSourceSectionPosition.toInt())
+                            }
+                        }
                         recentlyClickedShortcut = "Live Source Attenuation"
                     }
                 )
@@ -323,6 +345,11 @@ fun InputParametersTab(
                     isHighlighted = recentlyClickedShortcut == "Floor Reflections",
                     onClick = {
                         isFloorReflectionsExpanded = true
+                        if (floorReflectionsSectionPosition > 0) {
+                            coroutineScope.launch {
+                                scrollState.animateScrollTo(floorReflectionsSectionPosition.toInt())
+                            }
+                        }
                         recentlyClickedShortcut = "Floor Reflections"
                     }
                 )
@@ -331,6 +358,11 @@ fun InputParametersTab(
                     isHighlighted = recentlyClickedShortcut == "Jitter",
                     onClick = {
                         isJitterExpanded = true
+                        if (jitterSectionPosition > 0) {
+                            coroutineScope.launch {
+                                scrollState.animateScrollTo(jitterSectionPosition.toInt())
+                            }
+                        }
                         recentlyClickedShortcut = "Jitter"
                     }
                 )
@@ -339,6 +371,11 @@ fun InputParametersTab(
                     isHighlighted = recentlyClickedShortcut == "LFO",
                     onClick = {
                         isLFOExpanded = true
+                        if (lfoSectionPosition > 0) {
+                            coroutineScope.launch {
+                                scrollState.animateScrollTo(lfoSectionPosition.toInt())
+                            }
+                        }
                         recentlyClickedShortcut = "LFO"
                     }
                 )
@@ -1557,7 +1594,8 @@ private fun RenderDirectivitySection(
     onExpandedChange: (Boolean) -> Unit,
     scrollState: androidx.compose.foundation.ScrollState,
     coroutineScope: kotlinx.coroutines.CoroutineScope,
-    isPhone: Boolean
+    isPhone: Boolean,
+    onPositionChanged: (Float) -> Unit
 ) {
     val inputId by rememberUpdatedState(selectedChannel.inputId)
     val density = LocalDensity.current
@@ -1626,6 +1664,7 @@ private fun RenderDirectivitySection(
             .clickable { onExpandedChange(!isExpanded) }
             .onGloballyPositioned { coordinates ->
                 sectionYPosition = coordinates.positionInParent().y
+                onPositionChanged(sectionYPosition)
             }
             .padding(
                 start = screenWidthDp * 0.1f,
@@ -2014,7 +2053,8 @@ private fun RenderLiveSourceSection(
     onExpandedChange: (Boolean) -> Unit,
     scrollState: androidx.compose.foundation.ScrollState,
     coroutineScope: kotlinx.coroutines.CoroutineScope,
-    isPhone: Boolean
+    isPhone: Boolean,
+    onPositionChanged: (Float) -> Unit
 ) {
     val inputId by rememberUpdatedState(selectedChannel.inputId)
     val density = LocalDensity.current
@@ -2135,6 +2175,7 @@ private fun RenderLiveSourceSection(
             .clickable { onExpandedChange(!isExpanded) }
             .onGloballyPositioned { coordinates ->
                 sectionYPosition = coordinates.positionInParent().y
+                onPositionChanged(sectionYPosition)
             }
             .padding(
                 start = screenWidthDp * 0.1f,
@@ -2852,7 +2893,8 @@ private fun RenderFloorReflectionsSection(
     onExpandedChange: (Boolean) -> Unit,
     scrollState: androidx.compose.foundation.ScrollState,
     coroutineScope: kotlinx.coroutines.CoroutineScope,
-    isPhone: Boolean
+    isPhone: Boolean,
+    onPositionChanged: (Float) -> Unit
 ) {
     val inputId by rememberUpdatedState(selectedChannel.inputId)
     val density = LocalDensity.current
@@ -2984,6 +3026,7 @@ private fun RenderFloorReflectionsSection(
             .clickable { onExpandedChange(!isExpanded) }
             .onGloballyPositioned { coordinates ->
                 sectionYPosition = coordinates.positionInParent().y
+                onPositionChanged(sectionYPosition)
             }
             .padding(
                 start = screenWidthDp * 0.1f,
@@ -3755,7 +3798,8 @@ private fun RenderJitterSection(
     isExpanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     scrollState: androidx.compose.foundation.ScrollState,
-    coroutineScope: kotlinx.coroutines.CoroutineScope
+    coroutineScope: kotlinx.coroutines.CoroutineScope,
+    onPositionChanged: (Float) -> Unit
 ) {
     val inputId by rememberUpdatedState(selectedChannel.inputId)
     val density = LocalDensity.current
@@ -3804,6 +3848,7 @@ private fun RenderJitterSection(
             .clickable { onExpandedChange(!isExpanded) }
             .onGloballyPositioned { coordinates ->
                 sectionYPosition = coordinates.positionInParent().y
+                onPositionChanged(sectionYPosition)
             }
             .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -3892,7 +3937,8 @@ private fun RenderLFOSection(
     isExpanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     scrollState: androidx.compose.foundation.ScrollState,
-    coroutineScope: kotlinx.coroutines.CoroutineScope
+    coroutineScope: kotlinx.coroutines.CoroutineScope,
+    onPositionChanged: (Float) -> Unit
 ) {
     val inputId by rememberUpdatedState(selectedChannel.inputId)
     val density = LocalDensity.current
@@ -4118,6 +4164,7 @@ private fun RenderLFOSection(
             .clickable { onExpandedChange(!isExpanded) }
             .onGloballyPositioned { coordinates ->
                 sectionYPosition = coordinates.positionInParent().y
+                onPositionChanged(sectionYPosition)
             }
             .padding(
                 start = screenWidthDp * 0.1f,
