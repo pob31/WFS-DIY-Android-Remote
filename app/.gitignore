@@ -2,3 +2,5 @@
 /release/output-metadata.json
 /release/baselineProfiles/1/app-release.dm
 /release/baselineProfiles/0/app-release.dm
+/release/baselineProfiles/0/wfs-control-1.0-release.dm
+/release/baselineProfiles/1/wfs-control-1.0-release.dm
