@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Divider
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.MaterialTheme // Added for Preview
 import androidx.compose.material3.Surface // Added for Preview
 import androidx.compose.material3.Text
@@ -156,11 +156,10 @@ fun ArrayAdjustTab() {
 
 @Composable
 fun VerticalDivider() {
-    Divider(
+    androidx.compose.material3.VerticalDivider(
         color = Color.Gray,
-        modifier = Modifier
-            .fillMaxHeight()
-            .width(1.dp)
+        thickness = 1.dp,
+        modifier = Modifier.fillMaxHeight()
     )
 }
 
@@ -189,7 +188,7 @@ fun ColumnScope.TwoSplitCell(labels: Pair<String, String>, themeColor: Color, la
         Box(modifier = Modifier.weight(1f).fillMaxHeight().background(themeColor.copy(alpha = 0.3f)).padding(2.dp), contentAlignment = Alignment.Center) {
             Text(labels.first, textAlign = TextAlign.Center, fontSize = labelFontSize, color = Color.White, maxLines = 2)
         }
-        Divider(color = themeColor.copy(alpha = 0.5f), modifier = Modifier.width(1.dp).fillMaxHeight())
+        androidx.compose.material3.VerticalDivider(color = themeColor.copy(alpha = 0.5f), thickness = 1.dp, modifier = Modifier.fillMaxHeight())
         Box(modifier = Modifier.weight(1f).fillMaxHeight().background(themeColor.copy(alpha = 0.3f)).padding(2.dp), contentAlignment = Alignment.Center) {
             Text(labels.second, textAlign = TextAlign.Center, fontSize = labelFontSize, color = Color.White, maxLines = 2)
         }
@@ -209,7 +208,7 @@ fun ColumnScope.FourSplitCell(labels: List<String>, themeColor: Color, labelFont
                  Text(label, textAlign = TextAlign.Center, fontSize = labelFontSize, color = Color.White, maxLines = 1)
             }
             if (index < labels.size - 1) {
-                Divider(color = themeColor.copy(alpha = 0.5f), modifier = Modifier.width(1.dp).fillMaxHeight())
+                androidx.compose.material3.VerticalDivider(color = themeColor.copy(alpha = 0.5f), thickness = 1.dp, modifier = Modifier.fillMaxHeight())
             }
         }
     }
