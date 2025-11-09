@@ -1793,7 +1793,7 @@ private fun RenderDirectivitySection(
                 // Tilt
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Tilt", fontSize = 12.sp, color = Color.White)
-                    BidirectionalSlider(
+                    BidirectionalSliderWithSideBox(
                         value = tiltValue,
                         onValueChange = { newValue ->
                             tiltValue = newValue
@@ -1806,13 +1806,10 @@ private fun RenderDirectivitySection(
                             ))
                             viewModel.sendInputParameterInt("/remoteInput/tilt", inputId, newValue.toInt())
                         },
-                        modifier = Modifier.height(verticalSliderHeight),
                         sliderColor = getRowColor(4),
                         trackBackgroundColor = getRowColorLight(4),
-                        orientation = SliderOrientation.VERTICAL,
                         valueRange = -90f..90f,
                         displayedValue = tiltDisplayValue,
-                        isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
                             committedValue.toFloatOrNull()?.let { value ->
@@ -1831,7 +1828,8 @@ private fun RenderDirectivitySection(
                             }
                         },
                         valueUnit = "°",
-                        valueTextColor = Color.White
+                        valueTextColor = Color.White,
+                        sliderHeight = verticalSliderHeight
                     )
                 }
                 }
@@ -1914,7 +1912,7 @@ private fun RenderDirectivitySection(
                     // Tilt
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Tilt", fontSize = 12.sp, color = Color.White)
-                        BidirectionalSlider(
+                        BidirectionalSliderWithSideBox(
                             value = tiltValue,
                             onValueChange = { newValue ->
                                 tiltValue = newValue
@@ -1927,13 +1925,10 @@ private fun RenderDirectivitySection(
                                 ))
                                 viewModel.sendInputParameterInt("/remoteInput/tilt", inputId, newValue.toInt())
                             },
-                            modifier = Modifier.height(verticalSliderHeight),
                             sliderColor = getRowColor(4),
                             trackBackgroundColor = getRowColorLight(4),
-                            orientation = SliderOrientation.VERTICAL,
                             valueRange = -90f..90f,
                             displayedValue = tiltDisplayValue,
-                            isValueEditable = true,
                             onDisplayedValueChange = { /* Typing handled internally */ },
                             onValueCommit = { committedValue ->
                                 committedValue.toFloatOrNull()?.let { value ->
@@ -1951,7 +1946,8 @@ private fun RenderDirectivitySection(
                                 }
                             },
                             valueUnit = "°",
-                            valueTextColor = Color.White
+                            valueTextColor = Color.White,
+                            sliderHeight = verticalSliderHeight
                         )
                     }
 

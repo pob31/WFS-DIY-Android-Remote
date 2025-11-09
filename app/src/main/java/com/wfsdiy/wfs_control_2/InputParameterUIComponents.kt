@@ -300,7 +300,9 @@ fun ParameterTextBox(
                         lastCommittedValue = value
                     }
                 },
-            textStyle = TextStyle(fontSize = 14.sp),
+            textStyle = TextStyle(
+                fontSize = if (height < 48.dp) 12.sp else 14.sp
+            ),
             singleLine = true,
             keyboardOptions = KeyboardOptions(
                 imeAction = ImeAction.Done

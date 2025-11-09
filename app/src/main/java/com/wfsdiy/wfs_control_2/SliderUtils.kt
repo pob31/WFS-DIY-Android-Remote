@@ -840,6 +840,76 @@ private object ContentAlpha {
 }
 
 /**
+ * BidirectionalSlider variant with number box positioned on the right side
+ * for vertical sliders. The number box is vertically centered with the middle
+ * of the slider, providing a visual hint for the center position.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BidirectionalSliderWithSideBox(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    sliderColor: Color = Color.Blue,
+    trackBackgroundColor: Color = sliderColor.copy(alpha = 0.24f),
+    valueRange: ClosedFloatingPointRange<Float> = -1f..1f,
+    thumbSize: DpSize? = null,
+    trackThickness: Dp? = null,
+    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    onValueChangeFinished: (() -> Unit)? = null,
+    enabled: Boolean = true,
+    displayedValue: String = "",
+    onDisplayedValueChange: (String) -> Unit = {},
+    onValueCommit: (String) -> Unit = {},
+    valueUnit: String = "",
+    valueTextColor: Color = Color.White,
+    sliderHeight: Dp = 200.dp
+) {
+    val responsiveSizes = getResponsiveSliderSizes()
+    val finalThumbSize = thumbSize ?: responsiveSizes.thumbSize
+    val finalTrackThickness = trackThickness ?: responsiveSizes.trackThickness
+
+    // Vertical slider with number box on the right, centered
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Slider on the left
+        Box(
+            modifier = Modifier.height(sliderHeight),
+            contentAlignment = Alignment.Center
+        ) {
+            BidirectionalSliderCore(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier.fillMaxHeight().width(40.dp),
+                orientation = SliderOrientation.VERTICAL,
+                sliderColor = sliderColor,
+                trackBackgroundColor = trackBackgroundColor,
+                valueRange = valueRange,
+                thumbSize = finalThumbSize,
+                trackThickness = finalTrackThickness,
+                interactionSource = interactionSource,
+                onValueChangeFinished = onValueChangeFinished,
+                enabled = true // Always enabled for interaction, greying is visual only
+            )
+        }
+
+        // Number box on the right, vertically centered with slider
+        EditableValueBox(
+            displayedValue = displayedValue,
+            valueUnit = valueUnit,
+            valueTextColor = valueTextColor,
+            onDisplayedValueChange = onDisplayedValueChange,
+            onValueCommit = onValueCommit,
+            enabled = enabled,
+            modifier = Modifier.width(90.dp)
+        )
+    }
+}
+
+/**
  * Editable value box for sliders
  */
 @Composable
