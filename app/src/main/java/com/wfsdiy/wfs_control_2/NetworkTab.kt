@@ -72,6 +72,7 @@ fun NetworkTab(
     var incomingPort by remember { mutableStateOf("") }
     var outgoingPort by remember { mutableStateOf("") }
     var ipAddress by remember { mutableStateOf("") }
+    var findDevicePassword by remember { mutableStateOf("") }
     var currentIpAddress by remember { mutableStateOf("Loading...") }
 
     var incomingPortError by remember { mutableStateOf(false) }
@@ -83,10 +84,11 @@ fun NetworkTab(
         incomingPort = loadedIncoming
         outgoingPort = loadedOutgoing
         ipAddress = loadedIp
+        findDevicePassword = loadFindDevicePassword(context)
         incomingPortError = !isValidPort(loadedIncoming)
         outgoingPortError = !isValidPort(loadedOutgoing)
         ipAddressError = !isValidIpAddress(loadedIp)
-        
+
         // Get current device IP address
         currentIpAddress = getCurrentIpAddress()
     }
@@ -191,7 +193,7 @@ fun NetworkTab(
             colors = textFieldColors,
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Decimal,
-                imeAction = ImeAction.Done
+                imeAction = ImeAction.Next
             ),
             keyboardActions = KeyboardActions(
                 onDone = { focusManager.clearFocus() }
@@ -200,6 +202,27 @@ fun NetworkTab(
             isError = ipAddressError,
             supportingText = {
                 if (ipAddressError) Text("Invalid IPv4 address format (e.g., 192.168.1.100)")
+            }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = findDevicePassword,
+            onValueChange = { findDevicePassword = it },
+            label = { Text("Find Device Password (Optional)") },
+            textStyle = textStyle,
+            colors = textFieldColors,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = { focusManager.clearFocus() }
+            ),
+            modifier = Modifier.fillMaxWidth(0.8f),
+            supportingText = {
+                Text("Password for /findDevice OSC command. Leave empty to disable.")
             }
         )
 
@@ -223,6 +246,7 @@ fun NetworkTab(
 
                 if (isIncomingPortValid && isOutgoingPortValid && isIpAddressValid) {
                     saveNetworkParameters(context, incomingPort, outgoingPort, ipAddress)
+                    saveFindDevicePassword(context, findDevicePassword)
                     onNetworkParametersChanged?.invoke()
                     Toast.makeText(context, "Network settings saved", Toast.LENGTH_SHORT).show()
                 } else {

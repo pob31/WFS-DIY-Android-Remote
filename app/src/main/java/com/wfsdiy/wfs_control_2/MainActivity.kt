@@ -58,6 +58,7 @@ internal const val KEY_CLUSTER_SECONDARY_ANGULAR_ENABLED = "cluster_secondary_an
 internal const val KEY_CLUSTER_SECONDARY_RADIAL_ENABLED = "cluster_secondary_radial_enabled"
 internal const val KEY_INPUT_SECONDARY_ANGULAR_MODE = "input_secondary_angular_mode"
 internal const val KEY_INPUT_SECONDARY_RADIAL_MODE = "input_secondary_radial_mode"
+internal const val KEY_FIND_DEVICE_PASSWORD = "find_device_password"
 
 // Maximum number of inputs the system can handle
 internal const val MAX_INPUTS = 64
@@ -180,6 +181,19 @@ fun loadNetworkParameters(context: Context): Triple<String, String, String> {
     val outgoingPort = sharedPrefs.getString(KEY_OUTGOING_PORT, "8001") ?: "8001"
     val ipAddress = sharedPrefs.getString(KEY_IP_ADDRESS, "192.168.1.100") ?: "192.168.1.100"
     return Triple(incomingPort, outgoingPort, ipAddress)
+}
+
+fun saveFindDevicePassword(context: Context, password: String) {
+    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    with(sharedPrefs.edit()) {
+        putString(KEY_FIND_DEVICE_PASSWORD, password)
+        apply()
+    }
+}
+
+fun loadFindDevicePassword(context: Context): String {
+    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    return sharedPrefs.getString(KEY_FIND_DEVICE_PASSWORD, "") ?: ""
 }
 
 fun saveAppSettings(context: Context, numberOfInputs: Int, markers: List<Marker>) {
@@ -509,13 +523,12 @@ fun WFSControlApp() {
     }
 
     val requestPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
-        if (isGranted) {
-            Intent(context, OscService::class.java).also { intent ->
-                ContextCompat.startForegroundService(context, intent)
-                context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
-            }
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        // Start service if at least POST_NOTIFICATIONS is granted (or not required)
+        Intent(context, OscService::class.java).also { intent ->
+            ContextCompat.startForegroundService(context, intent)
+            context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
         }
     }
 
@@ -545,19 +558,23 @@ fun WFSControlApp() {
         }
         initialInputLayoutDone = false
         
-        // Start OSC service with screen dimensions
+        // Start OSC service with screen dimensions and request necessary permissions
+        val permissionsToRequest = mutableListOf<String>()
+
+        // Add CAMERA permission (needed for flashlight in find device feature)
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.CAMERA)
+        }
+
+        // Add POST_NOTIFICATIONS for Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            when {
-                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED -> {
-                    Intent(context, OscService::class.java).also { intent ->
-                        ContextCompat.startForegroundService(context, intent)
-                        context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
-                    }
-                }
-                else -> {
-                    requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
             }
+        }
+
+        if (permissionsToRequest.isNotEmpty()) {
+            requestPermissionLauncher.launch(permissionsToRequest.toTypedArray())
         } else {
             Intent(context, OscService::class.java).also { intent ->
                 ContextCompat.startForegroundService(context, intent)

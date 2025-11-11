@@ -709,6 +709,7 @@ typealias OscInputParameterFloatCallback = (oscPath: String, inputId: Int, value
 typealias OscInputParameterStringCallback = (oscPath: String, inputId: Int, value: String) -> Unit
 
 fun parseAndProcessOscPacket(
+    context: Context,
     data: ByteArray,
     canvasWidth: Float,
     canvasHeight: Float,
@@ -735,6 +736,20 @@ fun parseAndProcessOscPacket(
         val address = parseOscString(buffer)
 
         when {
+            address == "/findDevice" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",s") {
+                    return
+                }
+                val receivedPassword = parseOscString(buffer)
+                val storedPassword = loadFindDevicePassword(context)
+
+                // If password is set and matches, or if no password is set, launch the flash screen
+                if (storedPassword.isEmpty() || receivedPassword == storedPassword) {
+                    val intent = android.content.Intent(context, FlashScreenActivity::class.java)
+                    intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                }
+            }
             address == "/inputs" -> {
                 if (!buffer.hasRemaining() || parseOscString(buffer) != ",i") {
                     return
@@ -986,6 +1001,7 @@ fun startOscServer(
 
                     val (canvasWidth, canvasHeight) = CanvasDimensions.getCurrentDimensions()
                     parseAndProcessOscPacket(
+                        context,
                         receivedData,
                         canvasWidth,
                         canvasHeight,
