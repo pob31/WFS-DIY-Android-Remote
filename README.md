@@ -1,30 +1,40 @@
-This is open source software.
-The code repository is here: https://github.com/pob31/WFS_control_2/tree/master
+# WFS Control 2
+
+Android remote control application for WFS-DIY version 3.
+
+## Download & Installation
+
+### Latest Release
+Download the latest APK from the [Releases page](https://github.com/pob31/WFS_control_2/releases)
+
+**Direct download**: [Latest APK](https://github.com/pob31/WFS_control_2/releases/latest/download/wfs-control-1.0-release.apk)
+
+### Installation Instructions
+1. Download the APK from the releases page
+2. On your Android device, go to Settings → Security → Enable "Install from Unknown Sources"
+3. Open the downloaded APK file to install
+4. Grant camera permissions when prompted (required for Find Device feature)
+
+### System Requirements
+- Android 8.0 (API 26) or higher
+- Works on both tablets and phones
+
+## License
 
 Copyright (c) 2025, Pierre-Olivier Boulant
-All rights reserved.
 
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-    * Redistributions of source code must retain the above copyright
-      notice, this list of conditions and the following disclaimer.
-    * Redistributions in binary form must reproduce the above copyright
-      notice, this list of conditions and the following disclaimer in the
-      documentation and/or other materials provided with the distribution.
-    * The name of the author may not be used to endorse or promote
-      products derived from this software without specific prior 
-      written permission.
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
-DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 https://wfs-diy.net
 
