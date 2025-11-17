@@ -7,7 +7,7 @@ Get up and running with WFS Control in 5 minutes.
 1. Download the latest APK from [GitHub Releases](https://github.com/pob31/WFS_control_2/releases)
 2. Enable "Install from Unknown Sources" in your Android device settings
 3. Install the APK
-4. Grant Camera permission when prompted
+4. Grant Camera permission when prompted to enable flashing the camera light when hunting for the Android device
 
 ## 2. Network Setup
 
@@ -23,8 +23,7 @@ Get up and running with WFS Control in 5 minutes.
 
 1. Go to **Input Parameters** tab
 2. Select Input 1 from dropdown
-3. Tap **"Request"** button
-4. If values populate, you're connected!
+3. If values populate, you're connected!
 
 ## 4. Basic Controls
 
@@ -56,7 +55,7 @@ Get up and running with WFS Control in 5 minutes.
 
 **Find your tablet in the dark**:
 - Send OSC: `/findDevice` from server
-- Screen flashes, flashlight strobes, alarm sounds
+- Screen flashes, flashlight strobes, alarm sounds and vibrates
 
 ## Need Help?
 
