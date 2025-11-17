@@ -9,3 +9,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# APK files - use GitHub Releases instead
+*.apk
+*.aab
+app/release/
