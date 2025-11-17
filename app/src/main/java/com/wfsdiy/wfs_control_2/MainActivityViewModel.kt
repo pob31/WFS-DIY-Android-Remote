@@ -123,7 +123,11 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
     fun sendInputParameterString(oscPath: String, inputId: Int, value: String) {
         oscService.sendInputParameterString(oscPath, inputId, value)
     }
-    
+
+    fun sendInputParameterIncDec(oscPath: String, inputId: Int, direction: String, value: Float) {
+        oscService.sendInputParameterIncDec(oscPath, inputId, direction, value)
+    }
+
     fun requestInputParameters(inputId: Int) {
         oscService.requestInputParameters(inputId)
     }

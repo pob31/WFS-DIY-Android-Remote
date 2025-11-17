@@ -261,7 +261,13 @@ class OscService : Service() {
             sendOscInputParameterString(this@OscService, oscPath, inputId, value)
         }
     }
-    
+
+    fun sendInputParameterIncDec(oscPath: String, inputId: Int, direction: String, value: Float) {
+        serviceScope.launch {
+            sendOscInputParameterIncDec(this@OscService, oscPath, inputId, direction, value)
+        }
+    }
+
     fun requestInputParameters(inputId: Int) {
         serviceScope.launch {
             sendOscRequestInputParameters(this@OscService, inputId)

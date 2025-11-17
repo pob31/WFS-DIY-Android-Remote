@@ -678,6 +678,62 @@ fun sendOscRequestInputParameters(context: Context, inputId: Int) {
     }
 }
 
+/**
+ * Send position increment/decrement via OSC for tracking system integration
+ * Message format: /remoteInput/positionX <channelID> <"inc"/"dec"> <float_value>
+ * @param oscPath The OSC address path (e.g., "/remoteInput/positionX")
+ * @param inputId The channel/input ID
+ * @param direction "inc" for increment, "dec" for decrement
+ * @param value The positive float value to increment or decrement by
+ */
+fun sendOscInputParameterIncDec(context: Context, oscPath: String, inputId: Int, direction: String, value: Float) {
+    val throttleKey = OscThrottleManager.inputParameterKey(oscPath, inputId)
+
+    if (!OscThrottleManager.shouldSend(throttleKey)) {
+        OscThrottleManager.storePending(throttleKey) {
+            sendOscInputParameterIncDec(context, oscPath, inputId, direction, value)
+        }
+        return
+    }
+
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull()
+
+            if (outgoingPort == null || !isValidPort(outgoingPortStr)) {
+                return@launch
+            }
+            if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) {
+                return@launch
+            }
+
+            val addressPatternBytes = getPaddedBytes(oscPath)
+            // Type tag for integer (inputId), string (direction), and float (value)
+            val typeTagBytes = getPaddedBytes(",isf")
+            val inputIdBytes = inputId.toBytesBigEndian()
+            val directionBytes = getPaddedBytes(direction)
+            val valueBytes = value.toBytesBigEndian()
+
+            val oscPacketBytes = addressPatternBytes + typeTagBytes + inputIdBytes + directionBytes + valueBytes
+
+            DatagramSocket().use { socket ->
+                val inetAddress = InetAddress.getByName(ipAddressStr)
+                val packet = DatagramPacket(oscPacketBytes, oscPacketBytes.size, inetAddress, outgoingPort)
+                socket.send(packet)
+            }
+
+            val pendingAction = OscThrottleManager.getPendingAndClear(throttleKey)
+            if (pendingAction != null) {
+                kotlinx.coroutines.delay(20)
+                pendingAction()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
+
 
 fun parseOscString(buffer: ByteBuffer): String {
     val bytes = mutableListOf<Byte>()
