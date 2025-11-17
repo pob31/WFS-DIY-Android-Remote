@@ -14,3 +14,11 @@ local.properties
 *.apk
 *.aab
 app/release/
+
+# Keystore files - NEVER commit these!
+keystore.properties
+*.keystore
+*.jks
+*.p12
+*.key
+key.properties
