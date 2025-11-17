@@ -19,6 +19,24 @@ Download the latest APK from the [Releases page](https://github.com/pob31/WFS_co
 - Android 8.0 (API 26) or higher
 - Works on both tablets and phones
 
+## Documentation
+
+📚 **[Full User Guide](docs/user-guide.md)** - Complete documentation with detailed explanations of all features
+
+🚀 **[Quick Start Guide](docs/quick-start.md)** - Get up and running in 5 minutes
+
+🔌 **[OSC Reference](docs/osc-reference.md)** - Complete OSC message reference for developers
+
+### What's Included
+
+- **64 Input Channels** - Control up to 64 independent audio sources
+- **10 Speaker Clusters** - Configure and position speaker arrays
+- **Real-time OSC Communication** - Bi-directional communication with 50Hz update rate
+- **Interactive Maps** - Visual positioning of inputs and clusters on a stage grid
+- **Comprehensive Parameter Control** - Adjust attenuation, delay, directivity, LFO, and more
+- **Find Device Feature** - Locate your tablet in dark venues with screen flash and alarm
+- **Responsive Design** - Optimized layouts for both tablets and phones
+
 ## License
 
 Copyright (c) 2025, Pierre-Olivier Boulant
