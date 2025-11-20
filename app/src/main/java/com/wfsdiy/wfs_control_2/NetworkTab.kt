@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.widget.Toast
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -75,16 +77,37 @@ fun NetworkTab(
     var findDevicePassword by remember { mutableStateOf("") }
     var currentIpAddress by remember { mutableStateOf("Loading...") }
 
+    // Track original values to detect changes
+    var originalIncomingPort by remember { mutableStateOf("") }
+    var originalOutgoingPort by remember { mutableStateOf("") }
+    var originalIpAddress by remember { mutableStateOf("") }
+    var originalFindDevicePassword by remember { mutableStateOf("") }
+
     var incomingPortError by remember { mutableStateOf(false) }
     var outgoingPortError by remember { mutableStateOf(false) }
     var ipAddressError by remember { mutableStateOf(false) }
 
+    // Check if any values have changed
+    val hasChanges = incomingPort != originalIncomingPort ||
+                     outgoingPort != originalOutgoingPort ||
+                     ipAddress != originalIpAddress ||
+                     findDevicePassword != originalFindDevicePassword
+
     LaunchedEffect(Unit) {
         val (loadedIncoming, loadedOutgoing, loadedIp) = loadNetworkParameters(context)
+        val loadedPassword = loadFindDevicePassword(context)
+
         incomingPort = loadedIncoming
         outgoingPort = loadedOutgoing
         ipAddress = loadedIp
-        findDevicePassword = loadFindDevicePassword(context)
+        findDevicePassword = loadedPassword
+
+        // Store original values for change detection
+        originalIncomingPort = loadedIncoming
+        originalOutgoingPort = loadedOutgoing
+        originalIpAddress = loadedIp
+        originalFindDevicePassword = loadedPassword
+
         incomingPortError = !isValidPort(loadedIncoming)
         outgoingPortError = !isValidPort(loadedOutgoing)
         ipAddressError = !isValidIpAddress(loadedIp)
@@ -95,31 +118,27 @@ fun NetworkTab(
 
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null // No ripple effect
+        ) {
+            // When tapping outside, revert to original values before clearing focus
+            incomingPort = originalIncomingPort
+            outgoingPort = originalOutgoingPort
+            ipAddress = originalIpAddress
+            findDevicePassword = originalFindDevicePassword
+            incomingPortError = !isValidPort(originalIncomingPort)
+            outgoingPortError = !isValidPort(originalOutgoingPort)
+            ipAddressError = !isValidIpAddress(originalIpAddress)
+            focusManager.clearFocus()
+        }
     ) {
         Text(
             "Network Configuration",
             style = MaterialTheme.typography.headlineSmall.copy(color = Color.White),
             modifier = Modifier.padding(bottom = 8.dp)
         )
-
-        // Current Device IP Address Display
-        Row(
-            modifier = Modifier.fillMaxWidth(0.8f),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "Current Device IP:",
-                style = TextStyle(color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-            )
-            Text(
-                currentIpAddress,
-                style = TextStyle(color = Color.Cyan, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         val textFieldColors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = Color.White,
@@ -132,78 +151,99 @@ fun NetworkTab(
             errorLabelColor = MaterialTheme.colorScheme.error,
             errorSupportingTextColor = MaterialTheme.colorScheme.error,
             focusedLabelColor = Color.White,
-            unfocusedLabelColor = Color.LightGray
+            unfocusedLabelColor = Color.LightGray,
+            disabledTextColor = Color.White,
+            disabledBorderColor = Color.Gray,
+            disabledLabelColor = Color.LightGray
         )
         val textStyle = TextStyle(color = Color.White, fontSize = 18.sp)
 
-        OutlinedTextField(
-            value = incomingPort,
-            onValueChange = {
-                incomingPort = it
-                incomingPortError = !isValidPort(it)
-            },
-            label = { Text("Incoming Port") },
-            textStyle = textStyle,
-            colors = textFieldColors,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Number,
-                imeAction = ImeAction.Next
-            ),
-            keyboardActions = KeyboardActions(
-                onDone = { focusManager.clearFocus() }
-            ),
+        // Network parameters in a row for side-by-side layout (including current device IP)
+        Row(
             modifier = Modifier.fillMaxWidth(0.8f),
-            isError = incomingPortError,
-            supportingText = {
-                if (incomingPortError) Text("Port must be a number from 1 to 65535")
-            }
-        )
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Current Device IP (read-only)
+            OutlinedTextField(
+                value = currentIpAddress,
+                onValueChange = { }, // No-op since it's read-only
+                label = { Text("Device IP") },
+                textStyle = textStyle,
+                colors = textFieldColors,
+                readOnly = true,
+                enabled = false,
+                modifier = Modifier.weight(1f)
+            )
 
-        OutlinedTextField(
-            value = outgoingPort,
-            onValueChange = {
-                outgoingPort = it
-                outgoingPortError = !isValidPort(it)
-            },
-            label = { Text("Outgoing Port") },
-            textStyle = textStyle,
-            colors = textFieldColors,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Number,
-                imeAction = ImeAction.Next
-            ),
-            keyboardActions = KeyboardActions(
-                onDone = { focusManager.clearFocus() }
-            ),
-            modifier = Modifier.fillMaxWidth(0.8f),
-            isError = outgoingPortError,
-            supportingText = {
-                if (outgoingPortError) Text("Port must be a number from 1 to 65535")
-            }
-        )
+            OutlinedTextField(
+                value = incomingPort,
+                onValueChange = {
+                    incomingPort = it
+                    incomingPortError = !isValidPort(it)
+                },
+                label = { Text("Incoming Port") },
+                textStyle = textStyle,
+                colors = textFieldColors,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = { focusManager.clearFocus() }
+                ),
+                modifier = Modifier.weight(1f),
+                isError = incomingPortError,
+                supportingText = {
+                    if (incomingPortError) Text("Invalid", fontSize = 10.sp)
+                }
+            )
 
-        OutlinedTextField(
-            value = ipAddress,
-            onValueChange = {
-                ipAddress = it
-                ipAddressError = !isValidIpAddress(it)
-            },
-            label = { Text("IP Address (IPv4)") },
-            textStyle = textStyle,
-            colors = textFieldColors,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Decimal,
-                imeAction = ImeAction.Next
-            ),
-            keyboardActions = KeyboardActions(
-                onDone = { focusManager.clearFocus() }
-            ),
-            modifier = Modifier.fillMaxWidth(0.8f),
-            isError = ipAddressError,
-            supportingText = {
-                if (ipAddressError) Text("Invalid IPv4 address format (e.g., 192.168.1.100)")
-            }
-        )
+            OutlinedTextField(
+                value = outgoingPort,
+                onValueChange = {
+                    outgoingPort = it
+                    outgoingPortError = !isValidPort(it)
+                },
+                label = { Text("Outgoing Port") },
+                textStyle = textStyle,
+                colors = textFieldColors,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = { focusManager.clearFocus() }
+                ),
+                modifier = Modifier.weight(1f),
+                isError = outgoingPortError,
+                supportingText = {
+                    if (outgoingPortError) Text("Invalid", fontSize = 10.sp)
+                }
+            )
+
+            OutlinedTextField(
+                value = ipAddress,
+                onValueChange = {
+                    ipAddress = it
+                    ipAddressError = !isValidIpAddress(it)
+                },
+                label = { Text("IP Address") },
+                textStyle = textStyle,
+                colors = textFieldColors,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = { focusManager.clearFocus() }
+                ),
+                modifier = Modifier.weight(1f),
+                isError = ipAddressError,
+                supportingText = {
+                    if (ipAddressError) Text("Invalid", fontSize = 10.sp)
+                }
+            )
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -228,8 +268,24 @@ fun NetworkTab(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Calculate Input Map marker 23 color for the button
-        val networkButtonColor = run {
+        // Show warning if there are unsaved changes
+        if (hasChanges) {
+            Text(
+                "⚠ You have unsaved changes",
+                style = TextStyle(
+                    color = Color(0xFFFFAA00),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                ),
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+
+        // Calculate button color based on whether there are changes
+        val networkButtonColor = if (hasChanges) {
+            Color(0xFFFF6B35) // Orange-red for pending changes
+        } else {
+            // Original Input Map marker 23 color
             val hue = (23 * 360f / 32) % 360f
             Color.hsl(hue, 0.9f, 0.6f)
         }
@@ -247,6 +303,13 @@ fun NetworkTab(
                 if (isIncomingPortValid && isOutgoingPortValid && isIpAddressValid) {
                     saveNetworkParameters(context, incomingPort, outgoingPort, ipAddress)
                     saveFindDevicePassword(context, findDevicePassword)
+
+                    // Update original values after successful save
+                    originalIncomingPort = incomingPort
+                    originalOutgoingPort = outgoingPort
+                    originalIpAddress = ipAddress
+                    originalFindDevicePassword = findDevicePassword
+
                     onNetworkParametersChanged?.invoke()
                     Toast.makeText(context, "Network settings saved", Toast.LENGTH_SHORT).show()
                 } else {
@@ -260,7 +323,7 @@ fun NetworkTab(
             ),
             shape = RoundedCornerShape(4.dp)
         ) {
-            Text("Apply Network Settings")
+            Text(if (hasChanges) "Apply Changes" else "Apply Network Settings")
         }
     }
 }
