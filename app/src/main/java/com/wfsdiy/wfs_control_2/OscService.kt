@@ -75,7 +75,14 @@ class OscService : Service() {
         val stringValue: String? = null,
         val timestamp: Long = System.currentTimeMillis()
     )
-    
+
+    data class OscClusterConfigUpdate(
+        val clusterId: Int,
+        val referenceMode: Int? = null,
+        val trackedInputId: Int? = null,
+        val timestamp: Long = System.currentTimeMillis()
+    )
+
     // Buffers for incoming OSC data
     private val markerUpdates = ConcurrentLinkedQueue<OscMarkerUpdate>()
     private val normalizedMarkerUpdates = ConcurrentLinkedQueue<OscNormalizedMarkerUpdate>()
@@ -83,6 +90,7 @@ class OscService : Service() {
     private val inputsUpdates = ConcurrentLinkedQueue<OscInputsUpdate>()
     private val clusterZUpdates = ConcurrentLinkedQueue<OscClusterZUpdate>()
     private val inputParameterUpdates = ConcurrentLinkedQueue<OscInputParameterUpdate>()
+    private val clusterConfigUpdates = ConcurrentLinkedQueue<OscClusterConfigUpdate>()
     
     // StateFlows for real-time data (when MainActivity is active)
     private val _markers = MutableStateFlow<List<Marker>>(emptyList())
@@ -117,7 +125,10 @@ class OscService : Service() {
     
     private val _inputParametersState = MutableStateFlow(InputParametersState())
     val inputParametersState: StateFlow<InputParametersState> = _inputParametersState.asStateFlow()
-    
+
+    private val _clusterConfigs = MutableStateFlow(List(10) { index -> ClusterConfig(id = index + 1) })
+    val clusterConfigs: StateFlow<List<ClusterConfig>> = _clusterConfigs.asStateFlow()
+
     // Store screen dimensions once at startup
     private var screenWidth: Float = 0f
     private var screenHeight: Float = 0f
@@ -222,6 +233,24 @@ class OscService : Service() {
                     onInputParameterStringReceived = { oscPath, inputId, value ->
                         inputParameterUpdates.offer(OscInputParameterUpdate(oscPath, inputId, stringValue = value))
                         updateInputParameterFromOsc(oscPath, inputId, stringValue = value)
+                    },
+                    onClusterReferenceModeChanged = { clusterId, mode ->
+                        clusterConfigUpdates.offer(OscClusterConfigUpdate(clusterId, referenceMode = mode))
+                        val index = clusterId - 1
+                        if (index >= 0 && index < _clusterConfigs.value.size) {
+                            val updatedConfigs = _clusterConfigs.value.toMutableList()
+                            updatedConfigs[index] = updatedConfigs[index].copy(referenceMode = mode)
+                            _clusterConfigs.value = updatedConfigs
+                        }
+                    },
+                    onClusterTrackedInputChanged = { clusterId, inputId ->
+                        clusterConfigUpdates.offer(OscClusterConfigUpdate(clusterId, trackedInputId = inputId))
+                        val index = clusterId - 1
+                        if (index >= 0 && index < _clusterConfigs.value.size) {
+                            val updatedConfigs = _clusterConfigs.value.toMutableList()
+                            updatedConfigs[index] = updatedConfigs[index].copy(trackedInputId = inputId)
+                            _clusterConfigs.value = updatedConfigs
+                        }
                     }
                 )
             } catch (e: Exception) {
@@ -273,7 +302,27 @@ class OscService : Service() {
             sendOscRequestInputParameters(this@OscService, inputId)
         }
     }
-    
+
+    fun sendClusterMove(clusterId: Int, deltaX: Float, deltaY: Float) {
+        serviceScope.launch {
+            sendOscClusterMove(this@OscService, clusterId, deltaX, deltaY)
+        }
+    }
+
+    fun sendBarycenterMove(clusterId: Int, deltaX: Float, deltaY: Float) {
+        serviceScope.launch {
+            sendOscBarycenterMove(this@OscService, clusterId, deltaX, deltaY)
+        }
+    }
+
+    fun getBufferedClusterConfigUpdates(): List<OscClusterConfigUpdate> {
+        val updates = mutableListOf<OscClusterConfigUpdate>()
+        while (clusterConfigUpdates.isNotEmpty()) {
+            clusterConfigUpdates.poll()?.let { updates.add(it) }
+        }
+        return updates
+    }
+
     private fun updateInputParameterFromOsc(oscPath: String, inputId: Int, intValue: Int? = null, floatValue: Float? = null, stringValue: String? = null) {
         // Find parameter definition by OSC path
         val definition = InputParameterDefinitions.allParameters.find { it.oscPath == oscPath } ?: return
@@ -376,6 +425,18 @@ class OscService : Service() {
             selectedInputId = currentState.selectedInputId,
             revision = currentState.revision + 1  // Increment to force Compose change detection
         )
+
+        // Special handling for cluster assignment: update marker's clusterId
+        if (oscPath == "/remoteInput/cluster" && intValue != null) {
+            val updatedMarkers = _markers.value.map { marker ->
+                if (marker.id == inputId) {
+                    marker.copy(clusterId = intValue)
+                } else {
+                    marker
+                }
+            }
+            _markers.value = updatedMarkers
+        }
     }
     
     fun startOscServerWithCanvasDimensions(canvasWidth: Float, canvasHeight: Float) {

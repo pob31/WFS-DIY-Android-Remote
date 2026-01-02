@@ -382,6 +382,118 @@ fun sendOscClusterScale(context: Context, clusterId: Int, factor: Float) {
     }
 }
 
+/**
+ * Send cluster move command to server.
+ * The server will move all cluster members atomically.
+ * @param clusterId Cluster ID (1-10)
+ * @param deltaX X delta in meters
+ * @param deltaY Y delta in meters
+ */
+fun sendOscClusterMove(context: Context, clusterId: Int, deltaX: Float, deltaY: Float) {
+    val throttleKey = OscThrottleManager.clusterMoveKey(clusterId)
+
+    if (!OscThrottleManager.shouldSend(throttleKey)) {
+        OscThrottleManager.storePending(throttleKey) {
+            sendOscClusterMove(context, clusterId, deltaX, deltaY)
+        }
+        return
+    }
+
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull()
+
+            if (outgoingPort == null || !isValidPort(outgoingPortStr)) {
+                return@launch
+            }
+            if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) {
+                return@launch
+            }
+
+            val addressPattern = "/cluster/move"
+            val addressPatternBytes = getPaddedBytes(addressPattern)
+            // Type tag: int (clusterId), float (deltaX), float (deltaY)
+            val typeTagBytes = getPaddedBytes(",iff")
+            val clusterIdBytes = clusterId.toBytesBigEndian()
+            val deltaXBytes = deltaX.toBytesBigEndian()
+            val deltaYBytes = deltaY.toBytesBigEndian()
+
+            val oscPacketBytes = addressPatternBytes + typeTagBytes + clusterIdBytes + deltaXBytes + deltaYBytes
+
+            DatagramSocket().use { socket ->
+                val inetAddress = InetAddress.getByName(ipAddressStr)
+                val packet = DatagramPacket(oscPacketBytes, oscPacketBytes.size, inetAddress, outgoingPort)
+                socket.send(packet)
+            }
+
+            val pendingAction = OscThrottleManager.getPendingAndClear(throttleKey)
+            if (pendingAction != null) {
+                kotlinx.coroutines.delay(20)
+                pendingAction()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
+
+/**
+ * Send barycenter move command to server.
+ * The server will adjust all cluster member positions to achieve the new barycenter position.
+ * @param clusterId Cluster ID (1-10)
+ * @param deltaX X delta in meters
+ * @param deltaY Y delta in meters
+ */
+fun sendOscBarycenterMove(context: Context, clusterId: Int, deltaX: Float, deltaY: Float) {
+    val throttleKey = OscThrottleManager.barycenterMoveKey(clusterId)
+
+    if (!OscThrottleManager.shouldSend(throttleKey)) {
+        OscThrottleManager.storePending(throttleKey) {
+            sendOscBarycenterMove(context, clusterId, deltaX, deltaY)
+        }
+        return
+    }
+
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull()
+
+            if (outgoingPort == null || !isValidPort(outgoingPortStr)) {
+                return@launch
+            }
+            if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) {
+                return@launch
+            }
+
+            val addressPattern = "/cluster/barycenter/move"
+            val addressPatternBytes = getPaddedBytes(addressPattern)
+            // Type tag: int (clusterId), float (deltaX), float (deltaY)
+            val typeTagBytes = getPaddedBytes(",iff")
+            val clusterIdBytes = clusterId.toBytesBigEndian()
+            val deltaXBytes = deltaX.toBytesBigEndian()
+            val deltaYBytes = deltaY.toBytesBigEndian()
+
+            val oscPacketBytes = addressPatternBytes + typeTagBytes + clusterIdBytes + deltaXBytes + deltaYBytes
+
+            DatagramSocket().use { socket ->
+                val inetAddress = InetAddress.getByName(ipAddressStr)
+                val packet = DatagramPacket(oscPacketBytes, oscPacketBytes.size, inetAddress, outgoingPort)
+                socket.send(packet)
+            }
+
+            val pendingAction = OscThrottleManager.getPendingAndClear(throttleKey)
+            if (pendingAction != null) {
+                kotlinx.coroutines.delay(20)
+                pendingAction()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
+
 fun sendOscMarkerAngleChange(context: Context, markerId: Int, modeNumber: Int, angleChange: Float) {
     android.util.Log.d("OSC", "sendOscMarkerAngleChange called: markerId=$markerId, modeNumber=$modeNumber, angleChange=$angleChange")
     val throttleKey = OscThrottleManager.markerAngleChangeKey(markerId, modeNumber)
@@ -763,6 +875,8 @@ typealias OscClusterZCallback = (ClusterId: Int, normalizedZ: Float) -> Unit
 typealias OscInputParameterIntCallback = (oscPath: String, inputId: Int, value: Int) -> Unit
 typealias OscInputParameterFloatCallback = (oscPath: String, inputId: Int, value: Float) -> Unit
 typealias OscInputParameterStringCallback = (oscPath: String, inputId: Int, value: String) -> Unit
+typealias OscClusterReferenceModeCallback = (clusterId: Int, mode: Int) -> Unit
+typealias OscClusterTrackedInputCallback = (clusterId: Int, inputId: Int) -> Unit
 
 fun parseAndProcessOscPacket(
     context: Context,
@@ -780,7 +894,9 @@ fun parseAndProcessOscPacket(
     onClusterZChanged: OscClusterZCallback? = null,
     onInputParameterIntReceived: OscInputParameterIntCallback? = null,
     onInputParameterFloatReceived: OscInputParameterFloatCallback? = null,
-    onInputParameterStringReceived: OscInputParameterStringCallback? = null
+    onInputParameterStringReceived: OscInputParameterStringCallback? = null,
+    onClusterReferenceModeChanged: OscClusterReferenceModeCallback? = null,
+    onClusterTrackedInputChanged: OscClusterTrackedInputCallback? = null
 ) {
     if (data.isEmpty()) {
         return
@@ -965,6 +1081,24 @@ fun parseAndProcessOscPacket(
 
                         onClusterZChanged?.invoke(clusterId, normalizedZ) // <-- CALL THE NEW CALLBACK
                     }
+                    "referenceMode" -> {
+                        if (!isClusterMessage) return
+                        // Expecting Type Tag: ",ii" (cluster ID, mode)
+                        if (!buffer.hasRemaining() || parseOscString(buffer) != ",ii") return
+                        if (buffer.remaining() < 8) return
+                        val clusterId = parseOscInt(buffer)
+                        val mode = parseOscInt(buffer)
+                        onClusterReferenceModeChanged?.invoke(clusterId, mode)
+                    }
+                    "trackedInput" -> {
+                        if (!isClusterMessage) return
+                        // Expecting Type Tag: ",ii" (cluster ID, tracked input ID)
+                        if (!buffer.hasRemaining() || parseOscString(buffer) != ",ii") return
+                        if (buffer.remaining() < 8) return
+                        val clusterId = parseOscInt(buffer)
+                        val inputId = parseOscInt(buffer)
+                        onClusterTrackedInputChanged?.invoke(clusterId, inputId)
+                    }
                     else -> {
 
                     }
@@ -1030,7 +1164,9 @@ fun startOscServer(
     onClusterZChanged: OscClusterZCallback? = null,
     onInputParameterIntReceived: OscInputParameterIntCallback? = null,
     onInputParameterFloatReceived: OscInputParameterFloatCallback? = null,
-    onInputParameterStringReceived: OscInputParameterStringCallback? = null
+    onInputParameterStringReceived: OscInputParameterStringCallback? = null,
+    onClusterReferenceModeChanged: OscClusterReferenceModeCallback? = null,
+    onClusterTrackedInputChanged: OscClusterTrackedInputCallback? = null
 ) {
     CoroutineScope(Dispatchers.IO).launch {
         var serverSocket: DatagramSocket? = null
@@ -1072,7 +1208,9 @@ fun startOscServer(
                         onClusterZChanged,
                         onInputParameterIntReceived,
                         onInputParameterFloatReceived,
-                        onInputParameterStringReceived
+                        onInputParameterStringReceived,
+                        onClusterReferenceModeChanged,
+                        onClusterTrackedInputChanged
                     )
                 } catch (e: java.net.SocketTimeoutException) {
 

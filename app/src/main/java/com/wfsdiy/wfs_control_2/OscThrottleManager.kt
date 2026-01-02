@@ -119,6 +119,20 @@ object OscThrottleManager {
     }
 
     /**
+     * Generate a unique key for cluster move messages
+     */
+    fun clusterMoveKey(clusterId: Int): String {
+        return "/cluster/move_$clusterId"
+    }
+
+    /**
+     * Generate a unique key for barycenter move messages
+     */
+    fun barycenterMoveKey(clusterId: Int): String {
+        return "/cluster/barycenter/move_$clusterId"
+    }
+
+    /**
      * Generate a unique key for array adjust command messages
      */
     fun arrayAdjustKey(oscAddress: String, arrayId: Int): String {

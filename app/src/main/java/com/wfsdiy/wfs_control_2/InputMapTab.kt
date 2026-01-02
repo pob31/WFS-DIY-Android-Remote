@@ -46,6 +46,28 @@ fun calculateRelativeDistanceChange(initialDistance: Float, currentDistance: Flo
     return if (initialDistance > 0f) (currentDistance - initialDistance) / initialDistance else 0f
 }
 
+/**
+ * Find the barycenter position for a cluster if it's in barycenter mode.
+ * Returns null if the cluster is not in barycenter mode or has no tracked input.
+ */
+fun findClusterBarycenter(
+    clusterId: Int,
+    markers: List<Marker>,
+    clusterConfigs: List<ClusterConfig>
+): Offset? {
+    val config = clusterConfigs.find { it.id == clusterId } ?: return null
+
+    // Only return barycenter if in barycenter mode (referenceMode == 1) and no tracked input
+    if (config.referenceMode != 1 || config.trackedInputId != 0) return null
+
+    val clusterMembers = markers.filter { it.clusterId == clusterId && it.isVisible }
+    if (clusterMembers.size < 2) return null
+
+    val sumX = clusterMembers.sumOf { it.positionX.toDouble() }.toFloat()
+    val sumY = clusterMembers.sumOf { it.positionY.toDouble() }.toFloat()
+    return Offset(sumX / clusterMembers.size, sumY / clusterMembers.size)
+}
+
 // Assuming drawMarker is in MapElements.kt or accessible
 // internal fun DrawScope.drawMarker( ... )
 
@@ -118,6 +140,97 @@ fun DrawScope.drawStageCoordinates(
 }
 
 
+/**
+ * Convert stage coordinates (meters) to canvas pixel position.
+ * @param stageX X position in meters (relative to displayed origin)
+ * @param stageY Y position in meters (relative to displayed origin)
+ * @param stageWidth Stage width in meters
+ * @param stageDepth Stage depth in meters
+ * @param stageOriginX Stage origin X offset in meters
+ * @param stageOriginY Stage origin Y offset in meters
+ * @param canvasWidth Canvas width in pixels
+ * @param canvasHeight Canvas height in pixels
+ * @param markerRadius Marker radius in pixels (for effective area calculation)
+ * @return Offset with canvas X and Y in pixels
+ */
+fun stageToCanvasPosition(
+    stageX: Float,
+    stageY: Float,
+    stageWidth: Float,
+    stageDepth: Float,
+    stageOriginX: Float,
+    stageOriginY: Float,
+    canvasWidth: Float,
+    canvasHeight: Float,
+    markerRadius: Float
+): Offset {
+    if (stageWidth <= 0f || stageDepth <= 0f || canvasWidth <= 0f || canvasHeight <= 0f) {
+        return Offset(canvasWidth / 2f, canvasHeight / 2f)
+    }
+
+    val effectiveWidth = canvasWidth - (markerRadius * 2f)
+    val effectiveHeight = canvasHeight - (markerRadius * 2f)
+
+    // Convert origin-relative stage position to physical stage position, then normalize
+    // Physical position = stage position + origin offset
+    // Canvas shows physical stage: left=-stageWidth/2, right=+stageWidth/2
+    val physicalX = stageX + stageOriginX
+    val physicalY = stageY + stageOriginY
+    val normalizedX = (physicalX + stageWidth / 2f) / stageWidth
+    val normalizedY = (physicalY + stageDepth / 2f) / stageDepth
+
+    // Convert normalized to canvas pixels (Y is inverted)
+    val canvasX = (normalizedX * effectiveWidth + markerRadius).coerceIn(markerRadius, canvasWidth - markerRadius)
+    val canvasY = ((1f - normalizedY) * effectiveHeight + markerRadius).coerceIn(markerRadius, canvasHeight - markerRadius)
+
+    return Offset(canvasX, canvasY)
+}
+
+/**
+ * Convert canvas pixel position to stage coordinates (meters).
+ * @param canvasX X position in canvas pixels
+ * @param canvasY Y position in canvas pixels
+ * @param stageWidth Stage width in meters
+ * @param stageDepth Stage depth in meters
+ * @param stageOriginX Stage origin X offset in meters
+ * @param stageOriginY Stage origin Y offset in meters
+ * @param canvasWidth Canvas width in pixels
+ * @param canvasHeight Canvas height in pixels
+ * @param markerRadius Marker radius in pixels (for effective area calculation)
+ * @return Pair of (stageX, stageY) in meters
+ */
+fun canvasToStagePosition(
+    canvasX: Float,
+    canvasY: Float,
+    stageWidth: Float,
+    stageDepth: Float,
+    stageOriginX: Float,
+    stageOriginY: Float,
+    canvasWidth: Float,
+    canvasHeight: Float,
+    markerRadius: Float
+): Pair<Float, Float> {
+    if (stageWidth <= 0f || stageDepth <= 0f || canvasWidth <= 0f || canvasHeight <= 0f) {
+        return Pair(0f, 0f)
+    }
+
+    val effectiveWidth = canvasWidth - (markerRadius * 2f)
+    val effectiveHeight = canvasHeight - (markerRadius * 2f)
+
+    // Convert canvas pixels to normalized (0-1) range
+    val normalizedX = (canvasX - markerRadius) / effectiveWidth
+    val normalizedY = 1f - ((canvasY - markerRadius) / effectiveHeight)
+
+    // Convert normalized to physical stage position, then to origin-relative
+    // Inverse of: normalizedX = (physicalX + stageWidth/2) / stageWidth
+    val physicalX = normalizedX * stageWidth - stageWidth / 2f
+    val physicalY = normalizedY * stageDepth - stageDepth / 2f
+    val stageX = physicalX - stageOriginX
+    val stageY = physicalY - stageOriginY
+
+    return Pair(stageX, stageY)
+}
+
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun InputMapTab(
@@ -132,10 +245,16 @@ fun InputMapTab(
     stageOriginX: Float,
     stageOriginY: Float,
     inputSecondaryAngularMode: SecondaryTouchFunction = SecondaryTouchFunction.OFF,
-    inputSecondaryRadialMode: SecondaryTouchFunction = SecondaryTouchFunction.OFF
+    inputSecondaryRadialMode: SecondaryTouchFunction = SecondaryTouchFunction.OFF,
+    clusterConfigs: List<ClusterConfig> = emptyList(),
+    onClusterMove: ((clusterId: Int, deltaX: Float, deltaY: Float) -> Unit)? = null,
+    onBarycenterMove: ((clusterId: Int, deltaX: Float, deltaY: Float) -> Unit)? = null,
+    inputParametersState: InputParametersState? = null,
+    onPositionChanged: ((inputId: Int, positionX: Float, positionY: Float) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val draggingMarkers = remember { mutableStateMapOf<Long, Int>() }
+    val draggingBarycenters = remember { mutableStateMapOf<Long, Int>() }  // pointerId -> clusterId
     val currentMarkersState by rememberUpdatedState(markers)
     
     // Local state for smooth dragging without blocking global updates
@@ -205,6 +324,69 @@ fun InputMapTab(
                 onCanvasSizeChanged(canvasWidth, canvasHeight)
             } else {
 
+            }
+        }
+
+        // Update marker positions from server inputParametersState
+        LaunchedEffect(inputParametersState?.revision, canvasWidth, canvasHeight, stageWidth, stageDepth, stageOriginX, stageOriginY, numberOfInputs, markerRadius) {
+            if (inputParametersState != null && canvasWidth > 0f && canvasHeight > 0f && stageWidth > 0f && stageDepth > 0f && numberOfInputs > 0) {
+                val updatedMarkers = currentMarkersState.mapIndexed { index, marker ->
+                    if (index < numberOfInputs) {
+                        val inputId = marker.id
+                        val channel = inputParametersState.getChannel(inputId)
+
+                        // Get position values from input parameters
+                        val posXParam = channel.parameters["positionX"]
+                        val posYParam = channel.parameters["positionY"]
+
+                        if (posXParam != null && posYParam != null) {
+                            // Convert normalized values (0-1) back to actual meters
+                            // Position parameters have minValue=-50, maxValue=50
+                            // actualValue = normalizedValue * (max - min) + min
+                            val posXDef = InputParameterDefinitions.allParameters.find { it.variableName == "positionX" }
+                            val posYDef = InputParameterDefinitions.allParameters.find { it.variableName == "positionY" }
+
+                            val posXMeters = if (posXDef != null) {
+                                InputParameterDefinitions.applyFormula(posXDef, posXParam.normalizedValue)
+                            } else {
+                                posXParam.normalizedValue * 100f - 50f // Fallback
+                            }
+                            val posYMeters = if (posYDef != null) {
+                                InputParameterDefinitions.applyFormula(posYDef, posYParam.normalizedValue)
+                            } else {
+                                posYParam.normalizedValue * 100f - 50f // Fallback
+                            }
+
+                            // Convert from stage coordinates (meters) to canvas pixels
+                            val canvasPos = stageToCanvasPosition(
+                                stageX = posXMeters,
+                                stageY = posYMeters,
+                                stageWidth = stageWidth,
+                                stageDepth = stageDepth,
+                                stageOriginX = stageOriginX,
+                                stageOriginY = stageOriginY,
+                                canvasWidth = canvasWidth,
+                                canvasHeight = canvasHeight,
+                                markerRadius = markerRadius
+                            )
+
+                            marker.copy(positionX = canvasPos.x, positionY = canvasPos.y)
+                        } else {
+                            marker
+                        }
+                    } else {
+                        marker
+                    }
+                }
+
+                // Only update if positions have actually changed
+                val hasChanges = updatedMarkers.zip(currentMarkersState).any { (new, old) ->
+                    new.positionX != old.positionX || new.positionY != old.positionY
+                }
+
+                if (hasChanges) {
+                    onMarkersInitiallyPositioned(updatedMarkers)
+                }
             }
         }
 
@@ -340,8 +522,26 @@ fun InputMapTab(
                                                 }
                                             }
                                         } else {
-                                            // No marker in pickup range - check for vector control only if at least one function is enabled
-                                            if (inputSecondaryAngularMode != SecondaryTouchFunction.OFF || inputSecondaryRadialMode != SecondaryTouchFunction.OFF) {
+                                            // No marker in pickup range - check for barycenter first
+                                            var barycenterFound = false
+                                            if (clusterConfigs.isNotEmpty()) {
+                                                // Check each cluster in barycenter mode
+                                                for (clusterId in 1..10) {
+                                                    if (draggingBarycenters.containsValue(clusterId)) continue
+                                                    val barycenter = findClusterBarycenter(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
+                                                    if (barycenter != null && distance(touchPosition, barycenter) <= markerRadius * pickupRadiusMultiplier) {
+                                                        if (draggingBarycenters.size + draggingMarkers.size < 10) {
+                                                            draggingBarycenters[pointerValue] = clusterId
+                                                            pointerIdToCurrentLogicalPosition[pointerId] = barycenter
+                                                            barycenterFound = true
+                                                            break
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // If no barycenter found, check for vector control
+                                            if (!barycenterFound && (inputSecondaryAngularMode != SecondaryTouchFunction.OFF || inputSecondaryRadialMode != SecondaryTouchFunction.OFF)) {
                                                 val draggedMarkers = draggingMarkers.values.toSet()
                                                 val markersWithVectorControl = vectorControls.values.map { it.markerId }.toSet()
                                                 val availableMarkers = draggedMarkers - markersWithVectorControl
@@ -416,11 +616,43 @@ fun InputMapTab(
 
                                                     // Send OSC messages asynchronously to avoid blocking
                                                     if (initialLayoutDone) {
-                                                        CoroutineScope(Dispatchers.IO).launch {
-                                                            sendOscPosition(context, updatedMarker.id, updatedMarker.position.x, updatedMarker.position.y, false)
+                                                        // Check if this marker is a cluster reference
+                                                        val markerClusterId = updatedMarker.clusterId
+                                                        val clusterConfig = if (markerClusterId > 0) clusterConfigs.find { it.id == markerClusterId } else null
+                                                        val isClusterReference = clusterConfig != null && (
+                                                            clusterConfig.trackedInputId == updatedMarker.id ||
+                                                            (clusterConfig.referenceMode == 0 && clusterConfig.trackedInputId == 0 &&
+                                                                currentMarkersState.filter { it.clusterId == markerClusterId }.minByOrNull { it.id }?.id == updatedMarker.id)
+                                                        )
 
-                                                            // Check if this marker has vector control and send OSC only if at least one function is enabled
-                                                            if (inputSecondaryAngularMode != SecondaryTouchFunction.OFF || inputSecondaryRadialMode != SecondaryTouchFunction.OFF) {
+                                                        // Convert pixel delta to stage coordinate delta
+                                                        val effectiveWidth = canvasWidth - (markerRadius * 2f)
+                                                        val effectiveHeight = canvasHeight - (markerRadius * 2f)
+                                                        val deltaXMeters = (dragDelta.x / effectiveWidth) * stageWidth
+                                                        val deltaYMeters = -(dragDelta.y / effectiveHeight) * stageDepth // Invert Y
+
+                                                        if (isClusterReference && clusterConfig != null && clusterConfig.referenceMode == 0) {
+                                                            // Moving reference in First Input mode - send cluster move
+                                                            onClusterMove?.invoke(markerClusterId, deltaXMeters, deltaYMeters)
+                                                        } else {
+                                                            // Individual marker move - convert canvas position to stage meters
+                                                            val (stageX, stageY) = canvasToStagePosition(
+                                                                canvasX = updatedMarker.position.x,
+                                                                canvasY = updatedMarker.position.y,
+                                                                stageWidth = stageWidth,
+                                                                stageDepth = stageDepth,
+                                                                stageOriginX = stageOriginX,
+                                                                stageOriginY = stageOriginY,
+                                                                canvasWidth = canvasWidth,
+                                                                canvasHeight = canvasHeight,
+                                                                markerRadius = markerRadius
+                                                            )
+                                                            onPositionChanged?.invoke(updatedMarker.id, stageX, stageY)
+                                                        }
+
+                                                        // Check if this marker has vector control and send OSC only if at least one function is enabled
+                                                        if (inputSecondaryAngularMode != SecondaryTouchFunction.OFF || inputSecondaryRadialMode != SecondaryTouchFunction.OFF) {
+                                                            CoroutineScope(Dispatchers.IO).launch {
                                                                 vectorControls.values.forEach { vectorControl ->
                                                                     if (vectorControl.markerId == updatedMarker.id) {
                                                                         // Use local position for consistent calculations
@@ -449,6 +681,34 @@ fun InputMapTab(
                                                 }
                                             }
                                         }
+                                    } else {
+                                        // Check if we're dragging a barycenter
+                                        val clusterIdBeingDragged = draggingBarycenters[pointerValue]
+                                        if (clusterIdBeingDragged != null) {
+                                            val oldLogicalPosition = pointerIdToCurrentLogicalPosition[pointerId]
+                                            if (oldLogicalPosition != null && change.positionChanged()) {
+                                                val dragDelta = change.position - change.previousPosition
+
+                                                val newLogicalPosition = Offset(
+                                                    x = (oldLogicalPosition.x + dragDelta.x).coerceIn(markerRadius, canvasWidth - markerRadius),
+                                                    y = (oldLogicalPosition.y + dragDelta.y).coerceIn(markerRadius, canvasHeight - markerRadius)
+                                                )
+                                                pointerIdToCurrentLogicalPosition[pointerId] = newLogicalPosition
+
+                                                // Convert pixel delta to stage coordinate delta
+                                                val effectiveWidth = canvasWidth - (markerRadius * 2f)
+                                                val effectiveHeight = canvasHeight - (markerRadius * 2f)
+                                                val deltaXMeters = (dragDelta.x / effectiveWidth) * stageWidth
+                                                val deltaYMeters = -(dragDelta.y / effectiveHeight) * stageDepth // Invert Y
+
+                                                // Send barycenter move OSC command
+                                                if (initialLayoutDone) {
+                                                    onBarycenterMove?.invoke(clusterIdBeingDragged, deltaXMeters, deltaYMeters)
+                                                }
+
+                                                change.consume()
+                                            }
+                                        }
                                     }
                                 }
                             } else { // Pointer released
@@ -468,12 +728,28 @@ fun InputMapTab(
                                     // OSC for released marker (use its final position from currentMarkersState)
                                     val finalMarkerState = currentMarkersState.find { it.id == releasedMarkerId }
                                     if (finalMarkerState != null && !finalMarkerState.isLocked && initialLayoutDone) {
-                                        sendOscPosition(context, finalMarkerState.id, finalMarkerState.position.x, finalMarkerState.position.y, false)
+                                        // Convert canvas position to stage meters
+                                        val (stageX, stageY) = canvasToStagePosition(
+                                            canvasX = finalMarkerState.position.x,
+                                            canvasY = finalMarkerState.position.y,
+                                            stageWidth = stageWidth,
+                                            stageDepth = stageDepth,
+                                            stageOriginX = stageOriginX,
+                                            stageOriginY = stageOriginY,
+                                            canvasWidth = canvasWidth,
+                                            canvasHeight = canvasHeight,
+                                            markerRadius = markerRadius
+                                        )
+                                        onPositionChanged?.invoke(finalMarkerState.id, stageX, stageY)
                                     }
                                 } else if (vectorControls.containsKey(pointerValue)) {
                                     // Remove vector control when secondary touch is released
                                     vectorControls.remove(pointerValue)
                                     vectorControlsUpdateTrigger++ // Trigger recomposition
+                                } else if (draggingBarycenters.containsKey(pointerValue)) {
+                                    // Remove barycenter drag when released
+                                    draggingBarycenters.remove(pointerValue)
+                                    pointerIdToCurrentLogicalPosition.remove(pointerId)
                                 }
                                 pointersThatAttemptedGrab.remove(pointerId)
                                 change.consume()
@@ -547,6 +823,26 @@ fun InputMapTab(
                         )
                     }
                 }
+            }
+
+            // Draw cluster relationship lines (behind markers)
+            if (clusterConfigs.isNotEmpty()) {
+                // Build markers with current positions (including local drag positions)
+                val displayMarkers = currentMarkersState.take(numberOfInputs).map { marker ->
+                    if (localMarkerPositions.containsKey(marker.id)) {
+                        marker.copy(
+                            positionX = localMarkerPositions[marker.id]!!.x,
+                            positionY = localMarkerPositions[marker.id]!!.y
+                        )
+                    } else {
+                        marker
+                    }
+                }
+                drawClusterLines(
+                    markers = displayMarkers,
+                    clusterConfigs = clusterConfigs,
+                    barycenterRadius = markerRadius * 0.6f
+                )
             }
 
             // Draw markers on top of the grid and labels

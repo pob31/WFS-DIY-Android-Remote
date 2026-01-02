@@ -53,23 +53,33 @@ fun DrawScope.drawStageCornerLabels(
     val effectiveCanvasWidth = canvasPixelW - (markerRadius * 2f)
     val effectiveCanvasHeight = canvasPixelH - (markerRadius * 2f)
 
-    // Calculate corner coordinates based on stage origin
-    val bottomLeftX = if (currentStageOriginX == 0f) 0f else -1*currentStageOriginX
-    val bottomLeftY = if (currentStageOriginY == 0f) 0f else -1*currentStageOriginY
-    val bottomRightX = currentStageW - currentStageOriginX
-    val bottomRightY = if (currentStageOriginY == 0f) 0f else -1*currentStageOriginY
-    val topLeftX = if (currentStageOriginX == 0f) 0f else -1*currentStageOriginX
-    val topLeftY = currentStageD - currentStageOriginY
-    val topRightX = currentStageW - currentStageOriginX
-    val topRightY = currentStageD - currentStageOriginY
+    // Corner coordinates in origin-relative terms
+    // Canvas shows the physical stage, so we convert physical positions to origin-relative
+    // Physical edges: left=-stageW/2, right=+stageW/2, front=-stageD/2, back=+stageD/2
+    // Origin-relative = physical - origin
+    val halfW = currentStageW / 2f
+    val halfD = currentStageD / 2f
+
+    val bottomLeftX = -halfW - currentStageOriginX
+    val bottomLeftY = -halfD - currentStageOriginY
+    val bottomRightX = halfW - currentStageOriginX
+    val bottomRightY = -halfD - currentStageOriginY
+    val topLeftX = -halfW - currentStageOriginX
+    val topLeftY = halfD - currentStageOriginY
+    val topRightX = halfW - currentStageOriginX
+    val topRightY = halfD - currentStageOriginY
+
+    // Center labels show X=0 for bottom/top center (relative to origin)
+    val bottomCenterY = -halfD - currentStageOriginY
+    val topCenterY = halfD - currentStageOriginY
 
     val pointsToDraw = listOf(
-        StagePointInfo(bottomLeftX, bottomLeftY, Paint.Align.LEFT, false), // Bottom-Left
-        StagePointInfo(0f, bottomLeftY, Paint.Align.CENTER, false),        // Bottom-Center
-        StagePointInfo(bottomRightX, bottomRightY, Paint.Align.RIGHT, false), // Bottom-Right
-        StagePointInfo(topLeftX, topLeftY, Paint.Align.LEFT, true),         // Top-Left
-        StagePointInfo(0f, topLeftY, Paint.Align.CENTER, true),            // Top-Center
-        StagePointInfo(topRightX, topRightY, Paint.Align.RIGHT, true)      // Top-Right
+        StagePointInfo(bottomLeftX, bottomLeftY, Paint.Align.LEFT, false), // Bottom-Left (front-left)
+        StagePointInfo(-currentStageOriginX, bottomCenterY, Paint.Align.CENTER, false), // Bottom-Center (front-center, X at origin)
+        StagePointInfo(bottomRightX, bottomRightY, Paint.Align.RIGHT, false), // Bottom-Right (front-right)
+        StagePointInfo(topLeftX, topLeftY, Paint.Align.LEFT, true),         // Top-Left (back-left)
+        StagePointInfo(-currentStageOriginX, topCenterY, Paint.Align.CENTER, true), // Top-Center (back-center, X at origin)
+        StagePointInfo(topRightX, topRightY, Paint.Align.RIGHT, true)      // Top-Right (back-right)
     )
 
     pointsToDraw.forEach { point ->
@@ -180,54 +190,6 @@ fun <T> DrawScope.drawMarker(
         drawContext.canvas.nativeCanvas.drawText(idText, position.x, idTextY, textPaint)
     }
 
-    if (isBeingDragged && canvasPixelW > 0f && canvasPixelH > 0f) {
-        val currentPixelX = position.x
-        val currentPixelY = position.y
-
-        // Convert to 0.0-1.0 normalized coordinates accounting for marker radius
-        val markerRadius = CanvasDimensions.getCurrentMarkerRadius()
-        val effectiveWidth = canvasPixelW - (markerRadius * 2f)
-        val effectiveHeight = canvasPixelH - (markerRadius * 2f)
-        val normalizedX = if (effectiveWidth > 0f) (currentPixelX - markerRadius) / effectiveWidth else 0f
-        val normalizedY = if (effectiveHeight > 0f) 1f - ((currentPixelY - markerRadius) / effectiveHeight) else 0f
-
-        // Convert to stage coordinates for display
-        val displayX = normalizedX * currentStageW
-        val displayY = normalizedY * currentStageD
-
-        // Adjust coordinates by subtracting stage origin
-        val adjustedX = displayX - currentStageOriginX
-        val adjustedY = displayY - currentStageOriginY
-
-        val coordText = " (${String.format(Locale.US, "%.1f", adjustedX)}, ${String.format(Locale.US, "%.1f", adjustedY)})"
-
-        val originalTextSize = textPaint.textSize
-        val originalTextAlign = textPaint.textAlign
-        val originalTextColor = textPaint.color
-
-        textPaint.textSize = dynamicBaseTextSizePx * 0.7f
-        textPaint.color = android.graphics.Color.YELLOW
-
-        val coordTextPadding = 10f
-        val coordTextX: Float
-
-        if (position.x < canvasPixelW / 2f) {
-            textPaint.textAlign = Paint.Align.LEFT
-            coordTextX = position.x + radius + coordTextPadding
-        } else {
-            textPaint.textAlign = Paint.Align.RIGHT
-            coordTextX = position.x - radius - coordTextPadding
-        }
-
-        val coordTextMetrics = textPaint.fontMetrics
-        val coordTextY = position.y - (coordTextMetrics.ascent + coordTextMetrics.descent) / 2f
-        
-        drawContext.canvas.nativeCanvas.drawText(coordText, coordTextX, coordTextY, textPaint)
-
-        textPaint.textSize = originalTextSize
-        textPaint.textAlign = originalTextAlign
-        textPaint.color = originalTextColor
-    }
 }
 
 fun DrawScope.drawOriginMarker(
@@ -245,16 +207,11 @@ fun DrawScope.drawOriginMarker(
     val effectiveCanvasWidth = canvasPixelW - (markerRadius * 2f)
     val effectiveCanvasHeight = canvasPixelH - (markerRadius * 2f)
 
-    // Find where a marker would be positioned to have displayed coordinates (0.0, 0.0)
-    // displayedX = displayX - stageOriginX = 0.0 → displayX = stageOriginX
-    // displayedY = displayY - stageOriginY = 0.0 → displayY = stageOriginY
-    
-    // displayX = normalizedX * currentStageW = currentStageOriginX
-    // displayY = normalizedY * currentStageD = currentStageOriginY
-    
-    val normalizedX = currentStageOriginX / currentStageW
-    val normalizedY = currentStageOriginY / currentStageD
-    
+    // The origin (0, 0) in origin-relative coords is at physical (stageOriginX, stageOriginY)
+    // Convert physical position to normalized canvas position
+    val normalizedX = (currentStageOriginX + currentStageW / 2f) / currentStageW
+    val normalizedY = (currentStageOriginY + currentStageD / 2f) / currentStageD
+
     val canvasX = normalizedX * effectiveCanvasWidth + markerRadius
     val canvasY = (1f - normalizedY) * effectiveCanvasHeight + markerRadius
 
@@ -282,4 +239,91 @@ fun DrawScope.drawOriginMarker(
         end = Offset(canvasX, canvasY + crosshairLength),
         strokeWidth = 2f
     )
+}
+
+/**
+ * Draw cluster relationship lines between cluster members and their reference point.
+ * For clusters with referenceMode=0 (First Input), lines connect to the first input.
+ * For clusters with referenceMode=1 (Barycenter), lines connect to the calculated center
+ * and a draggable barycenter marker is drawn.
+ */
+fun DrawScope.drawClusterLines(
+    markers: List<Marker>,
+    clusterConfigs: List<ClusterConfig>,
+    barycenterRadius: Float = 20f
+) {
+    // Process each cluster configuration
+    clusterConfigs.forEach { config ->
+        // Get all markers in this cluster
+        val clusterMembers = markers.filter { it.clusterId == config.id && it.isVisible }
+
+        // Need at least 2 members to draw lines
+        if (clusterMembers.size < 2) return@forEach
+
+        // Determine the reference point
+        val referencePoint: Offset = when {
+            // If a tracked input exists, it's the reference
+            config.trackedInputId > 0 -> {
+                clusterMembers.find { it.id == config.trackedInputId }?.position
+                    ?: calculateBarycenter(clusterMembers)
+            }
+            // First Input mode: use first member by ID
+            config.referenceMode == 0 -> {
+                clusterMembers.minByOrNull { it.id }?.position ?: return@forEach
+            }
+            // Barycenter mode: calculate center
+            else -> {
+                calculateBarycenter(clusterMembers)
+            }
+        }
+
+        // Get cluster color with alpha for lines (matching JUCE)
+        val clusterColor = getMarkerColor(config.id, isClusterMarker = true).copy(alpha = 0.5f)
+
+        // Draw lines from reference to each member
+        clusterMembers.forEach { member ->
+            val memberPosition = member.position
+            // In First Input mode, don't draw line from reference to itself
+            // In Barycenter mode, draw lines to all members
+            val isReferenceInput = when {
+                config.trackedInputId > 0 -> member.id == config.trackedInputId
+                config.referenceMode == 0 -> member.id == clusterMembers.minByOrNull { it.id }?.id
+                else -> false
+            }
+
+            if (!isReferenceInput || config.referenceMode == 1) {
+                drawLine(
+                    color = clusterColor,
+                    start = referencePoint,
+                    end = memberPosition,
+                    strokeWidth = 3f
+                )
+            }
+        }
+
+        // Draw barycenter marker if in Barycenter mode (and no tracked input)
+        if (config.referenceMode == 1 && config.trackedInputId == 0) {
+            val barycenter = calculateBarycenter(clusterMembers)
+
+            // Draw filled circle for barycenter
+            drawCircle(
+                color = clusterColor.copy(alpha = 0.8f),
+                radius = barycenterRadius,
+                center = barycenter
+            )
+
+            // Draw cluster number in center
+            // Note: For text we'd need native canvas, keep it simple with just the circle
+        }
+    }
+}
+
+/**
+ * Calculate the barycenter (center of mass) of a list of markers.
+ */
+private fun calculateBarycenter(members: List<Marker>): Offset {
+    if (members.isEmpty()) return Offset.Zero
+    val sumX = members.sumOf { it.positionX.toDouble() }.toFloat()
+    val sumY = members.sumOf { it.positionY.toDouble() }.toFloat()
+    return Offset(sumX / members.size, sumY / members.size)
 }

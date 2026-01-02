@@ -144,6 +144,20 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
         oscService.syncInputParametersState(state)
     }
 
+    fun sendClusterMove(clusterId: Int, deltaX: Float, deltaY: Float) {
+        oscService.sendClusterMove(clusterId, deltaX, deltaY)
+    }
+
+    fun sendBarycenterMove(clusterId: Int, deltaX: Float, deltaY: Float) {
+        oscService.sendBarycenterMove(clusterId, deltaX, deltaY)
+    }
+
+    fun getBufferedClusterConfigUpdates(): List<OscService.OscClusterConfigUpdate> {
+        return oscService.getBufferedClusterConfigUpdates()
+    }
+
+    val clusterConfigs: StateFlow<List<ClusterConfig>> = oscService.clusterConfigs
+
     // Factory for creating the ViewModel with the OscService dependency
     class Factory(private val oscService: OscService) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {

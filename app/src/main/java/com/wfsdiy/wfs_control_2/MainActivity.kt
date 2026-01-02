@@ -124,7 +124,8 @@ data class Marker(
     val radius: Float,
     var isLocked: Boolean = false,
     var isVisible: Boolean = true,
-    var name: String = ""
+    var name: String = "",
+    var clusterId: Int = 0  // 0 = no cluster, 1-10 = cluster number
 ) : Parcelable {
     // Helper property to get Offset
     var position: Offset
@@ -151,6 +152,14 @@ data class ClusterMarker(
             positionY = value.y
         }
 }
+
+// Cluster configuration received from server
+@Parcelize
+data class ClusterConfig(
+    val id: Int,                      // 1-10
+    var referenceMode: Int = 0,       // 0 = First Input, 1 = Barycenter
+    var trackedInputId: Int = 0       // Input ID if tracking active, 0 = no tracking
+) : Parcelable
 
 // Helper to convert Dp to Px for marker radius, as Canvas works with Px
 @Composable
@@ -482,8 +491,13 @@ fun WFSControlApp() {
     var clusterNormalizedHeights by rememberSaveable { mutableStateOf(List(10) { 0.2f }) }
     var initialClusterLayoutDone by remember { mutableStateOf(false) }
 
+    // Cluster configurations received from server
+    var clusterConfigs by rememberSaveable {
+        mutableStateOf(List(10) { index -> ClusterConfig(id = index + 1) })
+    }
+
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Input Map", "Lock Input Markers", "View Input Markers", "Input Parameters", "Cluster Map", "Cluster Height", "Array Adjust", "Settings")
+    val tabs = listOf("Map", "Lock Input Markers", "View Input Markers", "Input Parameters", "Array Adjust", "Settings")
 
     val dynamicTabFontSize: TextUnit = remember(screenWidthDp) {
         val baseSize = screenWidthDp.value / 66f  // Changed from /60f to /66f for 10% smaller
@@ -506,6 +520,14 @@ fun WFSControlApp() {
     var stageOriginX by remember { mutableFloatStateOf(8.0f) }
     var stageOriginY by remember { mutableFloatStateOf(0.0f) }
     var stageOriginZ by remember { mutableFloatStateOf(0.0f) }
+
+    // Collect inputParametersState from ViewModel for position updates
+    var inputParametersState by remember { mutableStateOf<InputParametersState?>(null) }
+    LaunchedEffect(viewModel) {
+        viewModel?.inputParametersState?.collect { state ->
+            inputParametersState = state
+        }
+    }
 
     val serviceConnection = remember {
         object : ServiceConnection {
@@ -667,6 +689,21 @@ fun WFSControlApp() {
                         clusterNormalizedHeights = updatedHeights
                     }
                 }
+
+                // Process buffered cluster config updates
+                val clusterConfigUpdates = viewModel.getBufferedClusterConfigUpdates()
+                clusterConfigUpdates.forEach { update ->
+                    val index = update.clusterId - 1
+                    if (index >= 0 && index < clusterConfigs.size) {
+                        val updatedConfigs = clusterConfigs.toMutableList()
+                        val currentConfig = updatedConfigs[index]
+                        updatedConfigs[index] = currentConfig.copy(
+                            referenceMode = update.referenceMode ?: currentConfig.referenceMode,
+                            trackedInputId = update.trackedInputId ?: currentConfig.trackedInputId
+                        )
+                        clusterConfigs = updatedConfigs
+                    }
+                }
             }
         }
     }
@@ -738,32 +775,35 @@ fun WFSControlApp() {
                     numberOfInputs = numberOfInputs,
                     markers = markers,
                     onMarkersInitiallyPositioned = { newMarkerList ->
-                    markers = newMarkerList
-                    // Send OSC data via service if available
-                    val firstMarker = newMarkerList.firstOrNull()
-                    if (firstMarker != null) {
-                        viewModel?.sendMarkerPosition(
-                            firstMarker.id, 
-                            firstMarker.positionX, 
-                            firstMarker.positionY, 
-                            false
-                        )
-                    }
+                        markers = newMarkerList
                     },
                     onCanvasSizeChanged = { width, height ->
                         currentCanvasPixelWidth = width
                         currentCanvasPixelHeight = height
-                    // Update shared canvas dimensions
-                    CanvasDimensions.updateDimensions(width, height)
+                        // Update shared canvas dimensions
+                        CanvasDimensions.updateDimensions(width, height)
                     },
                     initialLayoutDone = initialInputLayoutDone,
                     onInitialLayoutDone = { initialInputLayoutDone = true },
                     stageWidth = stageWidth,
-                stageDepth = stageDepth,
-                stageOriginX = stageOriginX,
-                stageOriginY = stageOriginY,
-                inputSecondaryAngularMode = inputSecondaryAngularMode,
-                inputSecondaryRadialMode = inputSecondaryRadialMode
+                    stageDepth = stageDepth,
+                    stageOriginX = stageOriginX,
+                    stageOriginY = stageOriginY,
+                    inputSecondaryAngularMode = inputSecondaryAngularMode,
+                    inputSecondaryRadialMode = inputSecondaryRadialMode,
+                    clusterConfigs = clusterConfigs,
+                    onClusterMove = { clusterId, deltaX, deltaY ->
+                        viewModel?.sendClusterMove(clusterId, deltaX, deltaY)
+                    },
+                    onBarycenterMove = { clusterId, deltaX, deltaY ->
+                        viewModel?.sendBarycenterMove(clusterId, deltaX, deltaY)
+                    },
+                    inputParametersState = inputParametersState,
+                    onPositionChanged = { inputId, positionX, positionY ->
+                        // Send position updates to server using /remoteInput/positionX and /remoteInput/positionY
+                        viewModel?.sendInputParameterFloat("/remoteInput/positionX", inputId, positionX)
+                        viewModel?.sendInputParameterFloat("/remoteInput/positionY", inputId, positionY)
+                    }
                 )
                 1 -> LockingTab(
                     numberOfInputs = numberOfInputs,
@@ -788,54 +828,8 @@ fun WFSControlApp() {
                         InputParametersTab(viewModel = vm)
                     } ?: Text("Loading...", color = Color.White)
                 }
-                4 -> ClusterMapTab(
-                    clusterMarkers = clusterMarkers,
-                onClusterMarkersChanged = { updatedClusterMarkers ->
-                    // Only update state if there are actual changes (not just initial layout)
-                    val hasChanges = updatedClusterMarkers.any { updatedMarker ->
-                        val currentMarker = clusterMarkers.find { it.id == updatedMarker.id }
-                        currentMarker == null || 
-                        currentMarker.positionX != updatedMarker.positionX || 
-                        currentMarker.positionY != updatedMarker.positionY
-                    }
-                    
-                    if (hasChanges) {
-                        clusterMarkers = updatedClusterMarkers
-                        // Update service with new cluster marker states
-                        viewModel?.syncClusterMarkers(updatedClusterMarkers)
-                    }
-                },
-                    onCanvasSizeChanged = { width, height ->
-                        currentCanvasPixelWidth = width
-                        currentCanvasPixelHeight = height
-                    // Update shared canvas dimensions
-                    CanvasDimensions.updateDimensions(width, height)
-                    },
-                    initialLayoutDone = initialClusterLayoutDone,
-                    onInitialLayoutDone = { initialClusterLayoutDone = true },
-                    stageWidth = stageWidth,
-                stageDepth = stageDepth,
-                stageOriginX = stageOriginX,
-                stageOriginY = stageOriginY,
-                clusterSecondaryTouchEnabled = clusterSecondaryTouchEnabled,
-                clusterSecondaryAngularEnabled = clusterSecondaryAngularEnabled,
-                clusterSecondaryRadialEnabled = clusterSecondaryRadialEnabled,
-                viewModel = viewModel
-                )
-                5 -> ClusterHeightTab(
-                    clusterNormalizedHeights = clusterNormalizedHeights,
-                    stageHeight = stageHeight,
-                stageOriginZ = stageOriginZ,
-                    onNormalizedHeightChanged = { index, newNormalizedHeight ->
-                    val updatedHeights = clusterNormalizedHeights.toMutableList()
-                    updatedHeights[index] = newNormalizedHeight.coerceIn(0f, 1f)
-                    clusterNormalizedHeights = updatedHeights
-                    // Send OSC data via service if available
-                    viewModel?.sendClusterZ(index + 1, updatedHeights[index])
-                    }
-                )
-                6 -> ArrayAdjustTab()
-            7 -> SettingsTab(
+                4 -> ArrayAdjustTab()
+                5 -> SettingsTab(
                 onResetToDefaults = resetToDefaults,
                 onShutdownApp = {
                     // Stop OSC service
