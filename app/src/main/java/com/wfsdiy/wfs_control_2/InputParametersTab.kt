@@ -870,7 +870,8 @@ private fun RenderInputSection(
                         },
                         onValueCommit = { committedValue ->
                             committedValue.toFloatOrNull()?.let { value ->
-                                val coerced = value.coerceIn(-50f, 50f)
+                                // For cylindrical/spherical mode (distance), use 0 to 50 range
+                                val coerced = if (coordinateMode != 0) value.coerceIn(0f, 50f) else value.coerceIn(-50f, 50f)
                                 positionXValue = String.format(Locale.US, "%.2f", coerced)
                                 selectedChannel.setParameter("positionX", InputParameterValue(
                                     normalizedValue = (coerced + 50f) / 100f,
@@ -1159,7 +1160,8 @@ private fun RenderInputSection(
                             },
                             onValueCommit = { committedValue ->
                                 committedValue.toFloatOrNull()?.let { value ->
-                                    val coerced = value.coerceIn(-50f, 50f)
+                                    // For cylindrical/spherical mode (distance), use 0 to 50 range
+                                    val coerced = if (coordinateMode != 0) value.coerceIn(0f, 50f) else value.coerceIn(-50f, 50f)
                                     positionXValue = String.format(Locale.US, "%.2f", coerced)
                                     selectedChannel.setParameter("positionX", InputParameterValue(
                                         normalizedValue = (coerced + 50f) / 100f,

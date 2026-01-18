@@ -342,22 +342,43 @@ fun InputMapTab(
                         val posXParam = channel.parameters["positionX"]
                         val posYParam = channel.parameters["positionY"]
 
-                        if (posXParam != null && posYParam != null) {
+                        // Allow update if at least one position parameter exists
+                        // Use current marker position for missing axis to allow incremental updates
+                        if (posXParam != null || posYParam != null) {
                             // Convert normalized values (0-1) back to actual meters
                             // Position parameters have minValue=-50, maxValue=50
                             // actualValue = normalizedValue * (max - min) + min
                             val posXDef = InputParameterDefinitions.allParameters.find { it.variableName == "positionX" }
                             val posYDef = InputParameterDefinitions.allParameters.find { it.variableName == "positionY" }
 
-                            val posXMeters = if (posXDef != null) {
+                            // If a position parameter is missing, convert current canvas position back to meters
+                            val currentStagePos = if (posXParam == null || posYParam == null) {
+                                canvasToStagePosition(
+                                    canvasX = marker.positionX,
+                                    canvasY = marker.positionY,
+                                    stageWidth = stageWidth,
+                                    stageDepth = stageDepth,
+                                    stageOriginX = stageOriginX,
+                                    stageOriginY = stageOriginY,
+                                    canvasWidth = canvasWidth,
+                                    canvasHeight = canvasHeight,
+                                    markerRadius = markerRadius
+                                )
+                            } else null
+
+                            val posXMeters = if (posXParam != null && posXDef != null) {
                                 InputParameterDefinitions.applyFormula(posXDef, posXParam.normalizedValue)
-                            } else {
+                            } else if (posXParam != null) {
                                 posXParam.normalizedValue * 100f - 50f // Fallback
-                            }
-                            val posYMeters = if (posYDef != null) {
-                                InputParameterDefinitions.applyFormula(posYDef, posYParam.normalizedValue)
                             } else {
+                                currentStagePos?.first ?: 0f // Use current position if X not received
+                            }
+                            val posYMeters = if (posYParam != null && posYDef != null) {
+                                InputParameterDefinitions.applyFormula(posYDef, posYParam.normalizedValue)
+                            } else if (posYParam != null) {
                                 posYParam.normalizedValue * 100f - 50f // Fallback
+                            } else {
+                                currentStagePos?.second ?: 0f // Use current position if Y not received
                             }
 
                             // Convert from stage coordinates (meters) to canvas pixels
@@ -372,6 +393,21 @@ fun InputMapTab(
                                 canvasHeight = canvasHeight,
                                 markerRadius = markerRadius
                             )
+
+                            // Server correction detection: if this marker is being dragged locally
+                            // and the server sent a different position, clear the local position
+                            // to snap to the server's corrected position
+                            val localPos = localMarkerPositions[inputId]
+                            if (localPos != null) {
+                                val correctionThreshold = 5f // pixels - if server position differs by more than this, it's a correction
+                                val distanceFromLocal = sqrt(
+                                    (canvasPos.x - localPos.x).pow(2) + (canvasPos.y - localPos.y).pow(2)
+                                )
+                                if (distanceFromLocal > correctionThreshold) {
+                                    // Server sent a corrected position - clear local dragging state
+                                    localMarkerPositions.remove(inputId)
+                                }
+                            }
 
                             marker.copy(positionX = canvasPos.x, positionY = canvasPos.y)
                         } else {
