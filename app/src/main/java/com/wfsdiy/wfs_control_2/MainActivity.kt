@@ -497,6 +497,7 @@ fun WFSControlApp() {
     }
 
     var selectedTab by remember { mutableIntStateOf(0) }
+    var inputParamsTabVisitCount by remember { mutableIntStateOf(0) }  // Increments each time Input Parameters tab is selected
     val tabs = listOf("Map", "Lock Input Markers", "View Input Markers", "Input Parameters", "Array Adjust", "Settings")
 
     val dynamicTabFontSize: TextUnit = remember(screenWidthDp) {
@@ -514,12 +515,15 @@ fun WFSControlApp() {
     var currentCanvasPixelWidth by remember { mutableFloatStateOf(0f) }
     var currentCanvasPixelHeight by remember { mutableFloatStateOf(0f) }
 
-    var stageWidth by remember { mutableFloatStateOf(16.0f) }
+    var stageWidth by remember { mutableFloatStateOf(20.0f) }     // JUCE default
     var stageDepth by remember { mutableFloatStateOf(10.0f) }
-    var stageHeight by remember { mutableFloatStateOf(7.0f) }
-    var stageOriginX by remember { mutableFloatStateOf(8.0f) }
-    var stageOriginY by remember { mutableFloatStateOf(0.0f) }
+    var stageHeight by remember { mutableFloatStateOf(8.0f) }    // JUCE default
+    var stageOriginX by remember { mutableFloatStateOf(0.0f) }   // Center-referenced
+    var stageOriginY by remember { mutableFloatStateOf(-5.0f) }  // Downstage center
     var stageOriginZ by remember { mutableFloatStateOf(0.0f) }
+    var stageShape by remember { mutableIntStateOf(0) }          // 0=box, 1=cylinder, 2=dome
+    var stageDiameter by remember { mutableFloatStateOf(20.0f) }
+    var domeElevation by remember { mutableFloatStateOf(180.0f) }
 
     // Collect inputParametersState from ViewModel for position updates
     var inputParametersState by remember { mutableStateOf<InputParametersState?>(null) }
@@ -669,6 +673,9 @@ fun WFSControlApp() {
                         "originX" -> stageOriginX = update.value
                         "originY" -> stageOriginY = update.value
                         "originZ" -> stageOriginZ = update.value
+                        "shape" -> stageShape = update.value.toInt()
+                        "diameter" -> stageDiameter = update.value
+                        "domeElevation" -> domeElevation = update.value
                     }
                 }
                 
@@ -755,7 +762,13 @@ fun WFSControlApp() {
                     val isSelected = selectedTab == index
                     Tab(
                         selected = isSelected,
-                        onClick = { selectedTab = index },
+                        onClick = {
+                            selectedTab = index
+                            // Increment visit count when Input Parameters tab (index 3) is selected
+                            if (index == 3) {
+                                inputParamsTabVisitCount++
+                            }
+                        },
                         text = {
                             Text(
                                 title,
@@ -789,6 +802,9 @@ fun WFSControlApp() {
                     stageDepth = stageDepth,
                     stageOriginX = stageOriginX,
                     stageOriginY = stageOriginY,
+                    stageShape = stageShape,
+                    stageDiameter = stageDiameter,
+                    domeElevation = domeElevation,
                     inputSecondaryAngularMode = inputSecondaryAngularMode,
                     inputSecondaryRadialMode = inputSecondaryRadialMode,
                     clusterConfigs = clusterConfigs,
@@ -825,7 +841,7 @@ fun WFSControlApp() {
                 )
                 3 -> {
                     viewModel?.let { vm ->
-                        InputParametersTab(viewModel = vm)
+                        InputParametersTab(viewModel = vm, refreshTrigger = inputParamsTabVisitCount)
                     } ?: Text("Loading...", color = Color.White)
                 }
                 4 -> ArrayAdjustTab()

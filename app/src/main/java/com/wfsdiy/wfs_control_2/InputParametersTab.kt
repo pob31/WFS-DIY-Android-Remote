@@ -55,7 +55,8 @@ private fun getRowColorActive(rowIndex: Int): Color {
 
 @Composable
 fun InputParametersTab(
-    viewModel: MainActivityViewModel
+    viewModel: MainActivityViewModel,
+    refreshTrigger: Int = 0  // Incremented each time tab becomes visible to request fresh data
 ) {
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
@@ -102,8 +103,8 @@ fun InputParametersTab(
         }
     }
 
-    // Send inputNumber when tab becomes visible (Issue #2)
-    LaunchedEffect("sendInputNumber") {
+    // Send inputNumber when tab becomes visible to request fresh data from server
+    LaunchedEffect(refreshTrigger, inputId) {
         viewModel.sendInputParameterInt("/remoteInput/inputNumber", inputId, inputId)
     }
 
@@ -202,7 +203,8 @@ fun InputParametersTab(
             verticalSliderHeight = verticalSliderHeight,
             spacing = spacing,
             screenWidthDp = screenWidthDp,
-            isPhone = isPhone
+            isPhone = isPhone,
+            refreshTrigger = refreshTrigger
         )
         
         // Directivity Group (now has its own collapsible header)
@@ -417,7 +419,8 @@ private fun RenderInputSection(
     verticalSliderHeight: androidx.compose.ui.unit.Dp,
     spacing: ResponsiveSpacing,
     screenWidthDp: androidx.compose.ui.unit.Dp,
-    isPhone: Boolean
+    isPhone: Boolean,
+    refreshTrigger: Int = 0
 ) {
     val inputId by rememberUpdatedState(selectedChannel.inputId)
 
@@ -762,25 +765,57 @@ private fun RenderInputSection(
     val remainingSpace = verticalSliderHeight - totalNumberBoxesHeight
     val verticalPadding = remainingSpace / 4 // top, between boxes (2x), bottom
 
+    // Get coordinate mode for dynamic labels (0=Cartesian, 1=Cylindrical, 2=Spherical)
+    val coordinateModeParam = selectedChannel.getParameter("coordinateMode")
+    val coordinateModeDef = InputParameterDefinitions.parametersByVariableName["coordinateMode"]
+    val coordinateMode = if (coordinateModeDef != null) {
+        InputParameterDefinitions.applyFormula(coordinateModeDef, coordinateModeParam.normalizedValue).toInt().coerceIn(0, 2)
+    } else {
+        0
+    }
+
+    // Dynamic labels and units based on coordinate mode
+    // 0=Cartesian: X(m), Y(m), Z(m)
+    // 1=Cylindrical: Distance(m), Azimuth(°), Height(m)
+    // 2=Spherical: Distance(m), Azimuth(°), Elevation(°)
+    val (labelX, labelY, labelZ) = when (coordinateMode) {
+        1 -> Triple("Distance", "Azimuth", "Height")      // Cylindrical
+        2 -> Triple("Distance", "Azimuth", "Elevation")   // Spherical
+        else -> Triple("Position X", "Position Y", "Position Z")  // Cartesian (default)
+    }
+
+    // Units for each coordinate based on mode
+    val (unitX, unitY, unitZ) = when (coordinateMode) {
+        1 -> Triple("m", "°", "m")      // Cylindrical: Distance(m), Azimuth(°), Height(m)
+        2 -> Triple("m", "°", "°")      // Spherical: Distance(m), Azimuth(°), Elevation(°)
+        else -> Triple("m", "m", "m")   // Cartesian: all meters
+    }
+
+    // Helper to strip any unit and get clean number
+    fun cleanValue(displayValue: String): String {
+        return displayValue.replace("m", "").replace("°", "").trim().ifEmpty { "0.00" }
+    }
+
     val positionX = selectedChannel.getParameter("positionX")
     var positionXValue by remember {
-        mutableStateOf(positionX.displayValue.replace("m", "").trim().ifEmpty { "0.00" })
+        mutableStateOf(cleanValue(positionX.displayValue))
     }
 
     val positionY = selectedChannel.getParameter("positionY")
     var positionYValue by remember {
-        mutableStateOf(positionY.displayValue.replace("m", "").trim().ifEmpty { "0.00" })
+        mutableStateOf(cleanValue(positionY.displayValue))
     }
 
     val positionZ = selectedChannel.getParameter("positionZ")
     var positionZValue by remember {
-        mutableStateOf(positionZ.displayValue.replace("m", "").trim().ifEmpty { "0.00" })
+        mutableStateOf(cleanValue(positionZ.displayValue))
     }
 
-    LaunchedEffect(inputId, positionX.normalizedValue, positionY.normalizedValue, positionZ.normalizedValue) {
-        positionXValue = positionX.displayValue.replace("m", "").trim().ifEmpty { "0.00" }
-        positionYValue = positionY.displayValue.replace("m", "").trim().ifEmpty { "0.00" }
-        positionZValue = positionZ.displayValue.replace("m", "").trim().ifEmpty { "0.00" }
+    // Update position values when they change (triggered by refreshTrigger via channel dump or direct changes)
+    LaunchedEffect(inputId, refreshTrigger, positionX.normalizedValue, positionY.normalizedValue, positionZ.normalizedValue) {
+        positionXValue = cleanValue(positionX.displayValue)
+        positionYValue = cleanValue(positionY.displayValue)
+        positionZValue = cleanValue(positionZ.displayValue)
     }
 
     // Offset X, Y, Z state management
@@ -799,7 +834,8 @@ private fun RenderInputSection(
         mutableStateOf(offsetZ.displayValue.replace("m", "").trim().ifEmpty { "0.00" })
     }
 
-    LaunchedEffect(inputId, offsetX.normalizedValue, offsetY.normalizedValue, offsetZ.normalizedValue) {
+    // Update offset values when they change (triggered by refreshTrigger via channel dump or direct changes)
+    LaunchedEffect(inputId, refreshTrigger, offsetX.normalizedValue, offsetY.normalizedValue, offsetZ.normalizedValue) {
         offsetXValue = offsetX.displayValue.replace("m", "").trim().ifEmpty { "0.00" }
         offsetYValue = offsetY.displayValue.replace("m", "").trim().ifEmpty { "0.00" }
         offsetZValue = offsetZ.displayValue.replace("m", "").trim().ifEmpty { "0.00" }
@@ -822,7 +858,7 @@ private fun RenderInputSection(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Position X",
+                        text = labelX,
                         fontSize = 11.sp,
                         color = Color.White
                     )
@@ -839,12 +875,12 @@ private fun RenderInputSection(
                                 selectedChannel.setParameter("positionX", InputParameterValue(
                                     normalizedValue = (coerced + 50f) / 100f,
                                     stringValue = "",
-                                    displayValue = "${String.format(Locale.US, "%.2f", coerced)}m"
+                                    displayValue = "${String.format(Locale.US, "%.2f", coerced)}$unitX"
                                 ))
                                 viewModel.sendInputParameterFloat("/remoteInput/positionX", inputId, coerced)
                             }
                         },
-                        unit = "m",
+                        unit = unitX,
                         modifier = Modifier.width(80.dp)
                     )
                 }
@@ -853,7 +889,7 @@ private fun RenderInputSection(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Position Y",
+                        text = labelY,
                         fontSize = 11.sp,
                         color = Color.White
                     )
@@ -865,17 +901,18 @@ private fun RenderInputSection(
                         },
                         onValueCommit = { committedValue ->
                             committedValue.toFloatOrNull()?.let { value ->
-                                val coerced = value.coerceIn(-50f, 50f)
+                                // For cylindrical/spherical mode (azimuth), use -180 to 180 range
+                                    val coerced = if (coordinateMode != 0) value.coerceIn(-180f, 180f) else value.coerceIn(-50f, 50f)
                                 positionYValue = String.format(Locale.US, "%.2f", coerced)
                                 selectedChannel.setParameter("positionY", InputParameterValue(
                                     normalizedValue = (coerced + 50f) / 100f,
                                     stringValue = "",
-                                    displayValue = "${String.format(Locale.US, "%.2f", coerced)}m"
+                                    displayValue = "${String.format(Locale.US, "%.2f", coerced)}$unitY"
                                 ))
                                 viewModel.sendInputParameterFloat("/remoteInput/positionY", inputId, coerced)
                             }
                         },
-                        unit = "m",
+                        unit = unitY,
                         modifier = Modifier.width(80.dp)
                     )
                 }
@@ -884,7 +921,7 @@ private fun RenderInputSection(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Position Z",
+                        text = labelZ,
                         fontSize = 11.sp,
                         color = Color.White
                     )
@@ -896,17 +933,18 @@ private fun RenderInputSection(
                         },
                         onValueCommit = { committedValue ->
                             committedValue.toFloatOrNull()?.let { value ->
-                                val coerced = value.coerceIn(-50f, 50f)
+                                // For spherical mode (elevation), use -90 to 90 range
+                                val coerced = if (coordinateMode == 2) value.coerceIn(-90f, 90f) else value.coerceIn(-50f, 50f)
                                 positionZValue = String.format(Locale.US, "%.2f", coerced)
                                 selectedChannel.setParameter("positionZ", InputParameterValue(
                                     normalizedValue = (coerced + 50f) / 100f,
                                     stringValue = "",
-                                    displayValue = "${String.format(Locale.US, "%.2f", coerced)}m"
+                                    displayValue = "${String.format(Locale.US, "%.2f", coerced)}$unitZ"
                                 ))
                                 viewModel.sendInputParameterFloat("/remoteInput/positionZ", inputId, coerced)
                             }
                         },
-                        unit = "m",
+                        unit = unitZ,
                         modifier = Modifier.width(80.dp)
                     )
                 }
@@ -1107,7 +1145,7 @@ private fun RenderInputSection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Position X",
+                            text = labelX,
                             fontSize = 11.sp,
                             color = Color.White,
                             textAlign = TextAlign.End,
@@ -1126,12 +1164,12 @@ private fun RenderInputSection(
                                     selectedChannel.setParameter("positionX", InputParameterValue(
                                         normalizedValue = (coerced + 50f) / 100f,
                                         stringValue = "",
-                                        displayValue = "${String.format(Locale.US, "%.2f", coerced)}m"
+                                        displayValue = "${String.format(Locale.US, "%.2f", coerced)}$unitX"
                                     ))
                                     viewModel.sendInputParameterFloat("/remoteInput/positionX", inputId, coerced)
                                 }
                             },
-                            unit = "m",
+                            unit = unitX,
                             modifier = Modifier.weight(0.6f)
                         )
                     }
@@ -1143,7 +1181,7 @@ private fun RenderInputSection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Position Y",
+                            text = labelY,
                             fontSize = 11.sp,
                             color = Color.White,
                             textAlign = TextAlign.End,
@@ -1157,17 +1195,18 @@ private fun RenderInputSection(
                             },
                             onValueCommit = { committedValue ->
                                 committedValue.toFloatOrNull()?.let { value ->
-                                    val coerced = value.coerceIn(-50f, 50f)
+                                    // For cylindrical/spherical mode (azimuth), use -180 to 180 range
+                                    val coerced = if (coordinateMode != 0) value.coerceIn(-180f, 180f) else value.coerceIn(-50f, 50f)
                                     positionYValue = String.format(Locale.US, "%.2f", coerced)
                                     selectedChannel.setParameter("positionY", InputParameterValue(
                                         normalizedValue = (coerced + 50f) / 100f,
                                         stringValue = "",
-                                        displayValue = "${String.format(Locale.US, "%.2f", coerced)}m"
+                                        displayValue = "${String.format(Locale.US, "%.2f", coerced)}$unitY"
                                     ))
                                     viewModel.sendInputParameterFloat("/remoteInput/positionY", inputId, coerced)
                                 }
                             },
-                            unit = "m",
+                            unit = unitY,
                             modifier = Modifier.weight(0.6f)
                         )
                     }
@@ -1179,7 +1218,7 @@ private fun RenderInputSection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Position Z",
+                            text = labelZ,
                             fontSize = 11.sp,
                             color = Color.White,
                             textAlign = TextAlign.End,
@@ -1193,17 +1232,18 @@ private fun RenderInputSection(
                             },
                             onValueCommit = { committedValue ->
                                 committedValue.toFloatOrNull()?.let { value ->
-                                    val coerced = value.coerceIn(-50f, 50f)
+                                    // For spherical mode (elevation), use -90 to 90 range
+                                    val coerced = if (coordinateMode == 2) value.coerceIn(-90f, 90f) else value.coerceIn(-50f, 50f)
                                     positionZValue = String.format(Locale.US, "%.2f", coerced)
                                     selectedChannel.setParameter("positionZ", InputParameterValue(
                                         normalizedValue = (coerced + 50f) / 100f,
                                         stringValue = "",
-                                        displayValue = "${String.format(Locale.US, "%.2f", coerced)}m"
+                                        displayValue = "${String.format(Locale.US, "%.2f", coerced)}$unitZ"
                                     ))
                                     viewModel.sendInputParameterFloat("/remoteInput/positionZ", inputId, coerced)
                                 }
                             },
-                            unit = "m",
+                            unit = unitZ,
                             modifier = Modifier.weight(0.6f)
                         )
                     }

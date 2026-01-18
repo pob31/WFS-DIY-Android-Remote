@@ -20,23 +20,33 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     
     val stageWidth: StateFlow<Float> = oscService.stageWidth
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 16.0f)
-    
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 20.0f)
+
     val stageDepth: StateFlow<Float> = oscService.stageDepth
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 10.0f)
-    
+
     val stageHeight: StateFlow<Float> = oscService.stageHeight
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 7.0f)
-    
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 8.0f)
+
     val stageOriginX: StateFlow<Float> = oscService.stageOriginX
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 8.0f) // 0.5 * stageWidth (16.0f)
-    
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0f) // Center-referenced
+
     val stageOriginY: StateFlow<Float> = oscService.stageOriginY
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0f)
-    
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), -5.0f) // Downstage center
+
     val stageOriginZ: StateFlow<Float> = oscService.stageOriginZ
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0f)
-    
+
+    // Stage shape: 0=box, 1=cylinder, 2=dome
+    val stageShape: StateFlow<Int> = oscService.stageShape
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val stageDiameter: StateFlow<Float> = oscService.stageDiameter
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 20.0f)
+
+    val domeElevation: StateFlow<Float> = oscService.domeElevation
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 180.0f)
+
     val numberOfInputs: StateFlow<Int> = oscService.numberOfInputs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 64)
     
@@ -103,8 +113,18 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
         oscService.syncClusterHeights(heights)
     }
     
-    fun syncStageDimensions(width: Float, depth: Float, height: Float, originX: Float = -1f, originY: Float = 0f, originZ: Float = 0f) {
-        oscService.syncStageDimensions(width, depth, height, originX, originY, originZ)
+    fun syncStageDimensions(
+        width: Float,
+        depth: Float,
+        height: Float,
+        originX: Float = -1f,
+        originY: Float = 0f,
+        originZ: Float = 0f,
+        shape: Int = 0,
+        diameter: Float = 20f,
+        domeElev: Float = 180f
+    ) {
+        oscService.syncStageDimensions(width, depth, height, originX, originY, originZ, shape, diameter, domeElev)
     }
     
     fun syncNumberOfInputs(count: Int) {

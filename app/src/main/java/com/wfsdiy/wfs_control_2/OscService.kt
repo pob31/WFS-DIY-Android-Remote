@@ -111,15 +111,25 @@ class OscService : Service() {
     private val _stageHeight = MutableStateFlow(7.0f)
     val stageHeight: StateFlow<Float> = _stageHeight.asStateFlow()
     
-    private val _stageOriginX = MutableStateFlow(8.0f) // 0.5 * stageWidth (16.0f)
+    private val _stageOriginX = MutableStateFlow(0.0f) // Center-referenced (0 = center)
     val stageOriginX: StateFlow<Float> = _stageOriginX.asStateFlow()
-    
-    private val _stageOriginY = MutableStateFlow(0.0f)
+
+    private val _stageOriginY = MutableStateFlow(-5.0f) // Downstage center (-stageDepth/2)
     val stageOriginY: StateFlow<Float> = _stageOriginY.asStateFlow()
     
     private val _stageOriginZ = MutableStateFlow(0.0f)
     val stageOriginZ: StateFlow<Float> = _stageOriginZ.asStateFlow()
-    
+
+    // Stage shape parameters: 0=box, 1=cylinder, 2=dome
+    private val _stageShape = MutableStateFlow(0)
+    val stageShape: StateFlow<Int> = _stageShape.asStateFlow()
+
+    private val _stageDiameter = MutableStateFlow(20.0f)
+    val stageDiameter: StateFlow<Float> = _stageDiameter.asStateFlow()
+
+    private val _domeElevation = MutableStateFlow(180.0f)
+    val domeElevation: StateFlow<Float> = _domeElevation.asStateFlow()
+
     private val _numberOfInputs = MutableStateFlow(64)
     val numberOfInputs: StateFlow<Int> = _numberOfInputs.asStateFlow()
     
@@ -208,6 +218,18 @@ class OscService : Service() {
                     onStageOriginZChanged = { newOriginZ ->
                         stageUpdates.offer(OscStageUpdate("originZ", newOriginZ))
                         _stageOriginZ.value = newOriginZ
+                    },
+                    onStageShapeChanged = { newShape ->
+                        stageUpdates.offer(OscStageUpdate("shape", newShape.toFloat()))
+                        _stageShape.value = newShape
+                    },
+                    onStageDiameterChanged = { newDiameter ->
+                        stageUpdates.offer(OscStageUpdate("diameter", newDiameter))
+                        _stageDiameter.value = newDiameter
+                    },
+                    onDomeElevationChanged = { newElevation ->
+                        stageUpdates.offer(OscStageUpdate("domeElevation", newElevation))
+                        _domeElevation.value = newElevation
                     },
                     onNumberOfInputsChanged = { newCount ->
                         inputsUpdates.offer(OscInputsUpdate(newCount))
@@ -523,13 +545,26 @@ class OscService : Service() {
         _clusterNormalizedHeights.value = heights
     }
     
-    fun syncStageDimensions(width: Float, depth: Float, height: Float, originX: Float = -1f, originY: Float = 0f, originZ: Float = 0f) {
+    fun syncStageDimensions(
+        width: Float,
+        depth: Float,
+        height: Float,
+        originX: Float = -1f,
+        originY: Float = 0f,
+        originZ: Float = 0f,
+        shape: Int = 0,
+        diameter: Float = 20f,
+        domeElev: Float = 180f
+    ) {
         _stageWidth.value = width
         _stageDepth.value = depth
         _stageHeight.value = height
-        _stageOriginX.value = if (originX == -1f) width * 0.5f else originX
+        _stageOriginX.value = originX
         _stageOriginY.value = originY
         _stageOriginZ.value = originZ
+        _stageShape.value = shape
+        _stageDiameter.value = diameter
+        _domeElevation.value = domeElev
     }
     
     fun syncNumberOfInputs(count: Int) {

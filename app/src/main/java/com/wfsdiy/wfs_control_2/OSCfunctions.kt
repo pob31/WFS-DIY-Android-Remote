@@ -870,6 +870,7 @@ fun parseOscFloat(buffer: ByteBuffer): Float {
 
 typealias OscDataCallback = (id: Int, name: String?, position: Offset?, isCluster: Boolean) -> Unit
 typealias OscStageDimensionCallback = (value: Float) -> Unit
+typealias OscStageShapeCallback = (shape: Int) -> Unit
 typealias OscNumberOfInputsCallback = (count: Int) -> Unit
 typealias OscClusterZCallback = (ClusterId: Int, normalizedZ: Float) -> Unit
 typealias OscInputParameterIntCallback = (oscPath: String, inputId: Int, value: Int) -> Unit
@@ -890,6 +891,9 @@ fun parseAndProcessOscPacket(
     onStageOriginXChanged: OscStageDimensionCallback? = null,
     onStageOriginYChanged: OscStageDimensionCallback? = null,
     onStageOriginZChanged: OscStageDimensionCallback? = null,
+    onStageShapeChanged: OscStageShapeCallback? = null,
+    onStageDiameterChanged: OscStageDimensionCallback? = null,
+    onDomeElevationChanged: OscStageDimensionCallback? = null,
     onNumberOfInputsChanged: OscNumberOfInputsCallback? = null,
     onClusterZChanged: OscClusterZCallback? = null,
     onInputParameterIntReceived: OscInputParameterIntCallback? = null,
@@ -997,6 +1001,36 @@ fun parseAndProcessOscPacket(
                 }
                 val originZ = parseOscFloat(buffer)
                 onStageOriginZChanged?.invoke(originZ)
+            }
+            address == "/stage/shape" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",i") {
+                    return
+                }
+                if (buffer.remaining() < 4) {
+                    return
+                }
+                val shape = parseOscInt(buffer)
+                onStageShapeChanged?.invoke(shape)
+            }
+            address == "/stage/diameter" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",f") {
+                    return
+                }
+                if (buffer.remaining() < 4) {
+                    return
+                }
+                val diameter = parseOscFloat(buffer)
+                onStageDiameterChanged?.invoke(diameter)
+            }
+            address == "/stage/domeElevation" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",f") {
+                    return
+                }
+                if (buffer.remaining() < 4) {
+                    return
+                }
+                val elevation = parseOscFloat(buffer)
+                onDomeElevationChanged?.invoke(elevation)
             }
             address.startsWith("/marker/") || address.startsWith("/cluster/") -> {
                 val isClusterMessage = address.startsWith("/cluster/")
@@ -1160,6 +1194,9 @@ fun startOscServer(
     onStageOriginXChanged: OscStageDimensionCallback? = null,
     onStageOriginYChanged: OscStageDimensionCallback? = null,
     onStageOriginZChanged: OscStageDimensionCallback? = null,
+    onStageShapeChanged: OscStageShapeCallback? = null,
+    onStageDiameterChanged: OscStageDimensionCallback? = null,
+    onDomeElevationChanged: OscStageDimensionCallback? = null,
     onNumberOfInputsChanged: OscNumberOfInputsCallback? = null,
     onClusterZChanged: OscClusterZCallback? = null,
     onInputParameterIntReceived: OscInputParameterIntCallback? = null,
@@ -1204,6 +1241,9 @@ fun startOscServer(
                         onStageOriginXChanged,
                         onStageOriginYChanged,
                         onStageOriginZChanged,
+                        onStageShapeChanged,
+                        onStageDiameterChanged,
+                        onDomeElevationChanged,
                         onNumberOfInputsChanged,
                         onClusterZChanged,
                         onInputParameterIntReceived,

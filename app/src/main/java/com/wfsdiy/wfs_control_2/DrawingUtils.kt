@@ -327,3 +327,177 @@ private fun calculateBarycenter(members: List<Marker>): Offset {
     val sumY = members.sumOf { it.positionY.toDouble() }.toFloat()
     return Offset(sumX / members.size, sumY / members.size)
 }
+
+/**
+ * Draw the stage boundary on the canvas.
+ * For shape 0 (box): draws a rectangle
+ * For shape 1 (cylinder) or 2 (dome): draws a circle
+ *
+ * @param stageShape 0=box, 1=cylinder, 2=dome
+ * @param stageWidth Stage width in meters (used for box)
+ * @param stageDepth Stage depth in meters (used for box)
+ * @param stageDiameter Stage diameter in meters (used for cylinder/dome)
+ * @param stageOriginX Origin X offset in meters
+ * @param stageOriginY Origin Y offset in meters
+ * @param canvasPixelW Canvas width in pixels
+ * @param canvasPixelH Canvas height in pixels
+ * @param markerRadius Marker radius for effective area calculation
+ */
+fun DrawScope.drawStageBoundary(
+    stageShape: Int,
+    stageWidth: Float,
+    stageDepth: Float,
+    stageDiameter: Float,
+    stageOriginX: Float,
+    stageOriginY: Float,
+    canvasPixelW: Float,
+    canvasPixelH: Float,
+    markerRadius: Float = 0f
+) {
+    if (canvasPixelW <= 0f || canvasPixelH <= 0f) return
+
+    val effectiveCanvasWidth = canvasPixelW - (markerRadius * 2f)
+    val effectiveCanvasHeight = canvasPixelH - (markerRadius * 2f)
+
+    val boundaryColor = Color.DarkGray
+    val strokeWidth = 2f
+
+    when (stageShape) {
+        0 -> {
+            // Box shape - draw rectangle boundary
+            if (stageWidth <= 0f || stageDepth <= 0f) return
+
+            // Rectangle edges at canvas boundaries (the canvas represents the full stage)
+            drawRect(
+                color = boundaryColor,
+                topLeft = Offset(markerRadius, markerRadius),
+                size = androidx.compose.ui.geometry.Size(effectiveCanvasWidth, effectiveCanvasHeight),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+            )
+        }
+        1, 2 -> {
+            // Cylinder or Dome shape - draw circle boundary
+            if (stageDiameter <= 0f) return
+
+            // For circular stages, canvas represents a square area of diameter x diameter
+            // The circle is centered at the physical center (0,0 in physical coords)
+            // which is at canvas position corresponding to normalized (0.5, 0.5)
+
+            // The circle fills the canvas (diameter maps to canvas size)
+            // Center is at the physical stage center
+            val centerCanvasX = effectiveCanvasWidth / 2f + markerRadius
+            val centerCanvasY = effectiveCanvasHeight / 2f + markerRadius
+
+            // Radius in canvas pixels - the circle should fit within the canvas
+            // Use the smaller dimension to ensure the circle fits
+            val circleRadius = min(effectiveCanvasWidth, effectiveCanvasHeight) / 2f
+
+            drawCircle(
+                color = boundaryColor,
+                radius = circleRadius,
+                center = Offset(centerCanvasX, centerCanvasY),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+            )
+        }
+    }
+}
+
+/**
+ * Draw stage coordinate labels appropriate for the stage shape.
+ * For box shapes: draws corner coordinates
+ * For circular shapes: draws diameter info and cardinal points
+ */
+fun DrawScope.drawStageLabels(
+    stageShape: Int,
+    stageWidth: Float,
+    stageDepth: Float,
+    stageDiameter: Float,
+    stageOriginX: Float,
+    stageOriginY: Float,
+    canvasPixelW: Float,
+    canvasPixelH: Float,
+    markerRadius: Float = 0f
+) {
+    when (stageShape) {
+        0 -> {
+            // Box shape - use existing corner labels
+            drawStageCornerLabels(
+                stageWidth, stageDepth,
+                stageOriginX, stageOriginY,
+                canvasPixelW, canvasPixelH,
+                markerRadius
+            )
+        }
+        1, 2 -> {
+            // Circular shape - draw cardinal point labels
+            drawCircularStageLabels(
+                stageDiameter,
+                stageOriginX, stageOriginY,
+                canvasPixelW, canvasPixelH,
+                markerRadius
+            )
+        }
+    }
+}
+
+/**
+ * Draw labels for circular stage shapes showing cardinal directions and diameter.
+ */
+private fun DrawScope.drawCircularStageLabels(
+    stageDiameter: Float,
+    stageOriginX: Float,
+    stageOriginY: Float,
+    canvasPixelW: Float,
+    canvasPixelH: Float,
+    markerRadius: Float = 0f
+) {
+    if (stageDiameter <= 0f || canvasPixelW <= 0f || canvasPixelH <= 0f) return
+
+    val paint = Paint().apply {
+        color = android.graphics.Color.GRAY
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
+        textSize = if (canvasPixelH > 0f) canvasPixelH / 45f else 20f
+    }
+    val padding = if (canvasPixelH > 0f) canvasPixelH / 60f else 10f
+
+    val effectiveCanvasWidth = canvasPixelW - (markerRadius * 2f)
+    val effectiveCanvasHeight = canvasPixelH - (markerRadius * 2f)
+
+    val radius = stageDiameter / 2f
+
+    // Cardinal points in origin-relative coordinates
+    // Physical cardinal points are at (±radius, 0) and (0, ±radius)
+    // Origin-relative = physical - origin
+    val northY = radius - stageOriginY     // Top (back)
+    val southY = -radius - stageOriginY    // Bottom (front)
+    val eastX = radius - stageOriginX      // Right
+    val westX = -radius - stageOriginX     // Left
+
+    // Draw labels at four cardinal positions
+    // Top center (North/Back)
+    paint.textAlign = Paint.Align.CENTER
+    val topLabel = "(0, ${String.format(Locale.US, "%.1f", northY)})"
+    val topCanvasX = effectiveCanvasWidth / 2f + markerRadius
+    val topCanvasY = markerRadius + padding + abs(paint.fontMetrics.ascent)
+    drawContext.canvas.nativeCanvas.drawText(topLabel, topCanvasX, topCanvasY, paint)
+
+    // Bottom center (South/Front)
+    val bottomLabel = "(0, ${String.format(Locale.US, "%.1f", southY)})"
+    val bottomCanvasX = effectiveCanvasWidth / 2f + markerRadius
+    val bottomCanvasY = effectiveCanvasHeight + markerRadius - padding
+    drawContext.canvas.nativeCanvas.drawText(bottomLabel, bottomCanvasX, bottomCanvasY, paint)
+
+    // Left center (West)
+    paint.textAlign = Paint.Align.LEFT
+    val leftLabel = "(${String.format(Locale.US, "%.1f", westX)}, 0)"
+    val leftCanvasX = markerRadius + padding
+    val leftCanvasY = effectiveCanvasHeight / 2f + markerRadius
+    drawContext.canvas.nativeCanvas.drawText(leftLabel, leftCanvasX, leftCanvasY, paint)
+
+    // Right center (East)
+    paint.textAlign = Paint.Align.RIGHT
+    val rightLabel = "(${String.format(Locale.US, "%.1f", eastX)}, 0)"
+    val rightCanvasX = effectiveCanvasWidth + markerRadius - padding
+    val rightCanvasY = effectiveCanvasHeight / 2f + markerRadius
+    drawContext.canvas.nativeCanvas.drawText(rightLabel, rightCanvasX, rightCanvasY, paint)
+}

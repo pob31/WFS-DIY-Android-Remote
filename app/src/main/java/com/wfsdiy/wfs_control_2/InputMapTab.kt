@@ -244,6 +244,9 @@ fun InputMapTab(
     stageDepth: Float,
     stageOriginX: Float,
     stageOriginY: Float,
+    stageShape: Int = 0,           // 0=box, 1=cylinder, 2=dome
+    stageDiameter: Float = 20f,    // Used for cylinder/dome shapes
+    domeElevation: Float = 180f,   // Used for dome shape
     inputSecondaryAngularMode: SecondaryTouchFunction = SecondaryTouchFunction.OFF,
     inputSecondaryRadialMode: SecondaryTouchFunction = SecondaryTouchFunction.OFF,
     clusterConfigs: List<ClusterConfig> = emptyList(),
@@ -782,11 +785,36 @@ fun InputMapTab(
                 textPaint
             )
             
-            // Draw the stage grid lines (bottom-center origin)
-            drawStageCoordinates(stageWidth, stageDepth, canvasWidth, canvasHeight, markerRadius)
-            
-            // Draw the stage corner/center labels (top-left origin assumed by this function)
-            drawStageCornerLabels(stageWidth, stageDepth, stageOriginX, stageOriginY, canvasWidth, canvasHeight, markerRadius)
+            // Draw the stage boundary (rectangle for box, circle for cylinder/dome)
+            drawStageBoundary(
+                stageShape = stageShape,
+                stageWidth = stageWidth,
+                stageDepth = stageDepth,
+                stageDiameter = stageDiameter,
+                stageOriginX = stageOriginX,
+                stageOriginY = stageOriginY,
+                canvasPixelW = canvasWidth,
+                canvasPixelH = canvasHeight,
+                markerRadius = markerRadius
+            )
+
+            // Draw the stage grid lines (only for box shape)
+            if (stageShape == 0) {
+                drawStageCoordinates(stageWidth, stageDepth, canvasWidth, canvasHeight, markerRadius)
+            }
+
+            // Draw stage labels appropriate for the shape
+            drawStageLabels(
+                stageShape = stageShape,
+                stageWidth = stageWidth,
+                stageDepth = stageDepth,
+                stageDiameter = stageDiameter,
+                stageOriginX = stageOriginX,
+                stageOriginY = stageOriginY,
+                canvasPixelW = canvasWidth,
+                canvasPixelH = canvasHeight,
+                markerRadius = markerRadius
+            )
 
             // Draw origin marker at position where displayed coordinates would be (0.0, 0.0)
             drawOriginMarker(stageWidth, stageDepth, stageOriginX, stageOriginY, canvasWidth, canvasHeight, markerRadius)
