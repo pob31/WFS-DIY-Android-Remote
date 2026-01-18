@@ -53,6 +53,9 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
     val inputParametersState: StateFlow<InputParametersState> = oscService.inputParametersState
         .stateIn(viewModelScope, SharingStarted.Eagerly, InputParametersState())
 
+    val connectionState: StateFlow<OscService.RemoteConnectionState> = oscService.connectionState
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), OscService.RemoteConnectionState.DISCONNECTED)
+
     fun sendMarkerPosition(markerId: Int, x: Float, y: Float, isCluster: Boolean) {
         oscService.sendMarkerPosition(markerId, x, y, isCluster)
     }

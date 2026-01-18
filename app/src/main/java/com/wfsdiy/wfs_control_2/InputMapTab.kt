@@ -236,6 +236,7 @@ fun canvasToStagePosition(
 fun InputMapTab(
     numberOfInputs: Int,
     markers: List<Marker>,
+    refreshTrigger: Int = 0,  // Increments when tab becomes visible to force position refresh
     onMarkersInitiallyPositioned: (List<Marker>) -> Unit,
     onCanvasSizeChanged: (width: Float, height: Float) -> Unit,
     initialLayoutDone: Boolean,
@@ -331,7 +332,8 @@ fun InputMapTab(
         }
 
         // Update marker positions from server inputParametersState
-        LaunchedEffect(inputParametersState?.revision, canvasWidth, canvasHeight, stageWidth, stageDepth, stageOriginX, stageOriginY, numberOfInputs, markerRadius) {
+        // refreshTrigger forces update when returning to this tab
+        LaunchedEffect(inputParametersState?.revision, refreshTrigger, canvasWidth, canvasHeight, stageWidth, stageDepth, stageOriginX, stageOriginY, numberOfInputs, markerRadius) {
             if (inputParametersState != null && canvasWidth > 0f && canvasHeight > 0f && stageWidth > 0f && stageDepth > 0f && numberOfInputs > 0) {
                 val updatedMarkers = currentMarkersState.mapIndexed { index, marker ->
                     if (index < numberOfInputs) {
@@ -431,9 +433,24 @@ fun InputMapTab(
 
         LaunchedEffect(canvasWidth, canvasHeight, initialLayoutDone, numberOfInputs) {
             if (canvasWidth > 0f && canvasHeight > 0f && !initialLayoutDone && numberOfInputs > 0) {
+                // Check if we have position data from the server before applying grid layout
+                // If inputParametersState has position data for any input, skip grid layout
+                val hasServerPositionData = inputParametersState?.let { state ->
+                    (1..numberOfInputs).any { inputId ->
+                        val channel = state.getChannel(inputId)
+                        channel.parameters["positionX"] != null || channel.parameters["positionY"] != null
+                    }
+                } ?: false
+
+                if (hasServerPositionData) {
+                    // Server has sent positions, mark layout as done without applying grid
+                    onInitialLayoutDone()
+                    return@LaunchedEffect
+                }
+
                 val numCols = 8
                 val numRows = (numberOfInputs + numCols - 1) / numCols
-                
+
                 // Calculate responsive spacing factor based on screen size
                 val baseSpacingFactor = (screenWidthDp.value / 4f).coerceIn(60f, 100f) // 60-100dp range (more compact)
                 val spacingFactor = baseSpacingFactor
@@ -470,7 +487,7 @@ fun InputMapTab(
                 onInitialLayoutDone()
             } else if (numberOfInputs == 0 && !initialLayoutDone) {
                 // If numberOfInputs is 0, reset positions
-                val resetMarkersList = currentMarkersState.map { it.copy(positionX = 0f, positionY = 0f) } 
+                val resetMarkersList = currentMarkersState.map { it.copy(positionX = 0f, positionY = 0f) }
                 onMarkersInitiallyPositioned(resetMarkersList)
                 onInitialLayoutDone()
             }

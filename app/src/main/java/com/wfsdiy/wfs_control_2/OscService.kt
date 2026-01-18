@@ -16,9 +16,11 @@ import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -28,7 +30,22 @@ class OscService : Service() {
     private val binder = OscBinder()
     private val job = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + job)
-    
+
+    // Remote connection state
+    enum class RemoteConnectionState { DISCONNECTED, CONNECTED }
+
+    private val _connectionState = MutableStateFlow(RemoteConnectionState.DISCONNECTED)
+    val connectionState: StateFlow<RemoteConnectionState> = _connectionState.asStateFlow()
+
+    private var lastHeartbeatReceivedTime: Long = 0
+    private var connectionTimeoutJob: kotlinx.coroutines.Job? = null
+
+    companion object {
+        private const val NOTIFICATION_ID = 1
+        private const val NOTIFICATION_CHANNEL_ID = "OscServiceChannel"
+        private const val CONNECTION_TIMEOUT_MS = 6000L
+    }
+
     // Service state tracking
     private var isServerRunning = false
     private var serverJob: kotlinx.coroutines.Job? = null
@@ -273,6 +290,23 @@ class OscService : Service() {
                             updatedConfigs[index] = updatedConfigs[index].copy(trackedInputId = inputId)
                             _clusterConfigs.value = updatedConfigs
                         }
+                    },
+                    onRemotePingReceived = { sequenceNumber ->
+                        // Respond with pong and update connection state
+                        sendOscPong(this@OscService, sequenceNumber)
+                        lastHeartbeatReceivedTime = System.currentTimeMillis()
+                        _connectionState.value = RemoteConnectionState.CONNECTED
+                        startConnectionTimeoutMonitor()
+                    },
+                    onRemoteHeartbeatReceived = { sequenceNumber ->
+                        // Respond with heartbeat ack and update timestamp
+                        sendOscHeartbeatAck(this@OscService, sequenceNumber)
+                        lastHeartbeatReceivedTime = System.currentTimeMillis()
+                    },
+                    onRemoteDisconnectReceived = {
+                        // Server requested disconnect
+                        _connectionState.value = RemoteConnectionState.DISCONNECTED
+                        connectionTimeoutJob?.cancel()
                     }
                 )
             } catch (e: Exception) {
@@ -480,7 +514,25 @@ class OscService : Service() {
     fun isOscServerRunning(): Boolean {
         return isServerRunning
     }
-    
+
+    private fun startConnectionTimeoutMonitor() {
+        // Cancel any existing monitor
+        connectionTimeoutJob?.cancel()
+
+        connectionTimeoutJob = serviceScope.launch {
+            while (isActive && _connectionState.value == RemoteConnectionState.CONNECTED) {
+                delay(1000) // Check every second
+
+                val timeSinceLastHeartbeat = System.currentTimeMillis() - lastHeartbeatReceivedTime
+                if (timeSinceLastHeartbeat >= CONNECTION_TIMEOUT_MS) {
+                    _connectionState.value = RemoteConnectionState.DISCONNECTED
+                    android.util.Log.d("OscService", "Connection timeout - no heartbeat for ${timeSinceLastHeartbeat}ms")
+                    break
+                }
+            }
+        }
+    }
+
     fun restartOscServer() {
         serverJob?.cancel()
         isServerRunning = false
@@ -642,11 +694,6 @@ class OscService : Service() {
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .build()
         }
-    }
-
-    companion object {
-        private const val NOTIFICATION_ID = 1
-        private const val NOTIFICATION_CHANNEL_ID = "OscServiceChannel"
     }
 }
 

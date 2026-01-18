@@ -878,6 +878,9 @@ typealias OscInputParameterFloatCallback = (oscPath: String, inputId: Int, value
 typealias OscInputParameterStringCallback = (oscPath: String, inputId: Int, value: String) -> Unit
 typealias OscClusterReferenceModeCallback = (clusterId: Int, mode: Int) -> Unit
 typealias OscClusterTrackedInputCallback = (clusterId: Int, inputId: Int) -> Unit
+typealias OscRemotePingCallback = (sequenceNumber: Int) -> Unit
+typealias OscRemoteHeartbeatCallback = (sequenceNumber: Int) -> Unit
+typealias OscRemoteDisconnectCallback = () -> Unit
 
 fun parseAndProcessOscPacket(
     context: Context,
@@ -900,7 +903,10 @@ fun parseAndProcessOscPacket(
     onInputParameterFloatReceived: OscInputParameterFloatCallback? = null,
     onInputParameterStringReceived: OscInputParameterStringCallback? = null,
     onClusterReferenceModeChanged: OscClusterReferenceModeCallback? = null,
-    onClusterTrackedInputChanged: OscClusterTrackedInputCallback? = null
+    onClusterTrackedInputChanged: OscClusterTrackedInputCallback? = null,
+    onRemotePingReceived: OscRemotePingCallback? = null,
+    onRemoteHeartbeatReceived: OscRemoteHeartbeatCallback? = null,
+    onRemoteDisconnectReceived: OscRemoteDisconnectCallback? = null
 ) {
     if (data.isEmpty()) {
         return
@@ -1141,13 +1147,13 @@ fun parseAndProcessOscPacket(
             address.startsWith("/remoteInput/") -> {
                 // Handle input parameter messages
                 val parameterName = address.removePrefix("/remoteInput/")
-                
+
                 if (!buffer.hasRemaining()) {
                     return
                 }
-                
+
                 val typeTags = parseOscString(buffer)
-                
+
                 when {
                     typeTags == ",ii" -> {
                         // Integer parameter: inputId + int value
@@ -1174,6 +1180,27 @@ fun parseAndProcessOscPacket(
                         // Unknown type tag
                     }
                 }
+            }
+            // Remote handshake/heartbeat protocol
+            address == "/remote/ping" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",i") {
+                    return
+                }
+                if (buffer.remaining() < 4) return
+                val sequenceNumber = parseOscInt(buffer)
+                onRemotePingReceived?.invoke(sequenceNumber)
+            }
+            address == "/remote/heartbeat" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",i") {
+                    return
+                }
+                if (buffer.remaining() < 4) return
+                val sequenceNumber = parseOscInt(buffer)
+                onRemoteHeartbeatReceived?.invoke(sequenceNumber)
+            }
+            address == "/remote/disconnect" -> {
+                // Disconnect message has no arguments
+                onRemoteDisconnectReceived?.invoke()
             }
             else -> {
 
@@ -1203,7 +1230,10 @@ fun startOscServer(
     onInputParameterFloatReceived: OscInputParameterFloatCallback? = null,
     onInputParameterStringReceived: OscInputParameterStringCallback? = null,
     onClusterReferenceModeChanged: OscClusterReferenceModeCallback? = null,
-    onClusterTrackedInputChanged: OscClusterTrackedInputCallback? = null
+    onClusterTrackedInputChanged: OscClusterTrackedInputCallback? = null,
+    onRemotePingReceived: OscRemotePingCallback? = null,
+    onRemoteHeartbeatReceived: OscRemoteHeartbeatCallback? = null,
+    onRemoteDisconnectReceived: OscRemoteDisconnectCallback? = null
 ) {
     CoroutineScope(Dispatchers.IO).launch {
         var serverSocket: DatagramSocket? = null
@@ -1250,7 +1280,10 @@ fun startOscServer(
                         onInputParameterFloatReceived,
                         onInputParameterStringReceived,
                         onClusterReferenceModeChanged,
-                        onClusterTrackedInputChanged
+                        onClusterTrackedInputChanged,
+                        onRemotePingReceived,
+                        onRemoteHeartbeatReceived,
+                        onRemoteDisconnectReceived
                     )
                 } catch (e: java.net.SocketTimeoutException) {
 
@@ -1282,4 +1315,78 @@ fun isValidPort(port: String): Boolean {
 fun isValidIpAddress(ip: String): Boolean {
     val ipRegex = Regex("""^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$""")
     return ipRegex.matches(ip)
+}
+
+/**
+ * Send pong response to a ping from the JUCE server.
+ * @param context Android context for accessing network parameters
+ * @param sequenceNumber The sequence number from the received ping
+ */
+fun sendOscPong(context: Context, sequenceNumber: Int) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull()
+
+            if (outgoingPort == null || !isValidPort(outgoingPortStr)) {
+                return@launch
+            }
+            if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) {
+                return@launch
+            }
+
+            val addressPattern = "/remote/pong"
+            val addressPatternBytes = getPaddedBytes(addressPattern)
+            val typeTagBytes = getPaddedBytes(",i")
+            val seqNumBytes = sequenceNumber.toBytesBigEndian()
+
+            val oscPacketBytes = addressPatternBytes + typeTagBytes + seqNumBytes
+
+            DatagramSocket().use { socket ->
+                val inetAddress = InetAddress.getByName(ipAddressStr)
+                val packet = DatagramPacket(oscPacketBytes, oscPacketBytes.size, inetAddress, outgoingPort)
+                socket.send(packet)
+            }
+
+            android.util.Log.d("OSC", "Sent /remote/pong seq=$sequenceNumber")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
+
+/**
+ * Send heartbeat acknowledgment to the JUCE server.
+ * @param context Android context for accessing network parameters
+ * @param sequenceNumber The sequence number from the received heartbeat
+ */
+fun sendOscHeartbeatAck(context: Context, sequenceNumber: Int) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull()
+
+            if (outgoingPort == null || !isValidPort(outgoingPortStr)) {
+                return@launch
+            }
+            if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) {
+                return@launch
+            }
+
+            val addressPattern = "/remote/heartbeatAck"
+            val addressPatternBytes = getPaddedBytes(addressPattern)
+            val typeTagBytes = getPaddedBytes(",i")
+            val seqNumBytes = sequenceNumber.toBytesBigEndian()
+
+            val oscPacketBytes = addressPatternBytes + typeTagBytes + seqNumBytes
+
+            DatagramSocket().use { socket ->
+                val inetAddress = InetAddress.getByName(ipAddressStr)
+                val packet = DatagramPacket(oscPacketBytes, oscPacketBytes.size, inetAddress, outgoingPort)
+                socket.send(packet)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 }

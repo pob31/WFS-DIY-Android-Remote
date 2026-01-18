@@ -497,6 +497,7 @@ fun WFSControlApp() {
     }
 
     var selectedTab by remember { mutableIntStateOf(0) }
+    var mapTabVisitCount by remember { mutableIntStateOf(0) }  // Increments each time Map tab is selected
     var inputParamsTabVisitCount by remember { mutableIntStateOf(0) }  // Increments each time Input Parameters tab is selected
     val tabs = listOf("Map", "Lock Input Markers", "View Input Markers", "Input Parameters", "Array Adjust", "Settings")
 
@@ -530,6 +531,27 @@ fun WFSControlApp() {
     LaunchedEffect(viewModel) {
         viewModel?.inputParametersState?.collect { state ->
             inputParametersState = state
+        }
+    }
+
+    // Connection state tracking for reconnection logic
+    var connectionState by remember { mutableStateOf(OscService.RemoteConnectionState.DISCONNECTED) }
+    var previousConnectionState by remember { mutableStateOf(OscService.RemoteConnectionState.DISCONNECTED) }
+
+    // Collect connection state and handle reconnection
+    LaunchedEffect(viewModel) {
+        viewModel?.connectionState?.collect { newState ->
+            previousConnectionState = connectionState
+            connectionState = newState
+
+            // On reconnection (was disconnected, now connected), request param refresh if on Input Parameters tab
+            if (previousConnectionState == OscService.RemoteConnectionState.DISCONNECTED &&
+                newState == OscService.RemoteConnectionState.CONNECTED &&
+                selectedTab == 3) {
+                // Get current selected input ID and request parameter refresh
+                val selectedInputId = inputParametersState?.selectedInputId ?: 1
+                viewModel?.requestInputParameters(selectedInputId)
+            }
         }
     }
 
@@ -682,8 +704,12 @@ fun WFSControlApp() {
                 // Process buffered inputs updates
                 val inputsUpdates = viewModel.getBufferedInputsUpdates()
                 inputsUpdates.forEach { update ->
+                    // Only reset initial layout if number of inputs actually changed
+                    // and only if we don't already have layout done (server will send positions)
+                    val inputCountChanged = update.count != numberOfInputs
                     numberOfInputs = update.count
-                    initialInputLayoutDone = false
+                    // Don't reset initialInputLayoutDone - server will send positions
+                    // which will be applied via inputParametersState
                 }
                 
                 // Process buffered cluster Z updates
@@ -753,40 +779,63 @@ fun WFSControlApp() {
     }
 
         Column(modifier = Modifier.fillMaxSize()) {
-            TabRow(
-                selectedTabIndex = selectedTab,
-                modifier = Modifier.height(dynamicTabRowHeight),
-                containerColor = Color.DarkGray // Set a base color for the TabRow if needed, otherwise it might be transparent or themed
-            ) {
-                tabs.forEachIndexed { index, title ->
-                    val isSelected = selectedTab == index
-                    Tab(
-                        selected = isSelected,
-                        onClick = {
-                            selectedTab = index
-                            // Increment visit count when Input Parameters tab (index 3) is selected
-                            if (index == 3) {
-                                inputParamsTabVisitCount++
-                            }
-                        },
-                        text = {
-                            Text(
-                                title,
-                                fontSize = dynamicTabFontSize,
-                                color = if (isSelected) Color.White else Color.LightGray
-                            )
-                        },
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .background(if (isSelected) Color.Black else Color.DarkGray)
-                    )
+            // Tab row with connection indicator
+            Box(modifier = Modifier.height(dynamicTabRowHeight)) {
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = Color.DarkGray // Set a base color for the TabRow if needed, otherwise it might be transparent or themed
+                ) {
+                    tabs.forEachIndexed { index, title ->
+                        val isSelected = selectedTab == index
+                        Tab(
+                            selected = isSelected,
+                            onClick = {
+                                selectedTab = index
+                                // Increment visit count when Map tab (index 0) is selected
+                                if (index == 0) {
+                                    mapTabVisitCount++
+                                }
+                                // Increment visit count when Input Parameters tab (index 3) is selected
+                                if (index == 3) {
+                                    inputParamsTabVisitCount++
+                                }
+                            },
+                            text = {
+                                Text(
+                                    title,
+                                    fontSize = dynamicTabFontSize,
+                                    color = if (isSelected) Color.White else Color.LightGray
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .background(if (isSelected) Color.Black else Color.DarkGray)
+                        )
+                    }
                 }
+
+                // Connection status indicator (small dot in top-right corner)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(8.dp)
+                        .background(
+                            color = if (connectionState == OscService.RemoteConnectionState.CONNECTED)
+                                Color(0xFF00FF00) // Bright green
+                            else
+                                Color(0xFFFF0000), // Red
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                )
             }
 
             when (selectedTab) {
                 0 -> InputMapTab(
                     numberOfInputs = numberOfInputs,
                     markers = markers,
+                    refreshTrigger = mapTabVisitCount,
                     onMarkersInitiallyPositioned = { newMarkerList ->
                         markers = newMarkerList
                     },
