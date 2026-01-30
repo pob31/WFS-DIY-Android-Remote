@@ -881,6 +881,7 @@ typealias OscClusterTrackedInputCallback = (clusterId: Int, inputId: Int) -> Uni
 typealias OscRemotePingCallback = (sequenceNumber: Int) -> Unit
 typealias OscRemoteHeartbeatCallback = (sequenceNumber: Int) -> Unit
 typealias OscRemoteDisconnectCallback = () -> Unit
+typealias OscInputFullyTrackedCallback = (inputId: Int, isFullyTracked: Boolean) -> Unit
 
 fun parseAndProcessOscPacket(
     context: Context,
@@ -906,7 +907,8 @@ fun parseAndProcessOscPacket(
     onClusterTrackedInputChanged: OscClusterTrackedInputCallback? = null,
     onRemotePingReceived: OscRemotePingCallback? = null,
     onRemoteHeartbeatReceived: OscRemoteHeartbeatCallback? = null,
-    onRemoteDisconnectReceived: OscRemoteDisconnectCallback? = null
+    onRemoteDisconnectReceived: OscRemoteDisconnectCallback? = null,
+    onInputFullyTrackedReceived: OscInputFullyTrackedCallback? = null
 ) {
     if (data.isEmpty()) {
         return
@@ -1160,7 +1162,12 @@ fun parseAndProcessOscPacket(
                         if (buffer.remaining() < 8) return
                         val inputId = parseOscInt(buffer)
                         val value = parseOscInt(buffer)
-                        onInputParameterIntReceived?.invoke(address, inputId, value)
+                        // Handle isFullyTracked specially for marker tracking display
+                        if (parameterName == "isFullyTracked") {
+                            onInputFullyTrackedReceived?.invoke(inputId, value != 0)
+                        } else {
+                            onInputParameterIntReceived?.invoke(address, inputId, value)
+                        }
                     }
                     typeTags == ",if" -> {
                         // Float parameter: inputId + float value
@@ -1233,7 +1240,8 @@ fun startOscServer(
     onClusterTrackedInputChanged: OscClusterTrackedInputCallback? = null,
     onRemotePingReceived: OscRemotePingCallback? = null,
     onRemoteHeartbeatReceived: OscRemoteHeartbeatCallback? = null,
-    onRemoteDisconnectReceived: OscRemoteDisconnectCallback? = null
+    onRemoteDisconnectReceived: OscRemoteDisconnectCallback? = null,
+    onInputFullyTrackedReceived: OscInputFullyTrackedCallback? = null
 ) {
     CoroutineScope(Dispatchers.IO).launch {
         var serverSocket: DatagramSocket? = null
@@ -1283,7 +1291,8 @@ fun startOscServer(
                         onClusterTrackedInputChanged,
                         onRemotePingReceived,
                         onRemoteHeartbeatReceived,
-                        onRemoteDisconnectReceived
+                        onRemoteDisconnectReceived,
+                        onInputFullyTrackedReceived
                     )
                 } catch (e: java.net.SocketTimeoutException) {
 

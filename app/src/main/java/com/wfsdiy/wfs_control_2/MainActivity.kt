@@ -125,7 +125,8 @@ data class Marker(
     var isLocked: Boolean = false,
     var isVisible: Boolean = true,
     var name: String = "",
-    var clusterId: Int = 0  // 0 = no cluster, 1-10 = cluster number
+    var clusterId: Int = 0,  // 0 = no cluster, 1-10 = cluster number
+    var isFullyTracked: Boolean = false  // True when tracking is fully active for this input
 ) : Parcelable {
     // Helper property to get Offset
     var position: Offset
@@ -735,6 +736,17 @@ fun WFSControlApp() {
                             trackedInputId = update.trackedInputId ?: currentConfig.trackedInputId
                         )
                         clusterConfigs = updatedConfigs
+                    }
+                }
+
+                // Process buffered tracking state updates
+                val trackingStateUpdates = viewModel.getBufferedTrackingStateUpdates()
+                trackingStateUpdates.forEach { update ->
+                    val index = update.inputId - 1
+                    if (index >= 0 && index < markers.size) {
+                        markers = markers.toMutableList().apply {
+                            this[index] = this[index].copy(isFullyTracked = update.isFullyTracked)
+                        }
                     }
                 }
             }

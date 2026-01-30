@@ -179,6 +179,10 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
         return oscService.getBufferedClusterConfigUpdates()
     }
 
+    fun getBufferedTrackingStateUpdates(): List<OscService.OscTrackingStateUpdate> {
+        return oscService.getBufferedTrackingStateUpdates()
+    }
+
     val clusterConfigs: StateFlow<List<ClusterConfig>> = oscService.clusterConfigs
 
     // Factory for creating the ViewModel with the OscService dependency

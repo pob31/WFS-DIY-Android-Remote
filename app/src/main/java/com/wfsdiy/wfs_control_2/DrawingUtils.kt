@@ -154,9 +154,16 @@ fun <T> DrawScope.drawMarker(
     val finalOuterColor: Color
     val labelColor: Int
 
+    // Check if marker is fully tracked (only for regular markers, not clusters)
+    val markerIsFullyTracked = !isClusterMarker && markerInstance is Marker && markerInstance.isFullyTracked
+
     if (!isClusterMarker && markerIsLocked) {
         finalOuterColor = Color.LightGray
         labelColor = Color.Red.toArgb()
+    } else if (markerIsFullyTracked) {
+        // Tracking engaged: lime green label like JUCE map
+        finalOuterColor = if (isBeingDragged) Color.White else baseColor
+        labelColor = android.graphics.Color.parseColor("#00FF00")
     } else {
         finalOuterColor = if (isBeingDragged) Color.White else baseColor
         labelColor = android.graphics.Color.WHITE

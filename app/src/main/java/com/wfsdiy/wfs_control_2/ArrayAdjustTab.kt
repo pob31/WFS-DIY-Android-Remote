@@ -70,7 +70,7 @@ fun ArrayAdjustTab() {
                 modifier = Modifier
                     .weight(sideColumnWeight)
                     .fillMaxHeight(),
-                arrayLabels = List(5) { "Array ${it + 1}" },
+                arrayLabels = List(10) { "Array ${it + 1}" },
                 arrayLabelFontSize = arrayLabelFontSize
             )
 
@@ -145,7 +145,7 @@ fun ArrayAdjustTab() {
                 modifier = Modifier
                     .weight(sideColumnWeight)
                     .fillMaxHeight(),
-                arrayLabels = List(5) { "Array ${it + 1}" },
+                arrayLabels = List(10) { "Array ${it + 1}" },
                 arrayLabelFontSize = arrayLabelFontSize
             )
         }
@@ -273,7 +273,7 @@ fun SideColumn(modifier: Modifier = Modifier, arrayLabels: List<String>, arrayLa
         TwoSplitCell(labels = Pair(" ", " "), themeColor = defaultColumnColor, labelFontSize = 12.sp)
         FourSplitCell(labels = List(4) { " " }, themeColor = defaultColumnColor, labelFontSize = 12.sp)
 
-        // Rows 4-8: Array Labels
+        // Rows 4-13: Array Labels
         arrayLabels.forEach { label ->
             Box(
                 modifier = Modifier
@@ -310,8 +310,8 @@ fun ControlColumn(
         TwoSplitCell(labels = row2Labels, themeColor = themeColor, labelFontSize = row2FontSize)
         FourSplitCell(labels = row3AndLastLabels, themeColor = themeColor)
 
-        // Rows 4-8: Five rows of four temporary buttons
-        repeat(5) { arrayIndex -> // arrayIndex will be 0 to 4
+        // Rows 4-13: Ten rows of four temporary buttons
+        repeat(10) { arrayIndex -> // arrayIndex will be 0 to 9
              Row(
                 modifier = Modifier
                     .fillMaxWidth()

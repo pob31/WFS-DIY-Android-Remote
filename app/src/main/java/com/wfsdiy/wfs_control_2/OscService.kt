@@ -100,6 +100,12 @@ class OscService : Service() {
         val timestamp: Long = System.currentTimeMillis()
     )
 
+    data class OscTrackingStateUpdate(
+        val inputId: Int,
+        val isFullyTracked: Boolean,
+        val timestamp: Long = System.currentTimeMillis()
+    )
+
     // Buffers for incoming OSC data
     private val markerUpdates = ConcurrentLinkedQueue<OscMarkerUpdate>()
     private val normalizedMarkerUpdates = ConcurrentLinkedQueue<OscNormalizedMarkerUpdate>()
@@ -108,6 +114,7 @@ class OscService : Service() {
     private val clusterZUpdates = ConcurrentLinkedQueue<OscClusterZUpdate>()
     private val inputParameterUpdates = ConcurrentLinkedQueue<OscInputParameterUpdate>()
     private val clusterConfigUpdates = ConcurrentLinkedQueue<OscClusterConfigUpdate>()
+    private val trackingStateUpdates = ConcurrentLinkedQueue<OscTrackingStateUpdate>()
     
     // StateFlows for real-time data (when MainActivity is active)
     private val _markers = MutableStateFlow<List<Marker>>(emptyList())
@@ -307,6 +314,17 @@ class OscService : Service() {
                         // Server requested disconnect
                         _connectionState.value = RemoteConnectionState.DISCONNECTED
                         connectionTimeoutJob?.cancel()
+                    },
+                    onInputFullyTrackedReceived = { inputId, isFullyTracked ->
+                        // Buffer the tracking state update for MainActivity to process
+                        trackingStateUpdates.offer(OscTrackingStateUpdate(inputId, isFullyTracked))
+                        // Also update local StateFlow for any direct observers
+                        val index = inputId - 1
+                        if (index >= 0 && index < _markers.value.size) {
+                            val updatedMarkers = _markers.value.toMutableList()
+                            updatedMarkers[index] = updatedMarkers[index].copy(isFullyTracked = isFullyTracked)
+                            _markers.value = updatedMarkers
+                        }
                     }
                 )
             } catch (e: Exception) {
@@ -375,6 +393,14 @@ class OscService : Service() {
         val updates = mutableListOf<OscClusterConfigUpdate>()
         while (clusterConfigUpdates.isNotEmpty()) {
             clusterConfigUpdates.poll()?.let { updates.add(it) }
+        }
+        return updates
+    }
+
+    fun getBufferedTrackingStateUpdates(): List<OscTrackingStateUpdate> {
+        val updates = mutableListOf<OscTrackingStateUpdate>()
+        while (trackingStateUpdates.isNotEmpty()) {
+            trackingStateUpdates.poll()?.let { updates.add(it) }
         }
         return updates
     }
