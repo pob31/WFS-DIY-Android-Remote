@@ -5,6 +5,10 @@ plugins {
     id("kotlin-parcelize")
 }
 
+base {
+    archivesName.set("wfs-control-1.0")
+}
+
 android {
     namespace = "com.wfsdiy.wfs_control_2"
     compileSdk = 36
@@ -26,21 +30,21 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            setProperty("archivesBaseName", "wfs-control-${defaultConfig.versionName}")
         }
     }
-
-    // THE 'applicationVariants.all' BLOCK HAS BEEN REMOVED
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    kotlinOptions {
-        jvmTarget = "11"
-    }
     buildFeatures {
         compose = true
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
     }
 }
 
