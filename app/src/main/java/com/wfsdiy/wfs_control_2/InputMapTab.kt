@@ -341,13 +341,16 @@ fun InputMapTab(
                         val inputId = marker.id
                         val channel = inputParametersState.getChannel(inputId)
 
+                        // Get input name from parameters
+                        val inputName = channel.parameters["inputName"]?.stringValue ?: ""
+
                         // Get position values from input parameters
                         val posXParam = channel.parameters["positionX"]
                         val posYParam = channel.parameters["positionY"]
 
-                        // Allow update if at least one position parameter exists
+                        // Allow update if at least one position parameter or name exists
                         // Use current marker position for missing axis to allow incremental updates
-                        if (posXParam != null || posYParam != null) {
+                        if (posXParam != null || posYParam != null || inputName.isNotEmpty()) {
                             // Convert normalized values (0-1) back to actual meters
                             // Position parameters have minValue=-50, maxValue=50
                             // actualValue = normalizedValue * (max - min) + min
@@ -412,18 +415,25 @@ fun InputMapTab(
                                 }
                             }
 
-                            marker.copy(positionX = canvasPos.x, positionY = canvasPos.y)
+                            // Only update name if a new name was received, otherwise keep existing
+                            val newName = if (inputName.isNotEmpty()) inputName else marker.name
+                            marker.copy(positionX = canvasPos.x, positionY = canvasPos.y, name = newName)
                         } else {
-                            marker
+                            // Even if no position data, update name if available
+                            if (inputName.isNotEmpty() && inputName != marker.name) {
+                                marker.copy(name = inputName)
+                            } else {
+                                marker
+                            }
                         }
                     } else {
                         marker
                     }
                 }
 
-                // Only update if positions have actually changed
+                // Only update if positions or names have actually changed
                 val hasChanges = updatedMarkers.zip(currentMarkersState).any { (new, old) ->
-                    new.positionX != old.positionX || new.positionY != old.positionY
+                    new.positionX != old.positionX || new.positionY != old.positionY || new.name != old.name
                 }
 
                 if (hasChanges) {

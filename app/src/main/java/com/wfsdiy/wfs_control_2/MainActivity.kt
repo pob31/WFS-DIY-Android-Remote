@@ -749,6 +749,36 @@ fun WFSControlApp() {
         }
     }
 
+    // Sync input names from inputParametersState to markers
+    // This ensures LockingTab, VisibilityTab, and other views have access to marker names
+    LaunchedEffect(inputParametersState?.revision, numberOfInputs) {
+        val state = inputParametersState ?: return@LaunchedEffect
+        if (numberOfInputs > 0) {
+            var hasChanges = false
+            val updatedMarkers = markers.mapIndexed { index, marker ->
+                if (index < numberOfInputs) {
+                    val inputId = marker.id
+                    val channel = state.getChannel(inputId)
+                    val inputName = channel.parameters["inputName"]?.stringValue ?: ""
+
+                    // Only update if name has changed and new name is not empty
+                    if (inputName.isNotEmpty() && inputName != marker.name) {
+                        hasChanges = true
+                        marker.copy(name = inputName)
+                    } else {
+                        marker
+                    }
+                } else {
+                    marker
+                }
+            }
+
+            if (hasChanges) {
+                markers = updatedMarkers
+            }
+        }
+    }
+
     // Sync local state with service when it changes
     LaunchedEffect(markers, clusterMarkers, clusterNormalizedHeights, stageWidth, stageDepth, stageHeight, stageOriginX, stageOriginY, stageOriginZ, numberOfInputs) {
         if (isBound && viewModel != null) {
