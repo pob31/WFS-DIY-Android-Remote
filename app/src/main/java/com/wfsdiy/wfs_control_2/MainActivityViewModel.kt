@@ -175,11 +175,25 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
         oscService.sendBarycenterMove(clusterId, deltaX, deltaY)
     }
 
+    /**
+     * Send combined XY position for atomic position updates.
+     * This ensures both X and Y are processed together on the server,
+     * preventing jagged diagonal movements when speed limiting is enabled.
+     */
+    fun sendInputPositionXY(inputId: Int, posX: Float, posY: Float) {
+        oscService.sendInputPositionXY(inputId, posX, posY)
+    }
+
     fun getBufferedClusterConfigUpdates(): List<OscService.OscClusterConfigUpdate> {
         return oscService.getBufferedClusterConfigUpdates()
     }
 
     val clusterConfigs: StateFlow<List<ClusterConfig>> = oscService.clusterConfigs
+
+    // Composite deltas: inputId -> (deltaX, deltaY) in stage meters
+    // Delta is the difference between composite position (after transformations) and target position
+    val compositePositions: StateFlow<Map<Int, Pair<Float, Float>>> = oscService.compositePositions
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     // Factory for creating the ViewModel with the OscService dependency
     class Factory(private val oscService: OscService) : ViewModelProvider.Factory {

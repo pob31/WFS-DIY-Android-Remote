@@ -534,6 +534,14 @@ fun WFSControlApp() {
         }
     }
 
+    // Collect composite positions from ViewModel
+    var compositePositions by remember { mutableStateOf<Map<Int, Pair<Float, Float>>>(emptyMap()) }
+    LaunchedEffect(viewModel) {
+        viewModel?.compositePositions?.collect { positions ->
+            compositePositions = positions
+        }
+    }
+
     // Connection state tracking for reconnection logic
     var connectionState by remember { mutableStateOf(OscService.RemoteConnectionState.DISCONNECTED) }
     var previousConnectionState by remember { mutableStateOf(OscService.RemoteConnectionState.DISCONNECTED) }
@@ -643,7 +651,7 @@ fun WFSControlApp() {
     LaunchedEffect(isBound, oscService) {
         if (isBound && viewModel != null) {
             while (true) {
-                kotlinx.coroutines.delay(100) // Check every 100ms for buffered data
+                kotlinx.coroutines.delay(16) // Check every 16ms (~60 Hz) for buffered data
                 
                 // Process buffered marker updates
                 val markerUpdates = viewModel.getBufferedMarkerUpdates()
@@ -865,10 +873,10 @@ fun WFSControlApp() {
                     },
                     inputParametersState = inputParametersState,
                     onPositionChanged = { inputId, positionX, positionY ->
-                        // Send position updates to server using /remoteInput/positionX and /remoteInput/positionY
-                        viewModel?.sendInputParameterFloat("/remoteInput/positionX", inputId, positionX)
-                        viewModel?.sendInputParameterFloat("/remoteInput/positionY", inputId, positionY)
-                    }
+                        // Send combined XY position (atomic update) to prevent jagged diagonal movements
+                        viewModel?.sendInputPositionXY(inputId, positionX, positionY)
+                    },
+                    compositePositions = compositePositions
                 )
                 1 -> LockingTab(
                     numberOfInputs = numberOfInputs,

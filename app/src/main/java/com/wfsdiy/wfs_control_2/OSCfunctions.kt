@@ -846,6 +846,62 @@ fun sendOscInputParameterIncDec(context: Context, oscPath: String, inputId: Int,
     }
 }
 
+/**
+ * Send combined XY position via OSC for atomic position updates.
+ * Message format: /remoteInput/positionXY <inputId:i> <posX:f> <posY:f>
+ * Type tag: ,iff
+ * This ensures both X and Y coordinates are processed together on the server,
+ * preventing jagged diagonal movements when speed limiting is enabled.
+ */
+fun sendOscInputPositionXY(context: Context, inputId: Int, posX: Float, posY: Float) {
+    val throttleKey = OscThrottleManager.inputParameterKey("/remoteInput/positionXY", inputId)
+
+    if (!OscThrottleManager.shouldSend(throttleKey)) {
+        OscThrottleManager.storePending(throttleKey) {
+            sendOscInputPositionXY(context, inputId, posX, posY)
+        }
+        return
+    }
+
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull()
+
+            if (outgoingPort == null || !isValidPort(outgoingPortStr)) {
+                return@launch
+            }
+            if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) {
+                return@launch
+            }
+
+            val addressPattern = "/remoteInput/positionXY"
+            val addressPatternBytes = getPaddedBytes(addressPattern)
+            // Type tag for integer (inputId), float (posX), float (posY)
+            val typeTagBytes = getPaddedBytes(",iff")
+            val inputIdBytes = inputId.toBytesBigEndian()
+            val posXBytes = posX.toBytesBigEndian()
+            val posYBytes = posY.toBytesBigEndian()
+
+            val oscPacketBytes = addressPatternBytes + typeTagBytes + inputIdBytes + posXBytes + posYBytes
+
+            DatagramSocket().use { socket ->
+                val inetAddress = InetAddress.getByName(ipAddressStr)
+                val packet = DatagramPacket(oscPacketBytes, oscPacketBytes.size, inetAddress, outgoingPort)
+                socket.send(packet)
+            }
+
+            val pendingAction = OscThrottleManager.getPendingAndClear(throttleKey)
+            if (pendingAction != null) {
+                kotlinx.coroutines.delay(20)
+                pendingAction()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
+
 
 fun parseOscString(buffer: ByteBuffer): String {
     val bytes = mutableListOf<Byte>()
@@ -881,6 +937,7 @@ typealias OscClusterTrackedInputCallback = (clusterId: Int, inputId: Int) -> Uni
 typealias OscRemotePingCallback = (sequenceNumber: Int) -> Unit
 typealias OscRemoteHeartbeatCallback = (sequenceNumber: Int) -> Unit
 typealias OscRemoteDisconnectCallback = () -> Unit
+typealias OscCompositePositionCallback = (inputId: Int, compositeX: Float, compositeY: Float) -> Unit
 
 fun parseAndProcessOscPacket(
     context: Context,
@@ -906,7 +963,8 @@ fun parseAndProcessOscPacket(
     onClusterTrackedInputChanged: OscClusterTrackedInputCallback? = null,
     onRemotePingReceived: OscRemotePingCallback? = null,
     onRemoteHeartbeatReceived: OscRemoteHeartbeatCallback? = null,
-    onRemoteDisconnectReceived: OscRemoteDisconnectCallback? = null
+    onRemoteDisconnectReceived: OscRemoteDisconnectCallback? = null,
+    onCompositePositionReceived: OscCompositePositionCallback? = null
 ) {
     if (data.isEmpty()) {
         return
@@ -1144,6 +1202,19 @@ fun parseAndProcessOscPacket(
                     }
                 }
             }
+            address == "/remoteInput/compositeDelta" -> {
+                // Composite delta message: inputId (int), deltaX (float), deltaY (float)
+                // Delta is the difference between composite position and target position
+                // Must be checked BEFORE the generic /remoteInput/ prefix handler
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",iff") {
+                    return
+                }
+                if (buffer.remaining() < 12) return
+                val inputId = parseOscInt(buffer)
+                val deltaX = parseOscFloat(buffer)
+                val deltaY = parseOscFloat(buffer)
+                onCompositePositionReceived?.invoke(inputId, deltaX, deltaY)
+            }
             address.startsWith("/remoteInput/") -> {
                 // Handle input parameter messages
                 val parameterName = address.removePrefix("/remoteInput/")
@@ -1175,6 +1246,18 @@ fun parseAndProcessOscPacket(
                         val inputId = parseOscInt(buffer)
                         val value = parseOscString(buffer)
                         onInputParameterStringReceived?.invoke(address, inputId, value)
+                    }
+                    typeTags == ",iff" && parameterName == "positionXY" -> {
+                        // Combined XY position: inputId + posX + posY
+                        // This is sent by JUCE when dragging on the map to ensure
+                        // atomic XY updates and prevent jerky movement
+                        if (buffer.remaining() < 12) return
+                        val inputId = parseOscInt(buffer)
+                        val posX = parseOscFloat(buffer)
+                        val posY = parseOscFloat(buffer)
+                        // Invoke the float callback for both X and Y to update local state
+                        onInputParameterFloatReceived?.invoke("/remoteInput/positionX", inputId, posX)
+                        onInputParameterFloatReceived?.invoke("/remoteInput/positionY", inputId, posY)
                     }
                     else -> {
                         // Unknown type tag
@@ -1233,7 +1316,8 @@ fun startOscServer(
     onClusterTrackedInputChanged: OscClusterTrackedInputCallback? = null,
     onRemotePingReceived: OscRemotePingCallback? = null,
     onRemoteHeartbeatReceived: OscRemoteHeartbeatCallback? = null,
-    onRemoteDisconnectReceived: OscRemoteDisconnectCallback? = null
+    onRemoteDisconnectReceived: OscRemoteDisconnectCallback? = null,
+    onCompositePositionReceived: OscCompositePositionCallback? = null
 ) {
     CoroutineScope(Dispatchers.IO).launch {
         var serverSocket: DatagramSocket? = null
@@ -1283,7 +1367,8 @@ fun startOscServer(
                         onClusterTrackedInputChanged,
                         onRemotePingReceived,
                         onRemoteHeartbeatReceived,
-                        onRemoteDisconnectReceived
+                        onRemoteDisconnectReceived,
+                        onCompositePositionReceived
                     )
                 } catch (e: java.net.SocketTimeoutException) {
 

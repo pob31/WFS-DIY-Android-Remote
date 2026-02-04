@@ -100,6 +100,13 @@ class OscService : Service() {
         val timestamp: Long = System.currentTimeMillis()
     )
 
+    data class OscCompositePositionUpdate(
+        val inputId: Int,
+        val compositeX: Float,  // in stage meters
+        val compositeY: Float,  // in stage meters
+        val timestamp: Long = System.currentTimeMillis()
+    )
+
     // Buffers for incoming OSC data
     private val markerUpdates = ConcurrentLinkedQueue<OscMarkerUpdate>()
     private val normalizedMarkerUpdates = ConcurrentLinkedQueue<OscNormalizedMarkerUpdate>()
@@ -108,6 +115,7 @@ class OscService : Service() {
     private val clusterZUpdates = ConcurrentLinkedQueue<OscClusterZUpdate>()
     private val inputParameterUpdates = ConcurrentLinkedQueue<OscInputParameterUpdate>()
     private val clusterConfigUpdates = ConcurrentLinkedQueue<OscClusterConfigUpdate>()
+    private val compositePositionUpdates = ConcurrentLinkedQueue<OscCompositePositionUpdate>()
     
     // StateFlows for real-time data (when MainActivity is active)
     private val _markers = MutableStateFlow<List<Marker>>(emptyList())
@@ -155,6 +163,12 @@ class OscService : Service() {
 
     private val _clusterConfigs = MutableStateFlow(List(10) { index -> ClusterConfig(id = index + 1) })
     val clusterConfigs: StateFlow<List<ClusterConfig>> = _clusterConfigs.asStateFlow()
+
+    // Composite deltas: inputId -> (deltaX in meters, deltaY in meters)
+    // Delta is the difference between composite position (after transformations) and target position
+    // Used to show grey dot offset on Android map. JUCE sends (0,0) to clear when no offset.
+    private val _compositePositions = MutableStateFlow<Map<Int, Pair<Float, Float>>>(emptyMap())
+    val compositePositions: StateFlow<Map<Int, Pair<Float, Float>>> = _compositePositions.asStateFlow()
 
     // Store screen dimensions once at startup
     private var screenWidth: Float = 0f
@@ -307,6 +321,22 @@ class OscService : Service() {
                         // Server requested disconnect
                         _connectionState.value = RemoteConnectionState.DISCONNECTED
                         connectionTimeoutJob?.cancel()
+                    },
+                    onCompositePositionReceived = { inputId, deltaX, deltaY ->
+                        // Delta values: JUCE sends (0,0) when there's no offset to display
+                        val deltaThreshold = 0.01f  // 1cm threshold for considering delta significant
+                        val deltaIsZero = kotlin.math.abs(deltaX) < deltaThreshold && kotlin.math.abs(deltaY) < deltaThreshold
+
+                        val updated = _compositePositions.value.toMutableMap()
+                        if (deltaIsZero) {
+                            // Remove entry when delta is effectively zero (no offset to show)
+                            updated.remove(inputId)
+                        } else {
+                            // Store non-zero delta
+                            updated[inputId] = Pair(deltaX, deltaY)
+                            compositePositionUpdates.offer(OscCompositePositionUpdate(inputId, deltaX, deltaY))
+                        }
+                        _compositePositions.value = updated
                     }
                 )
             } catch (e: Exception) {
@@ -315,6 +345,8 @@ class OscService : Service() {
                 isServerRunning = false
             }
         }
+
+        // No staleness cleanup needed - JUCE explicitly sends (0,0) delta when transformations are disabled
     }
 
     fun sendMarkerPosition(markerId: Int, x: Float, y: Float, isCluster: Boolean) {
@@ -330,18 +362,28 @@ class OscService : Service() {
     }
     
     fun sendInputParameterInt(oscPath: String, inputId: Int, value: Int) {
+        // Update local state immediately to keep it in sync with what we're sending
+        updateInputParameterFromOsc(oscPath, inputId, intValue = value)
+
         serviceScope.launch {
             sendOscInputParameterInt(this@OscService, oscPath, inputId, value)
         }
     }
     
     fun sendInputParameterFloat(oscPath: String, inputId: Int, value: Float) {
+        // Update local state immediately to keep it in sync with what we're sending
+        // This prevents the "jump back" issue when other parameters arrive from server
+        updateInputParameterFromOsc(oscPath, inputId, floatValue = value)
+
         serviceScope.launch {
             sendOscInputParameterFloat(this@OscService, oscPath, inputId, value)
         }
     }
     
     fun sendInputParameterString(oscPath: String, inputId: Int, value: String) {
+        // Update local state immediately to keep it in sync with what we're sending
+        updateInputParameterFromOsc(oscPath, inputId, stringValue = value)
+
         serviceScope.launch {
             sendOscInputParameterString(this@OscService, oscPath, inputId, value)
         }
@@ -368,6 +410,20 @@ class OscService : Service() {
     fun sendBarycenterMove(clusterId: Int, deltaX: Float, deltaY: Float) {
         serviceScope.launch {
             sendOscBarycenterMove(this@OscService, clusterId, deltaX, deltaY)
+        }
+    }
+
+    /**
+     * Send combined XY position for atomic position updates.
+     * Updates local state for both axes before sending to keep state in sync.
+     */
+    fun sendInputPositionXY(inputId: Int, posX: Float, posY: Float) {
+        // Update local state for BOTH axes atomically to prevent jump-back issues
+        updateInputParameterFromOsc("/remoteInput/positionX", inputId, floatValue = posX)
+        updateInputParameterFromOsc("/remoteInput/positionY", inputId, floatValue = posY)
+
+        serviceScope.launch {
+            sendOscInputPositionXY(this@OscService, inputId, posX, posY)
         }
     }
 
@@ -536,6 +592,8 @@ class OscService : Service() {
     fun restartOscServer() {
         serverJob?.cancel()
         isServerRunning = false
+        // Clear composite deltas on restart
+        _compositePositions.value = emptyMap()
         startServer()
     }
     
@@ -580,6 +638,14 @@ class OscService : Service() {
         val updates = mutableListOf<OscInputParameterUpdate>()
         while (inputParameterUpdates.isNotEmpty()) {
             inputParameterUpdates.poll()?.let { updates.add(it) }
+        }
+        return updates
+    }
+
+    fun getBufferedCompositePositionUpdates(): List<OscCompositePositionUpdate> {
+        val updates = mutableListOf<OscCompositePositionUpdate>()
+        while (compositePositionUpdates.isNotEmpty()) {
+            compositePositionUpdates.poll()?.let { updates.add(it) }
         }
         return updates
     }
@@ -637,7 +703,7 @@ class OscService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        
+
         serverJob?.cancel()
         isServerRunning = false
         job.cancel()

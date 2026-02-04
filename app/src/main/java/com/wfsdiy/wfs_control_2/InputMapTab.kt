@@ -254,7 +254,8 @@ fun InputMapTab(
     onClusterMove: ((clusterId: Int, deltaX: Float, deltaY: Float) -> Unit)? = null,
     onBarycenterMove: ((clusterId: Int, deltaX: Float, deltaY: Float) -> Unit)? = null,
     inputParametersState: InputParametersState? = null,
-    onPositionChanged: ((inputId: Int, positionX: Float, positionY: Float) -> Unit)? = null
+    onPositionChanged: ((inputId: Int, positionX: Float, positionY: Float) -> Unit)? = null,
+    compositePositions: Map<Int, Pair<Float, Float>> = emptyMap()  // inputId -> (deltaX, deltaY) in stage meters
 ) {
     val context = LocalContext.current
     val draggingMarkers = remember { mutableStateMapOf<Long, Int>() }
@@ -926,6 +927,37 @@ fun InputMapTab(
                 )
             }
 
+            // Draw composite position indicators (behind markers)
+            // compositePositions contains delta values (composite - target) in stage meters
+            compositePositions.forEach { (inputId, delta) ->
+                val marker = currentMarkersState.find { it.id == inputId }
+                if (marker != null && marker.isVisible && inputId <= numberOfInputs) {
+                    // Get the target canvas position (use local position if dragging)
+                    val targetCanvasPos = if (localMarkerPositions.containsKey(marker.id)) {
+                        localMarkerPositions[marker.id]!!
+                    } else {
+                        marker.position
+                    }
+
+                    // Convert delta from stage meters to canvas pixels
+                    val effectiveWidth = canvasWidth - (markerRadius * 2f)
+                    val effectiveHeight = canvasHeight - (markerRadius * 2f)
+                    val deltaCanvasX = if (stageWidth > 0f) (delta.first / stageWidth) * effectiveWidth else 0f
+                    val deltaCanvasY = if (stageDepth > 0f) -(delta.second / stageDepth) * effectiveHeight else 0f  // Negative because Y is inverted
+
+                    // Composite canvas position = target + delta
+                    val compositeCanvasPos = Offset(
+                        targetCanvasPos.x + deltaCanvasX,
+                        targetCanvasPos.y + deltaCanvasY
+                    )
+
+                    // Only draw if the composite position differs from target by more than 5 pixels
+                    if (distance(targetCanvasPos, compositeCanvasPos) > 5f) {
+                        drawCompositePosition(targetCanvasPos, compositeCanvasPos, markerRadius)
+                    }
+                }
+            }
+
             // Draw markers on top of the grid and labels
             currentMarkersState.take(numberOfInputs).sortedByDescending { it.id }.forEach { marker ->
                 // Use local position if available for smooth dragging, otherwise use global position
@@ -937,7 +969,7 @@ fun InputMapTab(
                 } else {
                     marker
                 }
-                
+
                 // Assuming drawMarker is defined elsewhere and handles its own textPaint settings for visibility/zoom
                 drawMarker(displayMarker, draggingMarkers.containsValue(marker.id), textPaint, false, stageWidth, stageDepth, stageOriginX, stageOriginY, canvasWidth, canvasHeight, !isPhone)
             }

@@ -443,6 +443,37 @@ fun DrawScope.drawStageLabels(
 /**
  * Draw labels for circular stage shapes showing cardinal directions and diameter.
  */
+/**
+ * Draw composite position indicator showing the final DSP position after all transformations.
+ * Draws a thin grey line from target to composite position and a small grey filled circle.
+ *
+ * @param targetCanvasPos The canvas position of the target (user-controlled) marker
+ * @param compositeCanvasPos The canvas position of the composite (DSP-computed) position
+ * @param markerRadius The radius of the main marker for scaling the composite indicator
+ */
+fun DrawScope.drawCompositePosition(
+    targetCanvasPos: Offset,
+    compositeCanvasPos: Offset,
+    markerRadius: Float
+) {
+    val compositeRadius = markerRadius * 0.4f
+
+    // Draw thin grey line from target to composite
+    drawLine(
+        color = Color.Gray,
+        start = targetCanvasPos,
+        end = compositeCanvasPos,
+        strokeWidth = 1.5f
+    )
+
+    // Draw small grey filled circle at composite position
+    drawCircle(
+        color = Color.Gray,
+        radius = compositeRadius,
+        center = compositeCanvasPos
+    )
+}
+
 private fun DrawScope.drawCircularStageLabels(
     stageDiameter: Float,
     stageOriginX: Float,
