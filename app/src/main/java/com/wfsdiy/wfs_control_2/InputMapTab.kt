@@ -349,6 +349,12 @@ fun InputMapTab(
     compositePositions: Map<Int, Pair<Float, Float>> = emptyMap()  // inputId -> (deltaX, deltaY) in stage meters
 ) {
     val context = LocalContext.current
+
+    // Debug: Log when InputMapTab recomposes with new markers
+    SideEffect {
+        android.util.Log.d("InputMapTab", "Recomposing with ${markers.size} markers, first pos: ${markers.firstOrNull()?.let { "(${it.positionX}, ${it.positionY})" }}")
+    }
+
     val draggingMarkers = remember { mutableStateMapOf<Long, Int>() }
     val draggingBarycenters = remember { mutableStateMapOf<Long, Int>() }  // pointerId -> clusterId
     val draggingHiddenRefs = remember { mutableStateMapOf<Long, Int>() }   // pointerId -> clusterId (for hidden reference markers in mode 0)
