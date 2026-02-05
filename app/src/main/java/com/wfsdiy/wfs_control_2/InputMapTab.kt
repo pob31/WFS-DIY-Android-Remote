@@ -24,9 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
@@ -355,13 +353,6 @@ fun InputMapTab(
     val draggingBarycenters = remember { mutableStateMapOf<Long, Int>() }  // pointerId -> clusterId
     val draggingHiddenRefs = remember { mutableStateMapOf<Long, Int>() }   // pointerId -> clusterId (for hidden reference markers in mode 0)
     val currentMarkersState by rememberUpdatedState(markers)
-
-    // Snapshot of markers that triggers recomposition when markers change
-    // Using remember(markers) ensures recomposition when markers parameter changes
-    val markersSnapshot = remember(markers) { markers }
-
-    // Derive a value that forces recomposition - read this in the Canvas content
-    val markersHash = markersSnapshot.sumOf { it.positionX.toInt() + it.positionY.toInt() + it.id }
 
     // Local state for smooth dragging without blocking global updates
     val localMarkerPositions = remember { mutableStateMapOf<Int, Offset>() }
@@ -785,9 +776,8 @@ fun InputMapTab(
         }
 
         // Wrap Canvas in Box for floating buttons overlay
-        // Use key() on markersHash to force recomposition of Box content when markers change
-        // This doesn't reset gesture state because pointerInput is inside and has its own keys
-        key(markersHash) {
+        // Use key() on markers to force recomposition when markers list changes
+        key(markers) {
         Box(modifier = Modifier.fillMaxSize()) {
             Canvas(modifier = Modifier
                 .fillMaxSize()
@@ -1505,6 +1495,6 @@ fun InputMapTab(
                 }
             }
         }  // End Box (Canvas + floating buttons)
-        }  // End key(markersHash)
+        }  // End key(markers)
     }
 }
