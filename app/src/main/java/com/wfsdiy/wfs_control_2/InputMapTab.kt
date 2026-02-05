@@ -75,12 +75,37 @@ fun findClusterBarycenter(
     // Only return barycenter if in barycenter mode (referenceMode == 1) and no tracked input
     if (config.referenceMode != 1 || config.trackedInputId != 0) return null
 
-    val clusterMembers = markers.filter { it.clusterId == clusterId && it.isVisible }
+    val clusterMembers = markers.filter { it.clusterId == clusterId }
     if (clusterMembers.size < 2) return null
 
     val sumX = clusterMembers.sumOf { it.positionX.toDouble() }.toFloat()
     val sumY = clusterMembers.sumOf { it.positionY.toDouble() }.toFloat()
     return Offset(sumX / clusterMembers.size, sumY / clusterMembers.size)
+}
+
+/**
+ * Find the hidden reference marker position for a cluster if it's in First Input mode
+ * and the reference input is hidden.
+ * Returns the cluster ID and position if found, null otherwise.
+ */
+fun findHiddenClusterReference(
+    clusterId: Int,
+    markers: List<Marker>,
+    clusterConfigs: List<ClusterConfig>
+): Offset? {
+    val config = clusterConfigs.find { it.id == clusterId } ?: return null
+
+    // Only for First Input mode (referenceMode == 0) with no tracked input
+    if (config.referenceMode != 0 || config.trackedInputId != 0) return null
+
+    val clusterMembers = markers.filter { it.clusterId == clusterId }
+    if (clusterMembers.size < 2) return null
+
+    // Find the reference marker (first by ID)
+    val referenceMarker = clusterMembers.minByOrNull { it.id } ?: return null
+
+    // Only return position if the reference is hidden
+    return if (!referenceMarker.isVisible) referenceMarker.position else null
 }
 
 // Assuming drawMarker is in MapElements.kt or accessible
@@ -324,6 +349,7 @@ fun InputMapTab(
     val context = LocalContext.current
     val draggingMarkers = remember { mutableStateMapOf<Long, Int>() }
     val draggingBarycenters = remember { mutableStateMapOf<Long, Int>() }  // pointerId -> clusterId
+    val draggingHiddenRefs = remember { mutableStateMapOf<Long, Int>() }   // pointerId -> clusterId (for hidden reference markers in mode 0)
     val currentMarkersState by rememberUpdatedState(markers)
 
     // Local state for smooth dragging without blocking global updates
@@ -434,7 +460,7 @@ fun InputMapTab(
 
         // Track if any marker is being dragged (for gesture priority)
         val isDraggingAnyMarker by remember {
-            derivedStateOf { draggingMarkers.isNotEmpty() || draggingBarycenters.isNotEmpty() }
+            derivedStateOf { draggingMarkers.isNotEmpty() || draggingBarycenters.isNotEmpty() || draggingHiddenRefs.isNotEmpty() }
         }
 
         // Fit stage to screen function
@@ -842,26 +868,39 @@ fun InputMapTab(
                                                 }
                                             }
                                         } else {
-                                            // No marker in pickup range - check for barycenter first
-                                            var barycenterFound = false
+                                            // No marker in pickup range - check for barycenter or hidden reference first
+                                            var clusterTargetFound = false
                                             if (clusterConfigs.isNotEmpty()) {
-                                                // Check each cluster in barycenter mode
+                                                // Check each cluster for barycenter (mode 1) or hidden reference (mode 0)
                                                 for (clusterId in 1..10) {
-                                                    if (draggingBarycenters.containsValue(clusterId)) continue
+                                                    if (draggingBarycenters.containsValue(clusterId) || draggingHiddenRefs.containsValue(clusterId)) continue
+
+                                                    // First check for barycenter (mode 1)
                                                     val barycenter = findClusterBarycenter(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
                                                     if (barycenter != null && distance(touchPosition, barycenter) <= markerRadius * pickupRadiusMultiplier) {
-                                                        if (draggingBarycenters.size + draggingMarkers.size < 10) {
+                                                        if (draggingBarycenters.size + draggingMarkers.size + draggingHiddenRefs.size < 10) {
                                                             draggingBarycenters[pointerValue] = clusterId
                                                             pointerIdToCurrentLogicalPosition[pointerId] = barycenter
-                                                            barycenterFound = true
+                                                            clusterTargetFound = true
+                                                            break
+                                                        }
+                                                    }
+
+                                                    // Then check for hidden reference (mode 0)
+                                                    val hiddenRef = findHiddenClusterReference(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
+                                                    if (hiddenRef != null && distance(touchPosition, hiddenRef) <= markerRadius * pickupRadiusMultiplier) {
+                                                        if (draggingBarycenters.size + draggingMarkers.size + draggingHiddenRefs.size < 10) {
+                                                            draggingHiddenRefs[pointerValue] = clusterId
+                                                            pointerIdToCurrentLogicalPosition[pointerId] = hiddenRef
+                                                            clusterTargetFound = true
                                                             break
                                                         }
                                                     }
                                                 }
                                             }
 
-                                            // If no barycenter found, check for vector control
-                                            if (!barycenterFound && (inputSecondaryAngularMode != SecondaryTouchFunction.OFF || inputSecondaryRadialMode != SecondaryTouchFunction.OFF)) {
+                                            // If no cluster target found, check for vector control
+                                            if (!clusterTargetFound && (inputSecondaryAngularMode != SecondaryTouchFunction.OFF || inputSecondaryRadialMode != SecondaryTouchFunction.OFF)) {
                                                 val draggedMarkers = draggingMarkers.values.toSet()
                                                 val markersWithVectorControl = vectorControls.values.map { it.markerId }.toSet()
                                                 val availableMarkers = draggedMarkers - markersWithVectorControl
@@ -1037,6 +1076,34 @@ fun InputMapTab(
 
                                                 change.consume()
                                             }
+                                        } else {
+                                            // Check if we're dragging a hidden reference marker
+                                            val hiddenRefClusterId = draggingHiddenRefs[pointerValue]
+                                            if (hiddenRefClusterId != null) {
+                                                val oldLogicalPosition = pointerIdToCurrentLogicalPosition[pointerId]
+                                                if (oldLogicalPosition != null && change.positionChanged()) {
+                                                    val dragDelta = change.position - change.previousPosition
+
+                                                    val newLogicalPosition = Offset(
+                                                        x = (oldLogicalPosition.x + dragDelta.x).coerceIn(markerRadius, canvasWidth - markerRadius),
+                                                        y = (oldLogicalPosition.y + dragDelta.y).coerceIn(markerRadius, canvasHeight - markerRadius)
+                                                    )
+                                                    pointerIdToCurrentLogicalPosition[pointerId] = newLogicalPosition
+
+                                                    // Convert pixel delta to stage coordinate delta
+                                                    val effectiveWidth = canvasWidth - (markerRadius * 2f)
+                                                    val effectiveHeight = canvasHeight - (markerRadius * 2f)
+                                                    val deltaXMeters = (dragDelta.x / effectiveWidth) * stageWidth
+                                                    val deltaYMeters = -(dragDelta.y / effectiveHeight) * stageDepth // Invert Y
+
+                                                    // Send cluster move command (same as dragging reference in mode 0)
+                                                    if (initialLayoutDone) {
+                                                        onClusterMove?.invoke(hiddenRefClusterId, deltaXMeters, deltaYMeters)
+                                                    }
+
+                                                    change.consume()
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -1083,22 +1150,27 @@ fun InputMapTab(
                                     // Remove barycenter drag when released
                                     draggingBarycenters.remove(pointerValue)
                                     pointerIdToCurrentLogicalPosition.remove(pointerId)
+                                } else if (draggingHiddenRefs.containsKey(pointerValue)) {
+                                    // Remove hidden reference drag when released
+                                    draggingHiddenRefs.remove(pointerValue)
+                                    pointerIdToCurrentLogicalPosition.remove(pointerId)
                                 }
                                 pointersThatAttemptedGrab.remove(pointerId)
                                 change.consume()
                             }
                         }
 
-                        // Pan/zoom handling: check for 2+ pointers not used for markers/barycenters/vectors
+                        // Pan/zoom handling: check for 2+ pointers not used for markers/barycenters/vectors/hiddenRefs
                         val activePointers = event.changes.filter { it.pressed }
                         val freePointers = activePointers.filter { change ->
                             val pv = change.id.value
                             !draggingMarkers.containsKey(pv) &&
                                     !draggingBarycenters.containsKey(pv) &&
+                                    !draggingHiddenRefs.containsKey(pv) &&
                                     !vectorControls.containsKey(pv)
                         }
 
-                        if (freePointers.size >= 2 && draggingMarkers.isEmpty() && draggingBarycenters.isEmpty()) {
+                        if (freePointers.size >= 2 && draggingMarkers.isEmpty() && draggingBarycenters.isEmpty() && draggingHiddenRefs.isEmpty()) {
                             // Build current pointer positions
                             val currentPointers = freePointers.associate { it.id.value to it.position }
 

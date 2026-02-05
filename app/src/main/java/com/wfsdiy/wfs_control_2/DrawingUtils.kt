@@ -291,40 +291,45 @@ fun DrawScope.drawClusterLines(
 ) {
     // Process each cluster configuration
     clusterConfigs.forEach { config ->
-        // Get all markers in this cluster
-        val clusterMembers = markers.filter { it.clusterId == config.id && it.isVisible }
+        // Get ALL markers in this cluster (for reference/barycenter calculation)
+        val allClusterMembers = markers.filter { it.clusterId == config.id }
+        // Get only visible markers (for line drawing)
+        val visibleClusterMembers = allClusterMembers.filter { it.isVisible }
 
-        // Need at least 2 members to draw lines
-        if (clusterMembers.size < 2) return@forEach
+        // Need at least 2 total members for a valid cluster
+        if (allClusterMembers.size < 2) return@forEach
 
-        // Determine the reference point
+        // Get the reference marker (first by ID in cluster)
+        val referenceMarker = allClusterMembers.minByOrNull { it.id }
+
+        // Determine the reference point (using ALL members for calculation)
         val referencePoint: Offset = when {
             // If a tracked input exists, it's the reference
             config.trackedInputId > 0 -> {
-                clusterMembers.find { it.id == config.trackedInputId }?.position
-                    ?: calculateBarycenter(clusterMembers)
+                allClusterMembers.find { it.id == config.trackedInputId }?.position
+                    ?: calculateBarycenter(allClusterMembers)
             }
             // First Input mode: use first member by ID
             config.referenceMode == 0 -> {
-                clusterMembers.minByOrNull { it.id }?.position ?: return@forEach
+                referenceMarker?.position ?: return@forEach
             }
-            // Barycenter mode: calculate center
+            // Barycenter mode: calculate center from ALL members
             else -> {
-                calculateBarycenter(clusterMembers)
+                calculateBarycenter(allClusterMembers)
             }
         }
 
         // Get cluster color with alpha for lines (matching JUCE)
         val clusterColor = getMarkerColor(config.id, isClusterMarker = true).copy(alpha = 0.5f)
 
-        // Draw lines from reference to each member
-        clusterMembers.forEach { member ->
+        // Draw lines from reference to each VISIBLE member only
+        visibleClusterMembers.forEach { member ->
             val memberPosition = member.position
             // In First Input mode, don't draw line from reference to itself
             // In Barycenter mode, draw lines to all members
             val isReferenceInput = when {
                 config.trackedInputId > 0 -> member.id == config.trackedInputId
-                config.referenceMode == 0 -> member.id == clusterMembers.minByOrNull { it.id }?.id
+                config.referenceMode == 0 -> member.id == referenceMarker?.id
                 else -> false
             }
 
@@ -340,7 +345,8 @@ fun DrawScope.drawClusterLines(
 
         // Draw barycenter marker if in Barycenter mode (and no tracked input)
         if (config.referenceMode == 1 && config.trackedInputId == 0) {
-            val barycenter = calculateBarycenter(clusterMembers)
+            // Use ALL members for barycenter calculation
+            val barycenter = calculateBarycenter(allClusterMembers)
 
             // Draw filled circle for barycenter
             drawCircle(
@@ -351,6 +357,16 @@ fun DrawScope.drawClusterLines(
 
             // Draw cluster number in center
             // Note: For text we'd need native canvas, keep it simple with just the circle
+        }
+
+        // Draw hidden reference marker if in First Input mode and reference is hidden
+        if (config.referenceMode == 0 && config.trackedInputId == 0 && referenceMarker != null && !referenceMarker.isVisible) {
+            // Draw a cluster marker at the hidden reference's position
+            drawCircle(
+                color = clusterColor.copy(alpha = 0.8f),
+                radius = barycenterRadius,
+                center = referenceMarker.position
+            )
         }
     }
 }
