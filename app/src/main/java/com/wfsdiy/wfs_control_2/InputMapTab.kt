@@ -356,11 +356,12 @@ fun InputMapTab(
     val draggingHiddenRefs = remember { mutableStateMapOf<Long, Int>() }   // pointerId -> clusterId (for hidden reference markers in mode 0)
     val currentMarkersState by rememberUpdatedState(markers)
 
-    // Counter to force Canvas redraw when markers change (without resetting gesture state)
-    var redrawTrigger by remember { mutableIntStateOf(0) }
-    LaunchedEffect(markers) {
-        redrawTrigger++
-    }
+    // Snapshot of markers that triggers recomposition when markers change
+    // Using remember(markers) ensures recomposition when markers parameter changes
+    val markersSnapshot = remember(markers) { markers }
+
+    // Derive a value that forces recomposition - read this in the Canvas content
+    val markersHash = markersSnapshot.sumOf { it.positionX.toInt() + it.positionY.toInt() + it.id }
 
     // Local state for smooth dragging without blocking global updates
     val localMarkerPositions = remember { mutableStateMapOf<Int, Offset>() }
@@ -784,14 +785,12 @@ fun InputMapTab(
         }
 
         // Wrap Canvas in Box for floating buttons overlay
+        // Use key() on markersHash to force recomposition of Box content when markers change
+        // This doesn't reset gesture state because pointerInput is inside and has its own keys
+        key(markersHash) {
         Box(modifier = Modifier.fillMaxSize()) {
             Canvas(modifier = Modifier
                 .fillMaxSize()
-                // Force redraw when markers change without resetting gesture state
-                .graphicsLayer {
-                    // Reading redrawTrigger forces layer invalidation
-                    compositingStrategy = if (redrawTrigger >= 0) CompositingStrategy.Auto else CompositingStrategy.Auto
-                }
                 // Combined gesture handling for marker dragging and pan/zoom
                 .pointerInput(stageWidth, stageDepth, panOffsetX, panOffsetY, actualViewWidth, actualViewHeight, pixelsPerMeter) {
                     awaitEachGesture {
@@ -1506,5 +1505,6 @@ fun InputMapTab(
                 }
             }
         }  // End Box (Canvas + floating buttons)
+        }  // End key(markersHash)
     }
 }
