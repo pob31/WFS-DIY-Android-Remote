@@ -350,14 +350,6 @@ fun InputMapTab(
 ) {
     val context = LocalContext.current
 
-    // Counter that increments on every recomposition with new markers
-    // Used as key to force Canvas recreation
-    val recomposeCount = remember { mutableIntStateOf(0) }
-    SideEffect {
-        recomposeCount.intValue++
-        android.util.Log.d("InputMapTab", "Recomposing #${recomposeCount.intValue} with ${markers.size} markers, first pos: ${markers.firstOrNull()?.let { "(${it.positionX}, ${it.positionY})" }}")
-    }
-
     val draggingMarkers = remember { mutableStateMapOf<Long, Int>() }
     val draggingBarycenters = remember { mutableStateMapOf<Long, Int>() }  // pointerId -> clusterId
     val draggingHiddenRefs = remember { mutableStateMapOf<Long, Int>() }   // pointerId -> clusterId (for hidden reference markers in mode 0)
@@ -365,6 +357,14 @@ fun InputMapTab(
 
     // Local state for smooth dragging without blocking global updates
     val localMarkerPositions = remember { mutableStateMapOf<Int, Offset>() }
+
+    // Clear local positions for markers that aren't being dragged when server sends updates
+    // This allows server positions to be displayed while preserving smooth local dragging
+    LaunchedEffect(markers) {
+        val currentlyDragging = draggingMarkers.values.toSet()
+        val keysToRemove = localMarkerPositions.keys.filter { it !in currentlyDragging }
+        keysToRemove.forEach { localMarkerPositions.remove(it) }
+    }
 
     // Store marker positions in stage meters (true position, independent of view)
     // This allows proper recalculation when pan/zoom changes
@@ -785,8 +785,7 @@ fun InputMapTab(
         }
 
         // Wrap Canvas in Box for floating buttons overlay
-        // Use key() with recomposeCount to force Canvas recreation on each recomposition
-        key(recomposeCount.intValue) {
+        key(markers) {
         Box(modifier = Modifier.fillMaxSize()) {
             Canvas(modifier = Modifier
                 .fillMaxSize()
@@ -1504,6 +1503,6 @@ fun InputMapTab(
                 }
             }
         }  // End Box (Canvas + floating buttons)
-        }  // End key(recomposeCount)
+        }  // End key(markers)
     }
 }
