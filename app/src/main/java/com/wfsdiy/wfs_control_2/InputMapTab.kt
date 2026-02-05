@@ -350,9 +350,12 @@ fun InputMapTab(
 ) {
     val context = LocalContext.current
 
-    // Debug: Log when InputMapTab recomposes with new markers
+    // Counter that increments on every recomposition with new markers
+    // Used as key to force Canvas recreation
+    val recomposeCount = remember { mutableIntStateOf(0) }
     SideEffect {
-        android.util.Log.d("InputMapTab", "Recomposing with ${markers.size} markers, first pos: ${markers.firstOrNull()?.let { "(${it.positionX}, ${it.positionY})" }}")
+        recomposeCount.intValue++
+        android.util.Log.d("InputMapTab", "Recomposing #${recomposeCount.intValue} with ${markers.size} markers, first pos: ${markers.firstOrNull()?.let { "(${it.positionX}, ${it.positionY})" }}")
     }
 
     val draggingMarkers = remember { mutableStateMapOf<Long, Int>() }
@@ -782,8 +785,8 @@ fun InputMapTab(
         }
 
         // Wrap Canvas in Box for floating buttons overlay
-        // Use key() on markers to force recomposition when markers list changes
-        key(markers) {
+        // Use key() with recomposeCount to force Canvas recreation on each recomposition
+        key(recomposeCount.intValue) {
         Box(modifier = Modifier.fillMaxSize()) {
             Canvas(modifier = Modifier
                 .fillMaxSize()
@@ -1501,6 +1504,6 @@ fun InputMapTab(
                 }
             }
         }  // End Box (Canvas + floating buttons)
-        }  // End key(markers)
+        }  // End key(recomposeCount)
     }
 }
