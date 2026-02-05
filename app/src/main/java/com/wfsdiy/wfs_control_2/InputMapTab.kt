@@ -24,7 +24,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
@@ -354,8 +356,11 @@ fun InputMapTab(
     val draggingHiddenRefs = remember { mutableStateMapOf<Long, Int>() }   // pointerId -> clusterId (for hidden reference markers in mode 0)
     val currentMarkersState by rememberUpdatedState(markers)
 
-    // Trigger recomposition when markers change (needed for Canvas redraw)
-    val markersVersion = remember(markers) { markers.hashCode() }
+    // Counter to force Canvas redraw when markers change (without resetting gesture state)
+    var redrawTrigger by remember { mutableIntStateOf(0) }
+    LaunchedEffect(markers) {
+        redrawTrigger++
+    }
 
     // Local state for smooth dragging without blocking global updates
     val localMarkerPositions = remember { mutableStateMapOf<Int, Offset>() }
@@ -780,10 +785,13 @@ fun InputMapTab(
 
         // Wrap Canvas in Box for floating buttons overlay
         Box(modifier = Modifier.fillMaxSize()) {
-            // Force Canvas redraw when markers change by using key()
-            key(markersVersion) {
             Canvas(modifier = Modifier
                 .fillMaxSize()
+                // Force redraw when markers change without resetting gesture state
+                .graphicsLayer {
+                    // Reading redrawTrigger forces layer invalidation
+                    compositingStrategy = if (redrawTrigger >= 0) CompositingStrategy.Auto else CompositingStrategy.Auto
+                }
                 // Combined gesture handling for marker dragging and pan/zoom
                 .pointerInput(stageWidth, stageDepth, panOffsetX, panOffsetY, actualViewWidth, actualViewHeight, pixelsPerMeter) {
                     awaitEachGesture {
@@ -1466,7 +1474,6 @@ fun InputMapTab(
                 drawMarker(displayMarker, draggingMarkers.containsValue(marker.id), textPaint, false, stageWidth, stageDepth, stageOriginX, stageOriginY, canvasWidth, canvasHeight, !isPhone)
             }
         }
-            } // End key(markersVersion)
 
             // Floating buttons for fit-to-screen (top right)
             Column(
