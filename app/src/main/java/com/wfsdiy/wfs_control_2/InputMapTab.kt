@@ -354,6 +354,9 @@ fun InputMapTab(
     val draggingHiddenRefs = remember { mutableStateMapOf<Long, Int>() }   // pointerId -> clusterId (for hidden reference markers in mode 0)
     val currentMarkersState by rememberUpdatedState(markers)
 
+    // Trigger recomposition when markers change (needed for Canvas redraw)
+    val markersVersion = remember(markers) { markers.hashCode() }
+
     // Local state for smooth dragging without blocking global updates
     val localMarkerPositions = remember { mutableStateMapOf<Int, Offset>() }
 
@@ -777,6 +780,8 @@ fun InputMapTab(
 
         // Wrap Canvas in Box for floating buttons overlay
         Box(modifier = Modifier.fillMaxSize()) {
+            // Force Canvas redraw when markers change by using key()
+            key(markersVersion) {
             Canvas(modifier = Modifier
                 .fillMaxSize()
                 // Combined gesture handling for marker dragging and pan/zoom
@@ -1461,6 +1466,7 @@ fun InputMapTab(
                 drawMarker(displayMarker, draggingMarkers.containsValue(marker.id), textPaint, false, stageWidth, stageDepth, stageOriginX, stageOriginY, canvasWidth, canvasHeight, !isPhone)
             }
         }
+            } // End key(markersVersion)
 
             // Floating buttons for fit-to-screen (top right)
             Column(
