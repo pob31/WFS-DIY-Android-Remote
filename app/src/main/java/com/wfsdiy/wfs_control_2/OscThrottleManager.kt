@@ -77,13 +77,6 @@ object OscThrottleManager {
     }
 
     /**
-     * Generate a unique key for cluster Z position messages
-     */
-    fun clusterZKey(clusterId: Int): String {
-        return "/cluster/positionZ_$clusterId"
-    }
-
-    /**
      * Generate a unique key for input parameter messages
      */
     fun inputParameterKey(oscPath: String, inputId: Int): String {

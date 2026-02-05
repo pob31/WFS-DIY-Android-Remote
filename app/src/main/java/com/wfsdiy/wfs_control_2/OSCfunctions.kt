@@ -93,54 +93,6 @@ fun sendOscPosition(context: Context, markerId: Int, x: Float, y: Float, isClust
     }
 }
 
-fun sendOscClusterZ(context: Context, ClusterId: Int, normalizedZ: Float) {
-    val throttleKey = OscThrottleManager.clusterZKey(ClusterId)
-
-    if (!OscThrottleManager.shouldSend(throttleKey)) {
-        OscThrottleManager.storePending(throttleKey) {
-            sendOscClusterZ(context, ClusterId, normalizedZ)
-        }
-        return
-    }
-
-    CoroutineScope(Dispatchers.IO).launch {
-        try {
-            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
-            val outgoingPort = outgoingPortStr.toIntOrNull()
-
-            if (outgoingPort == null || !isValidPort(outgoingPortStr)) {
-                return@launch
-            }
-            if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) {
-                return@launch
-            }
-
-            val addressPattern = "/cluster/positionZ"
-            val addressPatternBytes = getPaddedBytes(addressPattern)
-            // OSC type tag for an integer (clusterID) followed by a float (normalizedZ)
-            val typeTagBytes = getPaddedBytes(",if")
-            val ClusterIdBytes = ClusterId.toBytesBigEndian()
-            val normalizedZBytes = normalizedZ.toBytesBigEndian()
-
-            val oscPacketBytes = addressPatternBytes + typeTagBytes + ClusterIdBytes + normalizedZBytes
-
-            DatagramSocket().use { socket ->
-                val address = InetAddress.getByName(ipAddressStr)
-                val packet = DatagramPacket(oscPacketBytes, oscPacketBytes.size, address, outgoingPort)
-                socket.send(packet)
-            }
-
-            val pendingAction = OscThrottleManager.getPendingAndClear(throttleKey)
-            if (pendingAction != null) {
-                kotlinx.coroutines.delay(20)
-                pendingAction()
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-}
-
 fun sendOscArrayAdjustCommand(context: Context, oscAddress: String, arrayId: Int, value: Float) {
     val throttleKey = OscThrottleManager.arrayAdjustKey(oscAddress, arrayId)
 
@@ -928,7 +880,6 @@ typealias OscDataCallback = (id: Int, name: String?, position: Offset?, isCluste
 typealias OscStageDimensionCallback = (value: Float) -> Unit
 typealias OscStageShapeCallback = (shape: Int) -> Unit
 typealias OscNumberOfInputsCallback = (count: Int) -> Unit
-typealias OscClusterZCallback = (ClusterId: Int, normalizedZ: Float) -> Unit
 typealias OscInputParameterIntCallback = (oscPath: String, inputId: Int, value: Int) -> Unit
 typealias OscInputParameterFloatCallback = (oscPath: String, inputId: Int, value: Float) -> Unit
 typealias OscInputParameterStringCallback = (oscPath: String, inputId: Int, value: String) -> Unit
@@ -955,7 +906,6 @@ fun parseAndProcessOscPacket(
     onStageDiameterChanged: OscStageDimensionCallback? = null,
     onDomeElevationChanged: OscStageDimensionCallback? = null,
     onNumberOfInputsChanged: OscNumberOfInputsCallback? = null,
-    onClusterZChanged: OscClusterZCallback? = null,
     onInputParameterIntReceived: OscInputParameterIntCallback? = null,
     onInputParameterFloatReceived: OscInputParameterFloatCallback? = null,
     onInputParameterStringReceived: OscInputParameterStringCallback? = null,
@@ -1160,25 +1110,6 @@ fun parseAndProcessOscPacket(
 
                         }
                     }
-                    "positionZ" -> {
-                        if (!isClusterMessage) {
-
-                            return
-                        }
-                        // Expecting Type Tag: ",if" (integer for cluster ID, float for normalized Z)
-                        if (!buffer.hasRemaining() || parseOscString(buffer) != ",if") {
-
-                            return
-                        }
-                        if (buffer.remaining() < 8) { // 4 bytes for int (ID) + 4 bytes for float (Z)
-
-                            return
-                        }
-                        val clusterId = parseOscInt(buffer)
-                        val normalizedZ = parseOscFloat(buffer)
-
-                        onClusterZChanged?.invoke(clusterId, normalizedZ) // <-- CALL THE NEW CALLBACK
-                    }
                     "referenceMode" -> {
                         if (!isClusterMessage) return
                         // Expecting Type Tag: ",ii" (cluster ID, mode)
@@ -1308,7 +1239,6 @@ fun startOscServer(
     onStageDiameterChanged: OscStageDimensionCallback? = null,
     onDomeElevationChanged: OscStageDimensionCallback? = null,
     onNumberOfInputsChanged: OscNumberOfInputsCallback? = null,
-    onClusterZChanged: OscClusterZCallback? = null,
     onInputParameterIntReceived: OscInputParameterIntCallback? = null,
     onInputParameterFloatReceived: OscInputParameterFloatCallback? = null,
     onInputParameterStringReceived: OscInputParameterStringCallback? = null,
@@ -1359,7 +1289,6 @@ fun startOscServer(
                         onStageDiameterChanged,
                         onDomeElevationChanged,
                         onNumberOfInputsChanged,
-                        onClusterZChanged,
                         onInputParameterIntReceived,
                         onInputParameterFloatReceived,
                         onInputParameterStringReceived,

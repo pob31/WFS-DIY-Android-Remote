@@ -12,12 +12,6 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
 
     val markers: StateFlow<List<Marker>> = oscService.markers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val clusterMarkers: StateFlow<List<ClusterMarker>> = oscService.clusterMarkers
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val clusterNormalizedHeights: StateFlow<List<Float>> = oscService.clusterNormalizedHeights
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     
     val stageWidth: StateFlow<Float> = oscService.stageWidth
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 20.0f)
@@ -59,10 +53,6 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
     fun sendMarkerPosition(markerId: Int, x: Float, y: Float, isCluster: Boolean) {
         oscService.sendMarkerPosition(markerId, x, y, isCluster)
     }
-
-    fun sendClusterZ(clusterId: Int, normalizedZ: Float) {
-        oscService.sendClusterZ(clusterId, normalizedZ)
-    }
     
     fun sendArrayAdjustCommand(oscAddress: String, arrayId: Int, value: Float) {
         oscService.sendArrayAdjustCommand(oscAddress, arrayId, value)
@@ -98,22 +88,10 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
     fun getBufferedInputsUpdates(): List<OscService.OscInputsUpdate> {
         return oscService.getBufferedInputsUpdates()
     }
-    
-    fun getBufferedClusterZUpdates(): List<OscService.OscClusterZUpdate> {
-        return oscService.getBufferedClusterZUpdates()
-    }
-    
+
     // Methods to sync current state with service
     fun syncMarkers(markers: List<Marker>) {
         oscService.syncMarkers(markers)
-    }
-    
-    fun syncClusterMarkers(clusterMarkers: List<ClusterMarker>) {
-        oscService.syncClusterMarkers(clusterMarkers)
-    }
-    
-    fun syncClusterHeights(heights: List<Float>) {
-        oscService.syncClusterHeights(heights)
     }
     
     fun syncStageDimensions(
@@ -173,6 +151,14 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
 
     fun sendBarycenterMove(clusterId: Int, deltaX: Float, deltaY: Float) {
         oscService.sendBarycenterMove(clusterId, deltaX, deltaY)
+    }
+
+    fun sendClusterScale(clusterId: Int, scaleFactor: Float) {
+        oscService.sendClusterScale(clusterId, scaleFactor)
+    }
+
+    fun sendClusterRotation(clusterId: Int, angleDegrees: Float) {
+        oscService.sendClusterRotation(clusterId, angleDegrees)
     }
 
     /**

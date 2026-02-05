@@ -52,32 +52,10 @@ internal const val KEY_IP_ADDRESS = "ip_address"
 internal const val KEY_NUMBER_OF_INPUTS = "number_of_inputs"
 internal const val KEY_LOCK_STATES = "lock_states"
 internal const val KEY_VISIBILITY_STATES = "visibility_states"
-internal const val KEY_SECONDARY_TOUCH_MODE = "secondary_touch_mode"
-internal const val KEY_CLUSTER_SECONDARY_TOUCH_ENABLED = "cluster_secondary_touch_enabled"
-internal const val KEY_CLUSTER_SECONDARY_ANGULAR_ENABLED = "cluster_secondary_angular_enabled"
-internal const val KEY_CLUSTER_SECONDARY_RADIAL_ENABLED = "cluster_secondary_radial_enabled"
-internal const val KEY_INPUT_SECONDARY_ANGULAR_MODE = "input_secondary_angular_mode"
-internal const val KEY_INPUT_SECONDARY_RADIAL_MODE = "input_secondary_radial_mode"
 internal const val KEY_FIND_DEVICE_PASSWORD = "find_device_password"
 
 // Maximum number of inputs the system can handle
 internal const val MAX_INPUTS = 64
-
-enum class SecondaryTouchMode(val modeNumber: Int, val displayName: String) {
-    DISABLED(-1, "Disabled"),
-    ATTENUATION_DELAY(0, "Attenuation / Delay-Latency compensation"),
-    DISTANCE_ATTENUATION_COMMON(1, "Distance attenuation / Common attenuation"),
-    DISTANCE_RATIO_COMMON(2, "Distance ratio / Common attenuation"),
-    ORIENTATION_TILT(3, "Rotation / Tilt"),
-    DIRECTIVITY_HF_SHELF(4, "Directivity / HF shelf"),
-    LIVE_SOURCE_RADIUS_FIXED(5, "Live source Fixed attenuation / Radius"),
-    LIVE_SOURCE_FAST_COMPRESSOR(6, "Live source Fast compressor Ratio / Threshold"),
-    LIVE_SOURCE_SLOW_COMPRESSOR(7, "Live source Slow compressor Ratio / Threshold"),
-    FLOOR_REFLECTIONS_DIFFUSION(8, "Floor reflections Diffusion / Attenuation"),
-    LFO_PHASE_PERIOD(9, "LFO Phase / Period"),
-    LFO_X_RATE_AMPLITUDE(10, "LFO X Rate / Amplitude"),
-    LFO_Y_RATE_AMPLITUDE(11, "LFO Y Rate / Amplitude")
-}
 
 enum class SecondaryTouchFunction(val modeNumber: Int, val displayName: String) {
     OFF(-1, "OFF"),
@@ -126,23 +104,6 @@ data class Marker(
     var isVisible: Boolean = true,
     var name: String = "",
     var clusterId: Int = 0  // 0 = no cluster, 1-10 = cluster number
-) : Parcelable {
-    // Helper property to get Offset
-    var position: Offset
-        get() = Offset(positionX, positionY)
-        set(value) {
-            positionX = value.x
-            positionY = value.y
-        }
-}
-
-// Define the ClusterMarker data class (Simplified)
-@Parcelize
-data class ClusterMarker(
-    val id: Int,
-    var positionX: Float,
-    var positionY: Float,
-    val radius: Float
 ) : Parcelable {
     // Helper property to get Offset
     var position: Offset
@@ -229,87 +190,6 @@ fun loadAppSettings(context: Context): Triple<Int, List<Boolean>, List<Boolean>>
     val visibilityStates = visibilityStatesString?.split(",")?.map { it.toBoolean() } ?: List(MAX_INPUTS) { true }
 
     return Triple(numberOfInputs, lockStates, visibilityStates)
-}
-
-fun saveSecondaryTouchMode(context: Context, mode: SecondaryTouchMode) {
-    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    with(sharedPrefs.edit()) {
-        putInt(KEY_SECONDARY_TOUCH_MODE, mode.modeNumber)
-        apply()
-    }
-}
-
-fun loadSecondaryTouchMode(context: Context): SecondaryTouchMode {
-    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    val modeNumber = sharedPrefs.getInt(KEY_SECONDARY_TOUCH_MODE, -1) // Default to DISABLED
-    return SecondaryTouchMode.entries.find { it.modeNumber == modeNumber } ?: SecondaryTouchMode.DISABLED
-}
-
-fun saveClusterSecondaryTouchEnabled(context: Context, enabled: Boolean) {
-    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    with(sharedPrefs.edit()) {
-        putBoolean(KEY_CLUSTER_SECONDARY_TOUCH_ENABLED, enabled)
-        apply()
-    }
-}
-
-fun loadClusterSecondaryTouchEnabled(context: Context): Boolean {
-    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    return sharedPrefs.getBoolean(KEY_CLUSTER_SECONDARY_TOUCH_ENABLED, true) // Default to enabled
-}
-
-fun saveClusterSecondaryAngularEnabled(context: Context, enabled: Boolean) {
-    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    with(sharedPrefs.edit()) {
-        putBoolean(KEY_CLUSTER_SECONDARY_ANGULAR_ENABLED, enabled)
-        apply()
-    }
-}
-
-fun loadClusterSecondaryAngularEnabled(context: Context): Boolean {
-    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    return sharedPrefs.getBoolean(KEY_CLUSTER_SECONDARY_ANGULAR_ENABLED, false) // Default to OFF
-}
-
-fun saveClusterSecondaryRadialEnabled(context: Context, enabled: Boolean) {
-    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    with(sharedPrefs.edit()) {
-        putBoolean(KEY_CLUSTER_SECONDARY_RADIAL_ENABLED, enabled)
-        apply()
-    }
-}
-
-fun loadClusterSecondaryRadialEnabled(context: Context): Boolean {
-    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    return sharedPrefs.getBoolean(KEY_CLUSTER_SECONDARY_RADIAL_ENABLED, false) // Default to OFF
-}
-
-fun saveInputSecondaryAngularMode(context: Context, mode: SecondaryTouchFunction) {
-    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    with(sharedPrefs.edit()) {
-        putInt(KEY_INPUT_SECONDARY_ANGULAR_MODE, mode.modeNumber)
-        apply()
-    }
-}
-
-fun loadInputSecondaryAngularMode(context: Context): SecondaryTouchFunction {
-    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    val modeNumber = sharedPrefs.getInt(KEY_INPUT_SECONDARY_ANGULAR_MODE, -1) // Default to OFF
-    return SecondaryTouchFunction.entries.find { it.modeNumber == modeNumber } ?: SecondaryTouchFunction.OFF
-}
-
-fun saveInputSecondaryRadialMode(context: Context, mode: SecondaryTouchFunction) {
-    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    with(sharedPrefs.edit()) {
-        putInt(KEY_INPUT_SECONDARY_RADIAL_MODE, mode.modeNumber)
-        apply()
-    }
-}
-
-fun loadInputSecondaryRadialMode(context: Context): SecondaryTouchFunction {
-    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    val modeNumber = sharedPrefs.getInt(KEY_INPUT_SECONDARY_RADIAL_MODE, -1) // Default to OFF
-    return SecondaryTouchFunction.entries.find { it.modeNumber == modeNumber } ?: SecondaryTouchFunction.OFF
 }
 
 class MainActivity : ComponentActivity() {
@@ -409,12 +289,6 @@ fun WFSControlApp() {
     val responsiveMarkerRadius = (baseMarkerRadius * screenDensity).coerceIn(0.5f, 17.5f)
     val markerRadiusPx = responsiveMarkerRadius.dpToPx()
     var numberOfInputs by rememberSaveable { mutableStateOf(MAX_INPUTS) }
-    var secondaryTouchMode by rememberSaveable { mutableStateOf(SecondaryTouchMode.ATTENUATION_DELAY) }
-    var clusterSecondaryTouchEnabled by rememberSaveable { mutableStateOf(true) }
-    var clusterSecondaryAngularEnabled by rememberSaveable { mutableStateOf(false) }
-    var clusterSecondaryRadialEnabled by rememberSaveable { mutableStateOf(false) }
-    var inputSecondaryAngularMode by rememberSaveable { mutableStateOf(SecondaryTouchFunction.OFF) }
-    var inputSecondaryRadialMode by rememberSaveable { mutableStateOf(SecondaryTouchFunction.OFF) }
 
     // Screen dimensions for OSC operations
     var screenWidthPx by remember { mutableFloatStateOf(0f) }
@@ -443,53 +317,6 @@ fun WFSControlApp() {
     }
     var initialInputLayoutDone by remember { mutableStateOf(false) }
 
-    var clusterMarkers by rememberSaveable {
-        mutableStateOf(
-            List(10) { index ->
-                // Initialize with proper grid positions to avoid top-left corner flash
-                val numCols = 5
-                val numRows = 2
-                val spacingFactor = (screenWidthDp.value / 3.5f).coerceIn(80f, 120f)
-                
-                val contentWidthOfCenters = (numCols - 1) * spacingFactor
-                val contentHeightOfCenters = (numRows - 1) * spacingFactor
-                val totalVisualWidth = contentWidthOfCenters + markerRadiusPx * 2f
-                val totalVisualHeight = contentHeightOfCenters + markerRadiusPx * 2f
-                
-                // Use screen dimensions for initial positioning
-                val screenWidth = screenWidthDp.value * density.density
-                val screenHeight = screenHeightDp.value * density.density
-                
-                val centeredStartX = ((screenWidth - totalVisualWidth) / 2f) + markerRadiusPx
-                val centeredStartY = ((screenHeight - totalVisualHeight) / 2f) + markerRadiusPx
-                
-                val logicalCol = index % numCols
-                var logicalRow = index / numCols
-                if (numRows > 1) {
-                    logicalRow = (numRows - 1) - logicalRow
-                }
-                val xPos = centeredStartX + logicalCol * spacingFactor
-                val yPos = centeredStartY + logicalRow * spacingFactor
-                
-                ClusterMarker(
-                    id = index + 1,
-                    positionX = xPos.coerceIn(markerRadiusPx, screenWidth - markerRadiusPx),
-                    positionY = yPos.coerceIn(markerRadiusPx, screenHeight - markerRadiusPx),
-                    radius = markerRadiusPx
-                )
-            }
-        )
-    }
-    
-    // Update cluster marker radius when screen size changes
-    LaunchedEffect(markerRadiusPx) {
-        clusterMarkers = clusterMarkers.map { marker ->
-            marker.copy(radius = markerRadiusPx)
-        }
-    }
-    
-    var clusterNormalizedHeights by rememberSaveable { mutableStateOf(List(10) { 0.2f }) }
-    var initialClusterLayoutDone by remember { mutableStateOf(false) }
 
     // Cluster configurations received from server
     var clusterConfigs by rememberSaveable {
@@ -600,12 +427,6 @@ fun WFSControlApp() {
         
         val (loadedInputs, loadedLockStates, loadedVisibilityStates) = loadAppSettings(context)
         numberOfInputs = loadedInputs
-        secondaryTouchMode = loadSecondaryTouchMode(context)
-        clusterSecondaryTouchEnabled = loadClusterSecondaryTouchEnabled(context)
-        clusterSecondaryAngularEnabled = loadClusterSecondaryAngularEnabled(context)
-        clusterSecondaryRadialEnabled = loadClusterSecondaryRadialEnabled(context)
-        inputSecondaryAngularMode = loadInputSecondaryAngularMode(context)
-        inputSecondaryRadialMode = loadInputSecondaryRadialMode(context)
         markers = markers.mapIndexed { index, marker ->
             marker.copy(
                 isLocked = loadedLockStates.getOrElse(index) { false },
@@ -656,24 +477,7 @@ fun WFSControlApp() {
                 // Process buffered marker updates
                 val markerUpdates = viewModel.getBufferedMarkerUpdates()
                 markerUpdates.forEach { update ->
-                    if (update.isCluster) {
-                        val updatedClusterMarkers = clusterMarkers.map { clusterMarker ->
-                            if (clusterMarker.id == update.id) {
-                                var updatedMarker = clusterMarker
-                                update.position?.let {
-                                    val (canvasWidth, canvasHeight) = CanvasDimensions.getCurrentDimensions()
-                                    updatedMarker = updatedMarker.copy(
-                                        positionX = it.x.coerceIn(clusterMarker.radius, canvasWidth - clusterMarker.radius),
-                                        positionY = it.y.coerceIn(clusterMarker.radius, canvasHeight - clusterMarker.radius)
-                                    )
-                                }
-                                updatedMarker
-                            } else {
-                                clusterMarker
-                            }
-                        }
-                        clusterMarkers = updatedClusterMarkers
-                    } else {
+                    if (!update.isCluster) {
                         markers = markers.map { marker ->
                             if (marker.id == update.id) {
                                 var updatedMarker = marker
@@ -720,17 +524,6 @@ fun WFSControlApp() {
                     // which will be applied via inputParametersState
                 }
                 
-                // Process buffered cluster Z updates
-                val clusterZUpdates = viewModel.getBufferedClusterZUpdates()
-                clusterZUpdates.forEach { update ->
-                    val index = update.clusterId - 1
-                    if (index >= 0 && index < clusterNormalizedHeights.size) {
-                        val updatedHeights = clusterNormalizedHeights.toMutableList()
-                        updatedHeights[index] = update.normalizedZ.coerceIn(0f, 1f)
-                        clusterNormalizedHeights = updatedHeights
-                    }
-                }
-
                 // Process buffered cluster config updates
                 val clusterConfigUpdates = viewModel.getBufferedClusterConfigUpdates()
                 clusterConfigUpdates.forEach { update ->
@@ -780,11 +573,9 @@ fun WFSControlApp() {
     }
 
     // Sync local state with service when it changes
-    LaunchedEffect(markers, clusterMarkers, clusterNormalizedHeights, stageWidth, stageDepth, stageHeight, stageOriginX, stageOriginY, stageOriginZ, numberOfInputs) {
+    LaunchedEffect(markers, stageWidth, stageDepth, stageHeight, stageOriginX, stageOriginY, stageOriginZ, numberOfInputs) {
         if (isBound && viewModel != null) {
             viewModel.syncMarkers(markers)
-            viewModel.syncClusterMarkers(clusterMarkers)
-            viewModel.syncClusterHeights(clusterNormalizedHeights)
             viewModel.syncStageDimensions(stageWidth, stageDepth, stageHeight, stageOriginX, stageOriginY, stageOriginZ)
             viewModel.syncNumberOfInputs(numberOfInputs)
         }
@@ -892,8 +683,6 @@ fun WFSControlApp() {
                     stageShape = stageShape,
                     stageDiameter = stageDiameter,
                     domeElevation = domeElevation,
-                    inputSecondaryAngularMode = inputSecondaryAngularMode,
-                    inputSecondaryRadialMode = inputSecondaryRadialMode,
                     clusterConfigs = clusterConfigs,
                     onClusterMove = { clusterId, deltaX, deltaY ->
                         viewModel?.sendClusterMove(clusterId, deltaX, deltaY)
@@ -905,6 +694,18 @@ fun WFSControlApp() {
                     onPositionChanged = { inputId, positionX, positionY ->
                         // Send combined XY position (atomic update) to prevent jagged diagonal movements
                         viewModel?.sendInputPositionXY(inputId, positionX, positionY)
+                    },
+                    onInputHeightChanged = { inputId, newZ ->
+                        viewModel?.sendInputParameterFloat("/remoteInput/positionZ", inputId, newZ)
+                    },
+                    onInputRotationChanged = { inputId, newRotation ->
+                        viewModel?.sendInputParameterFloat("/remoteInput/rotation", inputId, newRotation)
+                    },
+                    onClusterScale = { clusterId, scaleFactor ->
+                        viewModel?.sendClusterScale(clusterId, scaleFactor)
+                    },
+                    onClusterRotation = { clusterId, angleDegrees ->
+                        viewModel?.sendClusterRotation(clusterId, angleDegrees)
                     },
                     compositePositions = compositePositions
                 )
@@ -933,38 +734,18 @@ fun WFSControlApp() {
                 }
                 4 -> ArrayAdjustTab()
                 5 -> SettingsTab(
-                onResetToDefaults = resetToDefaults,
-                onShutdownApp = {
-                    // Stop OSC service
-                    oscService?.stopSelf()
-                    // Finish the activity to close the app
-                    (context as? android.app.Activity)?.finish()
-                },
-                onNetworkParametersChanged = {
-                    // Update service network parameters when settings change
-                    oscService?.updateNetworkParameters()
-                },
-                inputSecondaryAngularMode = inputSecondaryAngularMode,
-                onInputSecondaryAngularModeChanged = { mode ->
-                    inputSecondaryAngularMode = mode
-                    saveInputSecondaryAngularMode(context, mode)
-                },
-                inputSecondaryRadialMode = inputSecondaryRadialMode,
-                onInputSecondaryRadialModeChanged = { mode ->
-                    inputSecondaryRadialMode = mode
-                    saveInputSecondaryRadialMode(context, mode)
-                },
-                clusterSecondaryAngularEnabled = clusterSecondaryAngularEnabled,
-                onClusterSecondaryAngularEnabledChanged = { enabled ->
-                    clusterSecondaryAngularEnabled = enabled
-                    saveClusterSecondaryAngularEnabled(context, enabled)
-                },
-                clusterSecondaryRadialEnabled = clusterSecondaryRadialEnabled,
-                onClusterSecondaryRadialEnabledChanged = { enabled ->
-                    clusterSecondaryRadialEnabled = enabled
-                    saveClusterSecondaryRadialEnabled(context, enabled)
-                }
-            )
+                    onResetToDefaults = resetToDefaults,
+                    onShutdownApp = {
+                        // Stop OSC service
+                        oscService?.stopSelf()
+                        // Finish the activity to close the app
+                        (context as? android.app.Activity)?.finish()
+                    },
+                    onNetworkParametersChanged = {
+                        // Update service network parameters when settings change
+                        oscService?.updateNetworkParameters()
+                    }
+                )
         }
     }
 }

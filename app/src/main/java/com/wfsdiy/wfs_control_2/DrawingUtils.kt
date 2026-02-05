@@ -161,13 +161,7 @@ fun <T> DrawScope.drawMarker(
             markerIsLocked = markerInstance.isLocked
             markerIsVisible = markerInstance.isVisible
         }
-        is ClusterMarker -> {
-            id = markerInstance.id
-            position = markerInstance.position
-            radius = markerInstance.radius
-        }
         else -> {
-
             return
         }
     }

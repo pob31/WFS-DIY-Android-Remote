@@ -78,12 +78,6 @@ class OscService : Service() {
         val timestamp: Long = System.currentTimeMillis()
     )
     
-    data class OscClusterZUpdate(
-        val clusterId: Int,
-        val normalizedZ: Float,
-        val timestamp: Long = System.currentTimeMillis()
-    )
-    
     data class OscInputParameterUpdate(
         val oscPath: String,
         val inputId: Int,
@@ -112,7 +106,6 @@ class OscService : Service() {
     private val normalizedMarkerUpdates = ConcurrentLinkedQueue<OscNormalizedMarkerUpdate>()
     private val stageUpdates = ConcurrentLinkedQueue<OscStageUpdate>()
     private val inputsUpdates = ConcurrentLinkedQueue<OscInputsUpdate>()
-    private val clusterZUpdates = ConcurrentLinkedQueue<OscClusterZUpdate>()
     private val inputParameterUpdates = ConcurrentLinkedQueue<OscInputParameterUpdate>()
     private val clusterConfigUpdates = ConcurrentLinkedQueue<OscClusterConfigUpdate>()
     private val compositePositionUpdates = ConcurrentLinkedQueue<OscCompositePositionUpdate>()
@@ -120,12 +113,6 @@ class OscService : Service() {
     // StateFlows for real-time data (when MainActivity is active)
     private val _markers = MutableStateFlow<List<Marker>>(emptyList())
     val markers: StateFlow<List<Marker>> = _markers.asStateFlow()
-    
-    private val _clusterMarkers = MutableStateFlow<List<ClusterMarker>>(emptyList())
-    val clusterMarkers: StateFlow<List<ClusterMarker>> = _clusterMarkers.asStateFlow()
-    
-    private val _clusterNormalizedHeights = MutableStateFlow<List<Float>>(List(10) { 0.2f })
-    val clusterNormalizedHeights: StateFlow<List<Float>> = _clusterNormalizedHeights.asStateFlow()
     
     private val _stageWidth = MutableStateFlow(16.0f)
     val stageWidth: StateFlow<Float> = _stageWidth.asStateFlow()
@@ -266,15 +253,6 @@ class OscService : Service() {
                         inputsUpdates.offer(OscInputsUpdate(newCount))
                         _numberOfInputs.value = newCount
                     },
-                    onClusterZChanged = { clusterId, newNormalizedZ ->
-                        clusterZUpdates.offer(OscClusterZUpdate(clusterId, newNormalizedZ))
-                        val index = clusterId - 1
-                        if (index >= 0 && index < _clusterNormalizedHeights.value.size) {
-                            val updatedHeights = _clusterNormalizedHeights.value.toMutableList()
-                            updatedHeights[index] = newNormalizedZ.coerceIn(0f, 1f)
-                            _clusterNormalizedHeights.value = updatedHeights
-                        }
-                    },
                     onInputParameterIntReceived = { oscPath, inputId, value ->
                         inputParameterUpdates.offer(OscInputParameterUpdate(oscPath, inputId, intValue = value))
                         updateInputParameterFromOsc(oscPath, inputId, intValue = value)
@@ -354,12 +332,6 @@ class OscService : Service() {
             sendOscPosition(this@OscService, markerId, x, y, isCluster)
         }
     }
-
-    fun sendClusterZ(clusterId: Int, normalizedZ: Float) {
-        serviceScope.launch {
-            sendOscClusterZ(this@OscService, clusterId, normalizedZ)
-        }
-    }
     
     fun sendInputParameterInt(oscPath: String, inputId: Int, value: Int) {
         // Update local state immediately to keep it in sync with what we're sending
@@ -410,6 +382,18 @@ class OscService : Service() {
     fun sendBarycenterMove(clusterId: Int, deltaX: Float, deltaY: Float) {
         serviceScope.launch {
             sendOscBarycenterMove(this@OscService, clusterId, deltaX, deltaY)
+        }
+    }
+
+    fun sendClusterScale(clusterId: Int, scaleFactor: Float) {
+        serviceScope.launch {
+            sendOscClusterScale(this@OscService, clusterId, scaleFactor)
+        }
+    }
+
+    fun sendClusterRotation(clusterId: Int, angleDegrees: Float) {
+        serviceScope.launch {
+            sendOscClusterRotation(this@OscService, clusterId, angleDegrees)
         }
     }
 
@@ -625,15 +609,7 @@ class OscService : Service() {
         }
         return updates
     }
-    
-    fun getBufferedClusterZUpdates(): List<OscClusterZUpdate> {
-        val updates = mutableListOf<OscClusterZUpdate>()
-        while (clusterZUpdates.isNotEmpty()) {
-            clusterZUpdates.poll()?.let { updates.add(it) }
-        }
-        return updates
-    }
-    
+
     fun getBufferedInputParameterUpdates(): List<OscInputParameterUpdate> {
         val updates = mutableListOf<OscInputParameterUpdate>()
         while (inputParameterUpdates.isNotEmpty()) {
@@ -654,15 +630,7 @@ class OscService : Service() {
     fun syncMarkers(markers: List<Marker>) {
         _markers.value = markers
     }
-    
-    fun syncClusterMarkers(clusterMarkers: List<ClusterMarker>) {
-        _clusterMarkers.value = clusterMarkers
-    }
-    
-    fun syncClusterHeights(heights: List<Float>) {
-        _clusterNormalizedHeights.value = heights
-    }
-    
+
     fun syncStageDimensions(
         width: Float,
         depth: Float,
