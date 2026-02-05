@@ -6,9 +6,21 @@ import android.annotation.SuppressLint
 import androidx.compose.foundation.Canvas
 import kotlin.math.pow
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -21,9 +33,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlinx.coroutines.CoroutineScope
@@ -76,81 +91,110 @@ fun DrawScope.drawStageCoordinates(
     stageDepth: Float,
     canvasWidthPx: Float,
     canvasHeightPx: Float,
-    markerRadius: Float = 0f
+    markerRadius: Float = 0f,
+    // Pan/zoom parameters for view transformation
+    panOffsetX: Float = 0f,
+    panOffsetY: Float = 0f,
+    pixelsPerMeter: Float = 0f,  // Uniform scale
+    actualViewWidth: Float = stageWidth,
+    actualViewHeight: Float = stageDepth
 ) {
     if (stageWidth <= 0f || stageDepth <= 0f) return
 
-    // Adjust canvas boundaries to account for marker radius
     val effectiveCanvasWidth = canvasWidthPx - (markerRadius * 2f)
     val effectiveCanvasHeight = canvasHeightPx - (markerRadius * 2f)
-    
-    val pixelsPerMeterX = effectiveCanvasWidth / stageWidth
-    val pixelsPerMeterY = effectiveCanvasHeight / stageDepth
 
-    val originXPx = canvasWidthPx / 2f
-    val originYPx = canvasHeightPx - markerRadius // Bottom of effective canvas
-
-    val lineColor = Color.DarkGray
-    val lineStrokeWidth = 1f // Use 1 pixel for thin grid lines
-
-    // Horizontal lines for depth (from bottom up)
-    for (depthStep in 1..floor(stageDepth).toInt()) {
-        val yPx = originYPx - (depthStep * pixelsPerMeterY)
-        if (yPx >= markerRadius && yPx <= canvasHeightPx - markerRadius) { // Draw only if within effective canvas bounds
-            drawLine(
-                color = lineColor,
-                start = Offset(markerRadius, yPx),
-                end = Offset(canvasWidthPx - markerRadius, yPx),
-                strokeWidth = lineStrokeWidth
-            )
-        }
+    // Use provided pixelsPerMeter or calculate from stage dimensions
+    val ppm = if (pixelsPerMeter > 0f) pixelsPerMeter else {
+        min(effectiveCanvasWidth / stageWidth, effectiveCanvasHeight / stageDepth)
     }
 
-    // Vertical lines for width (from center out)
-    // Center line (0m)
-    drawLine(
-        color = lineColor,
-        start = Offset(originXPx, markerRadius),
-        end = Offset(originXPx, canvasHeightPx - markerRadius),
-        strokeWidth = lineStrokeWidth
-    )
-    // Lines to the right and left of center
-    for (widthStep in 1..floor(stageWidth / 2f).toInt()) {
-        // Right side
-        val xPxPositive = originXPx + (widthStep * pixelsPerMeterX)
-        if (xPxPositive >= markerRadius && xPxPositive <= canvasWidthPx - markerRadius) {
+    val viewWidth = if (actualViewWidth > 0f) actualViewWidth else stageWidth
+    val viewHeight = if (actualViewHeight > 0f) actualViewHeight else stageDepth
+
+    val lineColor = Color.DarkGray
+    val lineStrokeWidth = 1f
+
+    // Calculate visible range in physical stage meters
+    val viewCenterX = panOffsetX
+    val viewCenterY = panOffsetY
+    val viewMinX = viewCenterX - viewWidth / 2f
+    val viewMaxX = viewCenterX + viewWidth / 2f
+    val viewMinY = viewCenterY - viewHeight / 2f
+    val viewMaxY = viewCenterY + viewHeight / 2f
+
+    // Helper to convert physical stage position to canvas pixels
+    fun physicalToCanvas(physX: Float, physY: Float): Offset {
+        val viewX = physX - panOffsetX
+        val viewY = physY - panOffsetY
+        val canvasX = (viewX / viewWidth + 0.5f) * effectiveCanvasWidth + markerRadius
+        val canvasY = (0.5f - viewY / viewHeight) * effectiveCanvasHeight + markerRadius
+        return Offset(canvasX, canvasY)
+    }
+
+    // Calculate grid line spacing - always 1m
+    val gridSpacing = 1f
+
+    // Clamp grid line count to avoid performance issues
+    val maxGridLines = 200
+
+    // Horizontal lines (constant Y in physical coords)
+    val startY = ceil(viewMinY / gridSpacing) * gridSpacing
+    val endY = floor(viewMaxY / gridSpacing) * gridSpacing
+    var lineCount = 0
+    var yPhys = startY
+    while (yPhys <= endY && lineCount < maxGridLines) {
+        val leftPoint = physicalToCanvas(viewMinX, yPhys)
+        val rightPoint = physicalToCanvas(viewMaxX, yPhys)
+        if (leftPoint.y >= markerRadius && leftPoint.y <= canvasHeightPx - markerRadius) {
             drawLine(
                 color = lineColor,
-                start = Offset(xPxPositive, markerRadius),
-                end = Offset(xPxPositive, canvasHeightPx - markerRadius),
+                start = Offset(markerRadius, leftPoint.y),
+                end = Offset(canvasWidthPx - markerRadius, leftPoint.y),
                 strokeWidth = lineStrokeWidth
             )
         }
-        // Left side
-        val xPxNegative = originXPx - (widthStep * pixelsPerMeterX)
-        if (xPxNegative >= markerRadius && xPxNegative <= canvasWidthPx - markerRadius) {
+        yPhys += gridSpacing
+        lineCount++
+    }
+
+    // Vertical lines (constant X in physical coords)
+    val startX = ceil(viewMinX / gridSpacing) * gridSpacing
+    val endX = floor(viewMaxX / gridSpacing) * gridSpacing
+    lineCount = 0
+    var xPhys = startX
+    while (xPhys <= endX && lineCount < maxGridLines) {
+        val topPoint = physicalToCanvas(xPhys, viewMaxY)
+        val bottomPoint = physicalToCanvas(xPhys, viewMinY)
+        if (topPoint.x >= markerRadius && topPoint.x <= canvasWidthPx - markerRadius) {
             drawLine(
                 color = lineColor,
-                start = Offset(xPxNegative, markerRadius),
-                end = Offset(xPxNegative, canvasHeightPx - markerRadius),
+                start = Offset(topPoint.x, markerRadius),
+                end = Offset(topPoint.x, canvasHeightPx - markerRadius),
                 strokeWidth = lineStrokeWidth
             )
         }
+        xPhys += gridSpacing
+        lineCount++
     }
 }
 
 
 /**
- * Convert stage coordinates (meters) to canvas pixel position.
+ * Convert stage coordinates (meters) to canvas pixel position with pan/zoom support.
  * @param stageX X position in meters (relative to displayed origin)
  * @param stageY Y position in meters (relative to displayed origin)
- * @param stageWidth Stage width in meters
- * @param stageDepth Stage depth in meters
  * @param stageOriginX Stage origin X offset in meters
  * @param stageOriginY Stage origin Y offset in meters
  * @param canvasWidth Canvas width in pixels
  * @param canvasHeight Canvas height in pixels
  * @param markerRadius Marker radius in pixels (for effective area calculation)
+ * @param panOffsetX Pan offset X in physical stage meters (default 0)
+ * @param panOffsetY Pan offset Y in physical stage meters (default 0)
+ * @param actualViewWidth Visible width in meters after zoom (default uses stageWidth for backward compat)
+ * @param actualViewHeight Visible height in meters after zoom (default uses stageDepth for backward compat)
+ * @param stageWidth Stage width in meters (used as default for actualViewWidth)
+ * @param stageDepth Stage depth in meters (used as default for actualViewHeight)
  * @return Offset with canvas X and Y in pixels
  */
 fun stageToCanvasPosition(
@@ -162,41 +206,53 @@ fun stageToCanvasPosition(
     stageOriginY: Float,
     canvasWidth: Float,
     canvasHeight: Float,
-    markerRadius: Float
+    markerRadius: Float,
+    panOffsetX: Float = 0f,
+    panOffsetY: Float = 0f,
+    actualViewWidth: Float = stageWidth,
+    actualViewHeight: Float = stageDepth
 ): Offset {
-    if (stageWidth <= 0f || stageDepth <= 0f || canvasWidth <= 0f || canvasHeight <= 0f) {
+    if (canvasWidth <= 0f || canvasHeight <= 0f) {
         return Offset(canvasWidth / 2f, canvasHeight / 2f)
     }
 
     val effectiveWidth = canvasWidth - (markerRadius * 2f)
     val effectiveHeight = canvasHeight - (markerRadius * 2f)
 
-    // Convert origin-relative stage position to physical stage position, then normalize
-    // Physical position = stage position + origin offset
-    // Canvas shows physical stage: left=-stageWidth/2, right=+stageWidth/2
+    val viewWidth = if (actualViewWidth > 0f) actualViewWidth else stageWidth
+    val viewHeight = if (actualViewHeight > 0f) actualViewHeight else stageDepth
+
+    // Convert origin-relative stage position to physical stage position
     val physicalX = stageX + stageOriginX
     val physicalY = stageY + stageOriginY
-    val normalizedX = (physicalX + stageWidth / 2f) / stageWidth
-    val normalizedY = (physicalY + stageDepth / 2f) / stageDepth
 
-    // Convert normalized to canvas pixels (Y is inverted)
-    val canvasX = (normalizedX * effectiveWidth + markerRadius).coerceIn(markerRadius, canvasWidth - markerRadius)
-    val canvasY = ((1f - normalizedY) * effectiveHeight + markerRadius).coerceIn(markerRadius, canvasHeight - markerRadius)
+    // Apply pan offset (pan is in physical stage meters)
+    val viewX = physicalX - panOffsetX
+    val viewY = physicalY - panOffsetY
+
+    // Convert to canvas pixels with uniform scale
+    // Center of view maps to center of canvas
+    val canvasX = (viewX / viewWidth + 0.5f) * effectiveWidth + markerRadius
+    val canvasY = (0.5f - viewY / viewHeight) * effectiveHeight + markerRadius
 
     return Offset(canvasX, canvasY)
 }
 
 /**
- * Convert canvas pixel position to stage coordinates (meters).
+ * Convert canvas pixel position to stage coordinates (meters) with pan/zoom support.
  * @param canvasX X position in canvas pixels
  * @param canvasY Y position in canvas pixels
- * @param stageWidth Stage width in meters
- * @param stageDepth Stage depth in meters
  * @param stageOriginX Stage origin X offset in meters
  * @param stageOriginY Stage origin Y offset in meters
  * @param canvasWidth Canvas width in pixels
  * @param canvasHeight Canvas height in pixels
  * @param markerRadius Marker radius in pixels (for effective area calculation)
+ * @param panOffsetX Pan offset X in physical stage meters (default 0)
+ * @param panOffsetY Pan offset Y in physical stage meters (default 0)
+ * @param actualViewWidth Visible width in meters after zoom (default uses stageWidth for backward compat)
+ * @param actualViewHeight Visible height in meters after zoom (default uses stageDepth for backward compat)
+ * @param stageWidth Stage width in meters (used as default for actualViewWidth)
+ * @param stageDepth Stage depth in meters (used as default for actualViewHeight)
  * @return Pair of (stageX, stageY) in meters
  */
 fun canvasToStagePosition(
@@ -208,23 +264,31 @@ fun canvasToStagePosition(
     stageOriginY: Float,
     canvasWidth: Float,
     canvasHeight: Float,
-    markerRadius: Float
+    markerRadius: Float,
+    panOffsetX: Float = 0f,
+    panOffsetY: Float = 0f,
+    actualViewWidth: Float = stageWidth,
+    actualViewHeight: Float = stageDepth
 ): Pair<Float, Float> {
-    if (stageWidth <= 0f || stageDepth <= 0f || canvasWidth <= 0f || canvasHeight <= 0f) {
+    if (canvasWidth <= 0f || canvasHeight <= 0f) {
         return Pair(0f, 0f)
     }
 
     val effectiveWidth = canvasWidth - (markerRadius * 2f)
     val effectiveHeight = canvasHeight - (markerRadius * 2f)
 
-    // Convert canvas pixels to normalized (0-1) range
-    val normalizedX = (canvasX - markerRadius) / effectiveWidth
-    val normalizedY = 1f - ((canvasY - markerRadius) / effectiveHeight)
+    val viewWidth = if (actualViewWidth > 0f) actualViewWidth else stageWidth
+    val viewHeight = if (actualViewHeight > 0f) actualViewHeight else stageDepth
 
-    // Convert normalized to physical stage position, then to origin-relative
-    // Inverse of: normalizedX = (physicalX + stageWidth/2) / stageWidth
-    val physicalX = normalizedX * stageWidth - stageWidth / 2f
-    val physicalY = normalizedY * stageDepth - stageDepth / 2f
+    // Canvas to view-relative
+    val viewX = ((canvasX - markerRadius) / effectiveWidth - 0.5f) * viewWidth
+    val viewY = (0.5f - (canvasY - markerRadius) / effectiveHeight) * viewHeight
+
+    // Apply pan offset to get physical position
+    val physicalX = viewX + panOffsetX
+    val physicalY = viewY + panOffsetY
+
+    // Convert to stage-relative (origin-relative)
     val stageX = physicalX - stageOriginX
     val stageY = physicalY - stageOriginY
 
@@ -261,10 +325,24 @@ fun InputMapTab(
     val draggingMarkers = remember { mutableStateMapOf<Long, Int>() }
     val draggingBarycenters = remember { mutableStateMapOf<Long, Int>() }  // pointerId -> clusterId
     val currentMarkersState by rememberUpdatedState(markers)
-    
+
     // Local state for smooth dragging without blocking global updates
     val localMarkerPositions = remember { mutableStateMapOf<Int, Offset>() }
-    
+
+    // Store marker positions in stage meters (true position, independent of view)
+    // This allows proper recalculation when pan/zoom changes
+    // Only markers with "real" positions (from server or dragging) are stored here
+    val markerStagePositions = remember { mutableStateMapOf<Int, Pair<Float, Float>>() }
+
+    // Track the last known view parameters for markers without stage positions
+    // This allows us to properly transform their canvas positions when view changes
+    // Using a simple data holder (4 floats: panX, panY, viewW, viewH)
+    var lastViewPanX by remember { mutableFloatStateOf(0f) }
+    var lastViewPanY by remember { mutableFloatStateOf(0f) }
+    var lastViewWidth by remember { mutableFloatStateOf(0f) }
+    var lastViewHeight by remember { mutableFloatStateOf(0f) }
+    var lastViewInitialized by remember { mutableStateOf(false) }
+
     // Vector control state for secondary touches
     data class VectorControl(
         val markerId: Int,
@@ -321,6 +399,104 @@ fun InputMapTab(
         val canvasHeight = constraints.maxHeight.toFloat()
         val pickupRadiusMultiplier = 1.25f
 
+        // Pan/zoom state variables
+        // Pan offset in physical stage meters (center of view)
+        var panOffsetX by remember { mutableFloatStateOf(0f) }
+        var panOffsetY by remember { mutableFloatStateOf(0f) }
+
+        // View size in meters (what's visible in the current zoom level)
+        var viewWidthMeters by remember { mutableFloatStateOf(stageWidth) }
+        var viewHeightMeters by remember { mutableFloatStateOf(stageDepth) }
+
+        // Zoom limits
+        val minViewSize = max(2f, min(stageWidth, stageDepth))  // Min zoom: show at least full stage
+        val maxViewSize = 100f  // Max zoom out: 100m (±50m from origin)
+
+        // Calculate uniform scale (same pixels-per-meter for X and Y)
+        val effectiveCanvasWidth = canvasWidth - (markerRadius * 2f)
+        val effectiveCanvasHeight = canvasHeight - (markerRadius * 2f)
+        val canvasAspect = if (effectiveCanvasHeight > 0f) effectiveCanvasWidth / effectiveCanvasHeight else 1f
+        val viewAspect = if (viewHeightMeters > 0f) viewWidthMeters / viewHeightMeters else 1f
+
+        val pixelsPerMeter = if (effectiveCanvasWidth > 0f && effectiveCanvasHeight > 0f) {
+            if (canvasAspect > viewAspect) {
+                // Canvas is wider than view - height constrains
+                effectiveCanvasHeight / viewHeightMeters
+            } else {
+                // Canvas is taller than view - width constrains
+                effectiveCanvasWidth / viewWidthMeters
+            }
+        } else 1f
+
+        // Actual visible meters (may be larger than requested on one axis due to uniform scale)
+        val actualViewWidth = if (pixelsPerMeter > 0f) effectiveCanvasWidth / pixelsPerMeter else viewWidthMeters
+        val actualViewHeight = if (pixelsPerMeter > 0f) effectiveCanvasHeight / pixelsPerMeter else viewHeightMeters
+
+        // Track if any marker is being dragged (for gesture priority)
+        val isDraggingAnyMarker by remember {
+            derivedStateOf { draggingMarkers.isNotEmpty() || draggingBarycenters.isNotEmpty() }
+        }
+
+        // Fit stage to screen function
+        fun fitStageToScreen() {
+            panOffsetX = 0f
+            panOffsetY = 0f
+            val margin = 1.1f  // 10% margin
+            viewWidthMeters = stageWidth * margin
+            viewHeightMeters = stageDepth * margin
+        }
+
+        // Fit all inputs to screen function
+        fun fitAllInputsToScreen() {
+            val visibleMarkers = currentMarkersState.take(numberOfInputs).filter { it.isVisible }
+            if (visibleMarkers.isEmpty()) {
+                fitStageToScreen()
+                return
+            }
+
+            var minPhysX = Float.MAX_VALUE
+            var maxPhysX = Float.MIN_VALUE
+            var minPhysY = Float.MAX_VALUE
+            var maxPhysY = Float.MIN_VALUE
+
+            visibleMarkers.forEach { marker ->
+                // Use stored stage positions (in meters) - these are the true positions
+                val stagePos = markerStagePositions[marker.id]
+                if (stagePos != null) {
+                    val physX = stagePos.first + stageOriginX
+                    val physY = stagePos.second + stageOriginY
+                    minPhysX = min(minPhysX, physX)
+                    maxPhysX = max(maxPhysX, physX)
+                    minPhysY = min(minPhysY, physY)
+                    maxPhysY = max(maxPhysY, physY)
+                }
+            }
+
+            // If no stored positions, fall back to fitting stage
+            if (minPhysX == Float.MAX_VALUE) {
+                fitStageToScreen()
+                return
+            }
+
+            // Center on bounding box center
+            panOffsetX = (minPhysX + maxPhysX) / 2f
+            panOffsetY = (minPhysY + maxPhysY) / 2f
+
+            // Set view to encompass all markers with margin
+            val margin = 1.3f  // 30% margin for markers at edges
+            val spanX = (maxPhysX - minPhysX) * margin
+            val spanY = (maxPhysY - minPhysY) * margin
+            viewWidthMeters = max(spanX, 2f).coerceIn(minViewSize, maxViewSize)
+            viewHeightMeters = max(spanY, 2f).coerceIn(minViewSize, maxViewSize)
+        }
+
+        // Reset view when stage dimensions change
+        LaunchedEffect(stageWidth, stageDepth) {
+            if (stageWidth > 0f && stageDepth > 0f) {
+                fitStageToScreen()
+            }
+        }
+
         // Update shared canvas dimensions and call onCanvasSizeChanged
         LaunchedEffect(canvasWidth, canvasHeight, markerRadius) {
             if (canvasWidth > 0f && canvasHeight > 0f) {
@@ -332,111 +508,181 @@ fun InputMapTab(
             }
         }
 
-        // Update marker positions from server inputParametersState
+        // Update marker stage positions from server inputParametersState
         // refreshTrigger forces update when returning to this tab
-        LaunchedEffect(inputParametersState?.revision, refreshTrigger, canvasWidth, canvasHeight, stageWidth, stageDepth, stageOriginX, stageOriginY, numberOfInputs, markerRadius) {
-            if (inputParametersState != null && canvasWidth > 0f && canvasHeight > 0f && stageWidth > 0f && stageDepth > 0f && numberOfInputs > 0) {
+        // This stores the TRUE positions in stage meters (independent of view)
+        LaunchedEffect(inputParametersState?.revision, refreshTrigger, stageWidth, stageDepth, stageOriginX, stageOriginY, numberOfInputs) {
+            if (inputParametersState != null && stageWidth > 0f && stageDepth > 0f && numberOfInputs > 0) {
+                (1..numberOfInputs).forEach { inputId ->
+                    val channel = inputParametersState.getChannel(inputId)
+                    val posXParam = channel.parameters["positionX"]
+                    val posYParam = channel.parameters["positionY"]
+
+                    if (posXParam != null || posYParam != null) {
+                        val posXDef = InputParameterDefinitions.allParameters.find { it.variableName == "positionX" }
+                        val posYDef = InputParameterDefinitions.allParameters.find { it.variableName == "positionY" }
+
+                        // Get existing stored position for fallback
+                        val existingStagePos = markerStagePositions[inputId]
+
+                        val posXMeters = if (posXParam != null && posXDef != null) {
+                            InputParameterDefinitions.applyFormula(posXDef, posXParam.normalizedValue)
+                        } else if (posXParam != null) {
+                            posXParam.normalizedValue * 100f - 50f
+                        } else {
+                            existingStagePos?.first ?: 0f
+                        }
+                        val posYMeters = if (posYParam != null && posYDef != null) {
+                            InputParameterDefinitions.applyFormula(posYDef, posYParam.normalizedValue)
+                        } else if (posYParam != null) {
+                            posYParam.normalizedValue * 100f - 50f
+                        } else {
+                            existingStagePos?.second ?: 0f
+                        }
+
+                        // Store the stage position (in meters)
+                        markerStagePositions[inputId] = Pair(posXMeters, posYMeters)
+                    }
+                }
+            }
+        }
+
+        // Recalculate canvas positions when view changes (pan/zoom)
+        // Only affects markers that have stored stage positions (from server or dragging)
+        // Markers without stage positions keep their canvas positions and get transformed relative to view changes
+        LaunchedEffect(panOffsetX, panOffsetY, actualViewWidth, actualViewHeight, canvasWidth, canvasHeight, markerRadius, stageOriginX, stageOriginY, numberOfInputs) {
+            if (canvasWidth > 0f && canvasHeight > 0f && numberOfInputs > 0 && actualViewWidth > 0f && actualViewHeight > 0f) {
+                val hasPrevView = lastViewInitialized && lastViewWidth > 0f && lastViewHeight > 0f
+
                 val updatedMarkers = currentMarkersState.mapIndexed { index, marker ->
                     if (index < numberOfInputs) {
                         val inputId = marker.id
-                        val channel = inputParametersState.getChannel(inputId)
+                        val stagePos = markerStagePositions[inputId]
 
-                        // Get input name from parameters
-                        val inputName = channel.parameters["inputName"]?.stringValue ?: ""
-
-                        // Get position values from input parameters
-                        val posXParam = channel.parameters["positionX"]
-                        val posYParam = channel.parameters["positionY"]
-
-                        // Allow update if at least one position parameter or name exists
-                        // Use current marker position for missing axis to allow incremental updates
-                        if (posXParam != null || posYParam != null || inputName.isNotEmpty()) {
-                            // Convert normalized values (0-1) back to actual meters
-                            // Position parameters have minValue=-50, maxValue=50
-                            // actualValue = normalizedValue * (max - min) + min
-                            val posXDef = InputParameterDefinitions.allParameters.find { it.variableName == "positionX" }
-                            val posYDef = InputParameterDefinitions.allParameters.find { it.variableName == "positionY" }
-
-                            // If a position parameter is missing, convert current canvas position back to meters
-                            val currentStagePos = if (posXParam == null || posYParam == null) {
-                                canvasToStagePosition(
-                                    canvasX = marker.positionX,
-                                    canvasY = marker.positionY,
-                                    stageWidth = stageWidth,
-                                    stageDepth = stageDepth,
-                                    stageOriginX = stageOriginX,
-                                    stageOriginY = stageOriginY,
-                                    canvasWidth = canvasWidth,
-                                    canvasHeight = canvasHeight,
-                                    markerRadius = markerRadius
-                                )
-                            } else null
-
-                            val posXMeters = if (posXParam != null && posXDef != null) {
-                                InputParameterDefinitions.applyFormula(posXDef, posXParam.normalizedValue)
-                            } else if (posXParam != null) {
-                                posXParam.normalizedValue * 100f - 50f // Fallback
-                            } else {
-                                currentStagePos?.first ?: 0f // Use current position if X not received
-                            }
-                            val posYMeters = if (posYParam != null && posYDef != null) {
-                                InputParameterDefinitions.applyFormula(posYDef, posYParam.normalizedValue)
-                            } else if (posYParam != null) {
-                                posYParam.normalizedValue * 100f - 50f // Fallback
-                            } else {
-                                currentStagePos?.second ?: 0f // Use current position if Y not received
-                            }
-
-                            // Convert from stage coordinates (meters) to canvas pixels
+                        if (stagePos != null) {
+                            // Convert stage position to canvas pixels using current view
                             val canvasPos = stageToCanvasPosition(
-                                stageX = posXMeters,
-                                stageY = posYMeters,
+                                stageX = stagePos.first,
+                                stageY = stagePos.second,
                                 stageWidth = stageWidth,
                                 stageDepth = stageDepth,
                                 stageOriginX = stageOriginX,
                                 stageOriginY = stageOriginY,
                                 canvasWidth = canvasWidth,
                                 canvasHeight = canvasHeight,
-                                markerRadius = markerRadius
+                                markerRadius = markerRadius,
+                                panOffsetX = panOffsetX,
+                                panOffsetY = panOffsetY,
+                                actualViewWidth = actualViewWidth,
+                                actualViewHeight = actualViewHeight
                             )
 
-                            // Server correction detection: if this marker is being dragged locally
-                            // and the server sent a different position, clear the local position
-                            // to snap to the server's corrected position
+                            // Clear local position if it differs significantly (server correction)
                             val localPos = localMarkerPositions[inputId]
                             if (localPos != null) {
-                                val correctionThreshold = 5f // pixels - if server position differs by more than this, it's a correction
+                                val correctionThreshold = 5f
                                 val distanceFromLocal = sqrt(
                                     (canvasPos.x - localPos.x).pow(2) + (canvasPos.y - localPos.y).pow(2)
                                 )
                                 if (distanceFromLocal > correctionThreshold) {
-                                    // Server sent a corrected position - clear local dragging state
                                     localMarkerPositions.remove(inputId)
                                 }
                             }
 
-                            // Only update name if a new name was received, otherwise keep existing
-                            val newName = if (inputName.isNotEmpty()) inputName else marker.name
-                            marker.copy(positionX = canvasPos.x, positionY = canvasPos.y, name = newName)
+                            marker.copy(positionX = canvasPos.x, positionY = canvasPos.y)
+                        } else if (hasPrevView && marker.positionX > 0f && marker.positionY > 0f) {
+                            // No stage position stored - transform canvas position based on view change
+                            // First convert current canvas pos to stage using OLD view params
+                            val (stageX, stageY) = canvasToStagePosition(
+                                canvasX = marker.positionX,
+                                canvasY = marker.positionY,
+                                stageWidth = stageWidth,
+                                stageDepth = stageDepth,
+                                stageOriginX = stageOriginX,
+                                stageOriginY = stageOriginY,
+                                canvasWidth = canvasWidth,
+                                canvasHeight = canvasHeight,
+                                markerRadius = markerRadius,
+                                panOffsetX = lastViewPanX,
+                                panOffsetY = lastViewPanY,
+                                actualViewWidth = lastViewWidth,
+                                actualViewHeight = lastViewHeight
+                            )
+                            // Then convert stage pos to canvas using NEW view params
+                            val newCanvasPos = stageToCanvasPosition(
+                                stageX = stageX,
+                                stageY = stageY,
+                                stageWidth = stageWidth,
+                                stageDepth = stageDepth,
+                                stageOriginX = stageOriginX,
+                                stageOriginY = stageOriginY,
+                                canvasWidth = canvasWidth,
+                                canvasHeight = canvasHeight,
+                                markerRadius = markerRadius,
+                                panOffsetX = panOffsetX,
+                                panOffsetY = panOffsetY,
+                                actualViewWidth = actualViewWidth,
+                                actualViewHeight = actualViewHeight
+                            )
+                            marker.copy(positionX = newCanvasPos.x, positionY = newCanvasPos.y)
                         } else {
-                            // Even if no position data, update name if available
-                            if (inputName.isNotEmpty() && inputName != marker.name) {
-                                marker.copy(name = inputName)
-                            } else {
-                                marker
-                            }
+                            marker
                         }
                     } else {
                         marker
                     }
                 }
 
-                // Only update if positions or names have actually changed
+                // Update lastView params for next frame
+                lastViewPanX = panOffsetX
+                lastViewPanY = panOffsetY
+                lastViewWidth = actualViewWidth
+                lastViewHeight = actualViewHeight
+                lastViewInitialized = true
+
                 val hasChanges = updatedMarkers.zip(currentMarkersState).any { (new, old) ->
-                    new.positionX != old.positionX || new.positionY != old.positionY || new.name != old.name
+                    new.positionX != old.positionX || new.positionY != old.positionY
                 }
 
                 if (hasChanges) {
+                    onMarkersInitiallyPositioned(updatedMarkers)
+                }
+            }
+        }
+
+        // Initialize lastView params when view is first calculated
+        LaunchedEffect(actualViewWidth, actualViewHeight) {
+            if (actualViewWidth > 0f && actualViewHeight > 0f && !lastViewInitialized) {
+                lastViewPanX = panOffsetX
+                lastViewPanY = panOffsetY
+                lastViewWidth = actualViewWidth
+                lastViewHeight = actualViewHeight
+                lastViewInitialized = true
+            }
+        }
+
+        // Update marker names from server (separate from position updates)
+        LaunchedEffect(inputParametersState?.revision, numberOfInputs) {
+            if (inputParametersState != null && numberOfInputs > 0) {
+                val updatedMarkers = currentMarkersState.mapIndexed { index, marker ->
+                    if (index < numberOfInputs) {
+                        val channel = inputParametersState.getChannel(marker.id)
+                        val inputName = channel.parameters["inputName"]?.stringValue ?: ""
+                        if (inputName.isNotEmpty() && inputName != marker.name) {
+                            marker.copy(name = inputName)
+                        } else {
+                            marker
+                        }
+                    } else {
+                        marker
+                    }
+                }
+
+                val hasNameChanges = updatedMarkers.zip(currentMarkersState).any { (new, old) ->
+                    new.name != old.name
+                }
+
+                if (hasNameChanges) {
                     onMarkersInitiallyPositioned(updatedMarkers)
                 }
             }
@@ -504,13 +750,20 @@ fun InputMapTab(
             }
         }
 
-        Canvas(modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(stageWidth, stageDepth) {
-                awaitEachGesture {
-                    val pointerIdToCurrentLogicalPosition = mutableMapOf<PointerId, Offset>()
-                    val pointersThatAttemptedGrab = mutableSetOf<PointerId>()
-                    
+        // Wrap Canvas in Box for floating buttons overlay
+        Box(modifier = Modifier.fillMaxSize()) {
+            Canvas(modifier = Modifier
+                .fillMaxSize()
+                // Combined gesture handling for marker dragging and pan/zoom
+                .pointerInput(stageWidth, stageDepth, panOffsetX, panOffsetY, actualViewWidth, actualViewHeight, pixelsPerMeter) {
+                    awaitEachGesture {
+                        val pointerIdToCurrentLogicalPosition = mutableMapOf<PointerId, Offset>()
+                        val pointersThatAttemptedGrab = mutableSetOf<PointerId>()
+
+                        // Track pointers for pan/zoom gesture
+                        var previousPanZoomPointers = mapOf<Long, Offset>()
+                        var isPanZoomActive = false
+
                     while (true) {
                         val event = awaitPointerEvent()
                         val activeMarkersSnapshot = currentMarkersState.take(numberOfInputs).toMutableList()
@@ -698,22 +951,31 @@ fun InputMapTab(
                                                         val deltaXMeters = (dragDelta.x / effectiveWidth) * stageWidth
                                                         val deltaYMeters = -(dragDelta.y / effectiveHeight) * stageDepth // Invert Y
 
+                                                        // Calculate stage position for the marker
+                                                        val (stageX, stageY) = canvasToStagePosition(
+                                                            canvasX = updatedMarker.position.x,
+                                                            canvasY = updatedMarker.position.y,
+                                                            stageWidth = stageWidth,
+                                                            stageDepth = stageDepth,
+                                                            stageOriginX = stageOriginX,
+                                                            stageOriginY = stageOriginY,
+                                                            canvasWidth = canvasWidth,
+                                                            canvasHeight = canvasHeight,
+                                                            markerRadius = markerRadius,
+                                                            panOffsetX = panOffsetX,
+                                                            panOffsetY = panOffsetY,
+                                                            actualViewWidth = actualViewWidth,
+                                                            actualViewHeight = actualViewHeight
+                                                        )
+
+                                                        // Store the stage position for view change recalculations
+                                                        markerStagePositions[updatedMarker.id] = Pair(stageX, stageY)
+
                                                         if (isClusterReference && clusterConfig != null && clusterConfig.referenceMode == 0) {
                                                             // Moving reference in First Input mode - send cluster move
                                                             onClusterMove?.invoke(markerClusterId, deltaXMeters, deltaYMeters)
                                                         } else {
-                                                            // Individual marker move - convert canvas position to stage meters
-                                                            val (stageX, stageY) = canvasToStagePosition(
-                                                                canvasX = updatedMarker.position.x,
-                                                                canvasY = updatedMarker.position.y,
-                                                                stageWidth = stageWidth,
-                                                                stageDepth = stageDepth,
-                                                                stageOriginX = stageOriginX,
-                                                                stageOriginY = stageOriginY,
-                                                                canvasWidth = canvasWidth,
-                                                                canvasHeight = canvasHeight,
-                                                                markerRadius = markerRadius
-                                                            )
+                                                            // Individual marker move
                                                             onPositionChanged?.invoke(updatedMarker.id, stageX, stageY)
                                                         }
 
@@ -805,7 +1067,11 @@ fun InputMapTab(
                                             stageOriginY = stageOriginY,
                                             canvasWidth = canvasWidth,
                                             canvasHeight = canvasHeight,
-                                            markerRadius = markerRadius
+                                            markerRadius = markerRadius,
+                                            panOffsetX = panOffsetX,
+                                            panOffsetY = panOffsetY,
+                                            actualViewWidth = actualViewWidth,
+                                            actualViewHeight = actualViewHeight
                                         )
                                         onPositionChanged?.invoke(finalMarkerState.id, stageX, stageY)
                                     }
@@ -822,8 +1088,76 @@ fun InputMapTab(
                                 change.consume()
                             }
                         }
+
+                        // Pan/zoom handling: check for 2+ pointers not used for markers/barycenters/vectors
+                        val activePointers = event.changes.filter { it.pressed }
+                        val freePointers = activePointers.filter { change ->
+                            val pv = change.id.value
+                            !draggingMarkers.containsKey(pv) &&
+                                    !draggingBarycenters.containsKey(pv) &&
+                                    !vectorControls.containsKey(pv)
+                        }
+
+                        if (freePointers.size >= 2 && draggingMarkers.isEmpty() && draggingBarycenters.isEmpty()) {
+                            // Build current pointer positions
+                            val currentPointers = freePointers.associate { it.id.value to it.position }
+
+                            if (isPanZoomActive && previousPanZoomPointers.size >= 2) {
+                                // Calculate pan (centroid movement)
+                                val prevCentroid = Offset(
+                                    previousPanZoomPointers.values.map { it.x }.average().toFloat(),
+                                    previousPanZoomPointers.values.map { it.y }.average().toFloat()
+                                )
+                                val currCentroid = Offset(
+                                    currentPointers.values.map { it.x }.average().toFloat(),
+                                    currentPointers.values.map { it.y }.average().toFloat()
+                                )
+                                val panDelta = currCentroid - prevCentroid
+
+                                // Calculate zoom (distance change between first two pointers)
+                                val prevPointersList = previousPanZoomPointers.values.toList()
+                                val currPointersList = currentPointers.values.toList()
+                                if (prevPointersList.size >= 2 && currPointersList.size >= 2) {
+                                    val prevDist = calculateDistance(prevPointersList[0], prevPointersList[1])
+                                    val currDist = calculateDistance(currPointersList[0], currPointersList[1])
+
+                                    if (prevDist > 10f) {  // Avoid division by small numbers
+                                        val zoomFactor = currDist / prevDist
+
+                                        // Apply zoom
+                                        if (zoomFactor != 1f) {
+                                            val newViewWidth = (viewWidthMeters / zoomFactor).coerceIn(minViewSize, maxViewSize)
+                                            val newViewHeight = (viewHeightMeters / zoomFactor).coerceIn(minViewSize, maxViewSize)
+                                            viewWidthMeters = newViewWidth
+                                            viewHeightMeters = newViewHeight
+                                        }
+                                    }
+                                }
+
+                                // Apply pan
+                                if (pixelsPerMeter > 0f) {
+                                    val panMetersX = -panDelta.x / pixelsPerMeter
+                                    val panMetersY = panDelta.y / pixelsPerMeter
+                                    panOffsetX = (panOffsetX + panMetersX).coerceIn(-50f, 50f)
+                                    panOffsetY = (panOffsetY + panMetersY).coerceIn(-50f, 50f)
+                                }
+
+                                // Consume events to prevent other handlers
+                                freePointers.forEach { it.consume() }
+                            }
+
+                            previousPanZoomPointers = currentPointers
+                            isPanZoomActive = true
+                        } else {
+                            // Reset pan/zoom tracking when we don't have 2+ free pointers
+                            if (freePointers.size < 2) {
+                                previousPanZoomPointers = emptyMap()
+                                isPanZoomActive = false
+                            }
+                        }
+
                         if (event.changes.all { !it.pressed } && draggingMarkers.isEmpty()) {
-                            break 
+                            break
                         }
                     }
                 }
@@ -859,12 +1193,27 @@ fun InputMapTab(
                 stageOriginY = stageOriginY,
                 canvasPixelW = canvasWidth,
                 canvasPixelH = canvasHeight,
-                markerRadius = markerRadius
+                markerRadius = markerRadius,
+                panOffsetX = panOffsetX,
+                panOffsetY = panOffsetY,
+                actualViewWidth = actualViewWidth,
+                actualViewHeight = actualViewHeight
             )
 
             // Draw the stage grid lines (only for box shape)
             if (stageShape == 0) {
-                drawStageCoordinates(stageWidth, stageDepth, canvasWidth, canvasHeight, markerRadius)
+                drawStageCoordinates(
+                    stageWidth = stageWidth,
+                    stageDepth = stageDepth,
+                    canvasWidthPx = canvasWidth,
+                    canvasHeightPx = canvasHeight,
+                    markerRadius = markerRadius,
+                    panOffsetX = panOffsetX,
+                    panOffsetY = panOffsetY,
+                    pixelsPerMeter = pixelsPerMeter,
+                    actualViewWidth = actualViewWidth,
+                    actualViewHeight = actualViewHeight
+                )
             }
 
             // Draw stage labels appropriate for the shape
@@ -877,11 +1226,27 @@ fun InputMapTab(
                 stageOriginY = stageOriginY,
                 canvasPixelW = canvasWidth,
                 canvasPixelH = canvasHeight,
-                markerRadius = markerRadius
+                markerRadius = markerRadius,
+                panOffsetX = panOffsetX,
+                panOffsetY = panOffsetY,
+                actualViewWidth = actualViewWidth,
+                actualViewHeight = actualViewHeight
             )
 
             // Draw origin marker at position where displayed coordinates would be (0.0, 0.0)
-            drawOriginMarker(stageWidth, stageDepth, stageOriginX, stageOriginY, canvasWidth, canvasHeight, markerRadius)
+            drawOriginMarker(
+                currentStageW = stageWidth,
+                currentStageD = stageDepth,
+                currentStageOriginX = stageOriginX,
+                currentStageOriginY = stageOriginY,
+                canvasPixelW = canvasWidth,
+                canvasPixelH = canvasHeight,
+                markerRadius = markerRadius,
+                panOffsetX = panOffsetX,
+                panOffsetY = panOffsetY,
+                actualViewWidth = actualViewWidth,
+                actualViewHeight = actualViewHeight
+            )
 
             // Draw vector control lines only if at least one function is enabled
             if (inputSecondaryAngularMode != SecondaryTouchFunction.OFF || inputSecondaryRadialMode != SecondaryTouchFunction.OFF) {
@@ -949,11 +1314,11 @@ fun InputMapTab(
                         marker.position
                     }
 
-                    // Convert delta from stage meters to canvas pixels
-                    val effectiveWidth = canvasWidth - (markerRadius * 2f)
-                    val effectiveHeight = canvasHeight - (markerRadius * 2f)
-                    val deltaCanvasX = if (stageWidth > 0f) (delta.first / stageWidth) * effectiveWidth else 0f
-                    val deltaCanvasY = if (stageDepth > 0f) -(delta.second / stageDepth) * effectiveHeight else 0f  // Negative because Y is inverted
+                    // Convert delta from stage meters to canvas pixels using actual view dimensions
+                    val effWidth = canvasWidth - (markerRadius * 2f)
+                    val effHeight = canvasHeight - (markerRadius * 2f)
+                    val deltaCanvasX = if (actualViewWidth > 0f) (delta.first / actualViewWidth) * effWidth else 0f
+                    val deltaCanvasY = if (actualViewHeight > 0f) -(delta.second / actualViewHeight) * effHeight else 0f  // Negative because Y is inverted
 
                     // Composite canvas position = target + delta
                     val compositeCanvasPos = Offset(
@@ -984,5 +1349,37 @@ fun InputMapTab(
                 drawMarker(displayMarker, draggingMarkers.containsValue(marker.id), textPaint, false, stageWidth, stageDepth, stageOriginX, stageOriginY, canvasWidth, canvasHeight, !isPhone)
             }
         }
+
+            // Floating buttons for fit-to-screen (top right)
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FloatingActionButton(
+                    onClick = { fitStageToScreen() },
+                    modifier = Modifier.size(40.dp),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Icon(
+                        Icons.Default.Fullscreen,
+                        contentDescription = "Fit Stage",
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                FloatingActionButton(
+                    onClick = { fitAllInputsToScreen() },
+                    modifier = Modifier.size(40.dp),
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Icon(
+                        Icons.Default.CenterFocusStrong,
+                        contentDescription = "Fit All Inputs",
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        }  // End Box (Canvas + floating buttons)
     }
 }

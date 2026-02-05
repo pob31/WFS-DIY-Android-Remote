@@ -30,7 +30,7 @@ internal data class StagePointInfo(
     val isTopAnchor: Boolean // True if the label is for a top coordinate (TL, TC, TR)
 )
 
-// Function to draw stage coordinate labels on the canvas
+// Function to draw stage coordinate labels on the canvas with pan/zoom support
 fun DrawScope.drawStageCornerLabels(
     currentStageW: Float,
     currentStageD: Float,
@@ -38,25 +38,37 @@ fun DrawScope.drawStageCornerLabels(
     currentStageOriginY: Float,
     canvasPixelW: Float,
     canvasPixelH: Float,
-    markerRadius: Float = 0f
+    markerRadius: Float = 0f,
+    panOffsetX: Float = 0f,
+    panOffsetY: Float = 0f,
+    actualViewWidth: Float = currentStageW,
+    actualViewHeight: Float = currentStageD
 ) {
     if (currentStageW <= 0f || currentStageD <= 0f || canvasPixelW <= 0f || canvasPixelH <= 0f) return
 
     val paint = Paint().apply {
         color = android.graphics.Color.GRAY
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
-        textSize = if (canvasPixelH > 0f) canvasPixelH / 45f else 20f // Default if canvasPixelH is 0
+        textSize = if (canvasPixelH > 0f) canvasPixelH / 45f else 20f
     }
     val padding = if (canvasPixelH > 0f) canvasPixelH / 60f else 10f
 
-    // Adjust canvas boundaries to account for marker radius
     val effectiveCanvasWidth = canvasPixelW - (markerRadius * 2f)
     val effectiveCanvasHeight = canvasPixelH - (markerRadius * 2f)
 
+    val viewWidth = if (actualViewWidth > 0f) actualViewWidth else currentStageW
+    val viewHeight = if (actualViewHeight > 0f) actualViewHeight else currentStageD
+
+    // Helper to convert physical stage position to canvas pixels
+    fun physicalToCanvas(physX: Float, physY: Float): Offset {
+        val viewX = physX - panOffsetX
+        val viewY = physY - panOffsetY
+        val canvasX = (viewX / viewWidth + 0.5f) * effectiveCanvasWidth + markerRadius
+        val canvasY = (0.5f - viewY / viewHeight) * effectiveCanvasHeight + markerRadius
+        return Offset(canvasX, canvasY)
+    }
+
     // Corner coordinates in origin-relative terms
-    // Canvas shows the physical stage, so we convert physical positions to origin-relative
-    // Physical edges: left=-stageW/2, right=+stageW/2, front=-stageD/2, back=+stageD/2
-    // Origin-relative = physical - origin
     val halfW = currentStageW / 2f
     val halfD = currentStageD / 2f
 
@@ -68,39 +80,51 @@ fun DrawScope.drawStageCornerLabels(
     val topLeftY = halfD - currentStageOriginY
     val topRightX = halfW - currentStageOriginX
     val topRightY = halfD - currentStageOriginY
-
-    // Center labels show X=0 for bottom/top center (relative to origin)
     val bottomCenterY = -halfD - currentStageOriginY
     val topCenterY = halfD - currentStageOriginY
 
-    val pointsToDraw = listOf(
-        StagePointInfo(bottomLeftX, bottomLeftY, Paint.Align.LEFT, false), // Bottom-Left (front-left)
-        StagePointInfo(-currentStageOriginX, bottomCenterY, Paint.Align.CENTER, false), // Bottom-Center (front-center, X at origin)
-        StagePointInfo(bottomRightX, bottomRightY, Paint.Align.RIGHT, false), // Bottom-Right (front-right)
-        StagePointInfo(topLeftX, topLeftY, Paint.Align.LEFT, true),         // Top-Left (back-left)
-        StagePointInfo(-currentStageOriginX, topCenterY, Paint.Align.CENTER, true), // Top-Center (back-center, X at origin)
-        StagePointInfo(topRightX, topRightY, Paint.Align.RIGHT, true)      // Top-Right (back-right)
+    // Data class for label info with physical position
+    data class LabelInfo(
+        val stageX: Float,
+        val stageY: Float,
+        val physX: Float,
+        val physY: Float,
+        val align: Paint.Align
     )
 
-    pointsToDraw.forEach { point ->
-        // Display the stage coordinates based on origin
-        val labelText = "(${String.format(Locale.US, "%.1f", point.stageX)}, ${String.format(Locale.US, "%.1f", point.stageY)})"
-        paint.textAlign = point.align
+    val labelsToDraw = listOf(
+        LabelInfo(bottomLeftX, bottomLeftY, -halfW, -halfD, Paint.Align.LEFT),
+        LabelInfo(-currentStageOriginX, bottomCenterY, 0f, -halfD, Paint.Align.CENTER),
+        LabelInfo(bottomRightX, bottomRightY, halfW, -halfD, Paint.Align.RIGHT),
+        LabelInfo(topLeftX, topLeftY, -halfW, halfD, Paint.Align.LEFT),
+        LabelInfo(-currentStageOriginX, topCenterY, 0f, halfD, Paint.Align.CENTER),
+        LabelInfo(topRightX, topRightY, halfW, halfD, Paint.Align.RIGHT)
+    )
 
-        // Fixed canvas positions - corners and center of top/bottom edges
-        val canvasX = when (point.align) {
-            Paint.Align.LEFT -> markerRadius + padding
-            Paint.Align.RIGHT -> effectiveCanvasWidth + markerRadius - padding
-            else -> (effectiveCanvasWidth / 2f) + markerRadius // CENTER
-        }
-        
-        val canvasY = if (point.isTopAnchor) {
-            markerRadius + padding + abs(paint.fontMetrics.ascent)
-        } else {
-            effectiveCanvasHeight + markerRadius - padding
-        }
+    labelsToDraw.forEach { label ->
+        val canvasPos = physicalToCanvas(label.physX, label.physY)
 
-        drawContext.canvas.nativeCanvas.drawText(labelText, canvasX, canvasY, paint)
+        // Only draw if the label position is visible on canvas
+        if (canvasPos.x >= markerRadius - 50f && canvasPos.x <= canvasPixelW - markerRadius + 50f &&
+            canvasPos.y >= markerRadius - 20f && canvasPos.y <= canvasPixelH - markerRadius + 20f) {
+
+            val labelText = "(${String.format(Locale.US, "%.1f", label.stageX)}, ${String.format(Locale.US, "%.1f", label.stageY)})"
+            paint.textAlign = label.align
+
+            // Position text near the corner with some offset
+            val textX = when (label.align) {
+                Paint.Align.LEFT -> canvasPos.x + padding
+                Paint.Align.RIGHT -> canvasPos.x - padding
+                else -> canvasPos.x
+            }
+            val textY = if (label.physY > 0) {
+                canvasPos.y + abs(paint.fontMetrics.ascent) + padding
+            } else {
+                canvasPos.y - padding
+            }
+
+            drawContext.canvas.nativeCanvas.drawText(labelText, textX, textY, paint)
+        }
     }
 }
 
@@ -199,33 +223,46 @@ fun DrawScope.drawOriginMarker(
     currentStageOriginY: Float,
     canvasPixelW: Float,
     canvasPixelH: Float,
-    markerRadius: Float = 0f
+    markerRadius: Float = 0f,
+    panOffsetX: Float = 0f,
+    panOffsetY: Float = 0f,
+    actualViewWidth: Float = currentStageW,
+    actualViewHeight: Float = currentStageD
 ) {
-    if (currentStageW <= 0f || currentStageD <= 0f || canvasPixelW <= 0f || canvasPixelH <= 0f) return
+    if (canvasPixelW <= 0f || canvasPixelH <= 0f) return
 
-    // Adjust canvas boundaries to account for marker radius
     val effectiveCanvasWidth = canvasPixelW - (markerRadius * 2f)
     val effectiveCanvasHeight = canvasPixelH - (markerRadius * 2f)
 
-    // The origin (0, 0) in origin-relative coords is at physical (stageOriginX, stageOriginY)
-    // Convert physical position to normalized canvas position
-    val normalizedX = (currentStageOriginX + currentStageW / 2f) / currentStageW
-    val normalizedY = (currentStageOriginY + currentStageD / 2f) / currentStageD
+    val viewWidth = if (actualViewWidth > 0f) actualViewWidth else currentStageW
+    val viewHeight = if (actualViewHeight > 0f) actualViewHeight else currentStageD
 
-    val canvasX = normalizedX * effectiveCanvasWidth + markerRadius
-    val canvasY = (1f - normalizedY) * effectiveCanvasHeight + markerRadius
+    // The origin (0, 0) in origin-relative coords is at physical (stageOriginX, stageOriginY)
+    // Apply pan offset
+    val viewX = currentStageOriginX - panOffsetX
+    val viewY = currentStageOriginY - panOffsetY
+
+    // Convert to canvas pixels with uniform scale
+    val canvasX = (viewX / viewWidth + 0.5f) * effectiveCanvasWidth + markerRadius
+    val canvasY = (0.5f - viewY / viewHeight) * effectiveCanvasHeight + markerRadius
+
+    // Only draw if origin is visible
+    if (canvasX < markerRadius - 20f || canvasX > canvasPixelW - markerRadius + 20f ||
+        canvasY < markerRadius - 20f || canvasY > canvasPixelH - markerRadius + 20f) {
+        return
+    }
 
     // Draw origin marker: circle with crosshairs
     val originRadius = 15f
     val crosshairLength = 20f
-    
+
     // Draw circle
     drawCircle(
         color = Color.White,
         radius = originRadius,
         center = Offset(canvasX, canvasY)
     )
-    
+
     // Draw crosshairs
     drawLine(
         color = Color.White,
@@ -329,7 +366,7 @@ private fun calculateBarycenter(members: List<Marker>): Offset {
 }
 
 /**
- * Draw the stage boundary on the canvas.
+ * Draw the stage boundary on the canvas with pan/zoom support.
  * For shape 0 (box): draws a rectangle
  * For shape 1 (cylinder) or 2 (dome): draws a circle
  *
@@ -342,6 +379,10 @@ private fun calculateBarycenter(members: List<Marker>): Offset {
  * @param canvasPixelW Canvas width in pixels
  * @param canvasPixelH Canvas height in pixels
  * @param markerRadius Marker radius for effective area calculation
+ * @param panOffsetX Pan offset X in physical stage meters
+ * @param panOffsetY Pan offset Y in physical stage meters
+ * @param actualViewWidth Visible width in meters after zoom
+ * @param actualViewHeight Visible height in meters after zoom
  */
 fun DrawScope.drawStageBoundary(
     stageShape: Int,
@@ -352,50 +393,67 @@ fun DrawScope.drawStageBoundary(
     stageOriginY: Float,
     canvasPixelW: Float,
     canvasPixelH: Float,
-    markerRadius: Float = 0f
+    markerRadius: Float = 0f,
+    panOffsetX: Float = 0f,
+    panOffsetY: Float = 0f,
+    actualViewWidth: Float = stageWidth,
+    actualViewHeight: Float = stageDepth
 ) {
     if (canvasPixelW <= 0f || canvasPixelH <= 0f) return
 
     val effectiveCanvasWidth = canvasPixelW - (markerRadius * 2f)
     val effectiveCanvasHeight = canvasPixelH - (markerRadius * 2f)
 
+    val viewWidth = if (actualViewWidth > 0f) actualViewWidth else stageWidth
+    val viewHeight = if (actualViewHeight > 0f) actualViewHeight else stageDepth
+
     val boundaryColor = Color.DarkGray
     val strokeWidth = 2f
+
+    // Helper to convert physical stage position to canvas pixels
+    fun physicalToCanvas(physX: Float, physY: Float): Offset {
+        val viewX = physX - panOffsetX
+        val viewY = physY - panOffsetY
+        val canvasX = (viewX / viewWidth + 0.5f) * effectiveCanvasWidth + markerRadius
+        val canvasY = (0.5f - viewY / viewHeight) * effectiveCanvasHeight + markerRadius
+        return Offset(canvasX, canvasY)
+    }
 
     when (stageShape) {
         0 -> {
             // Box shape - draw rectangle boundary
             if (stageWidth <= 0f || stageDepth <= 0f) return
 
-            // Rectangle edges at canvas boundaries (the canvas represents the full stage)
-            drawRect(
-                color = boundaryColor,
-                topLeft = Offset(markerRadius, markerRadius),
-                size = androidx.compose.ui.geometry.Size(effectiveCanvasWidth, effectiveCanvasHeight),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
-            )
+            // Calculate the four corners of the stage in physical coords
+            val halfW = stageWidth / 2f
+            val halfD = stageDepth / 2f
+
+            val topLeft = physicalToCanvas(-halfW, halfD)
+            val topRight = physicalToCanvas(halfW, halfD)
+            val bottomLeft = physicalToCanvas(-halfW, -halfD)
+            val bottomRight = physicalToCanvas(halfW, -halfD)
+
+            // Draw the four edges of the rectangle
+            drawLine(color = boundaryColor, start = topLeft, end = topRight, strokeWidth = strokeWidth)
+            drawLine(color = boundaryColor, start = topRight, end = bottomRight, strokeWidth = strokeWidth)
+            drawLine(color = boundaryColor, start = bottomRight, end = bottomLeft, strokeWidth = strokeWidth)
+            drawLine(color = boundaryColor, start = bottomLeft, end = topLeft, strokeWidth = strokeWidth)
         }
         1, 2 -> {
             // Cylinder or Dome shape - draw circle boundary
             if (stageDiameter <= 0f) return
 
-            // For circular stages, canvas represents a square area of diameter x diameter
-            // The circle is centered at the physical center (0,0 in physical coords)
-            // which is at canvas position corresponding to normalized (0.5, 0.5)
+            // Circle center is at physical (0, 0)
+            val center = physicalToCanvas(0f, 0f)
 
-            // The circle fills the canvas (diameter maps to canvas size)
-            // Center is at the physical stage center
-            val centerCanvasX = effectiveCanvasWidth / 2f + markerRadius
-            val centerCanvasY = effectiveCanvasHeight / 2f + markerRadius
-
-            // Radius in canvas pixels - the circle should fit within the canvas
-            // Use the smaller dimension to ensure the circle fits
-            val circleRadius = min(effectiveCanvasWidth, effectiveCanvasHeight) / 2f
+            // Calculate radius in canvas pixels using uniform scale
+            val pixelsPerMeter = effectiveCanvasWidth / viewWidth
+            val circleRadius = (stageDiameter / 2f) * pixelsPerMeter
 
             drawCircle(
                 color = boundaryColor,
                 radius = circleRadius,
-                center = Offset(centerCanvasX, centerCanvasY),
+                center = center,
                 style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
             )
         }
@@ -403,7 +461,7 @@ fun DrawScope.drawStageBoundary(
 }
 
 /**
- * Draw stage coordinate labels appropriate for the stage shape.
+ * Draw stage coordinate labels appropriate for the stage shape with pan/zoom support.
  * For box shapes: draws corner coordinates
  * For circular shapes: draws diameter info and cardinal points
  */
@@ -416,7 +474,11 @@ fun DrawScope.drawStageLabels(
     stageOriginY: Float,
     canvasPixelW: Float,
     canvasPixelH: Float,
-    markerRadius: Float = 0f
+    markerRadius: Float = 0f,
+    panOffsetX: Float = 0f,
+    panOffsetY: Float = 0f,
+    actualViewWidth: Float = stageWidth,
+    actualViewHeight: Float = stageDepth
 ) {
     when (stageShape) {
         0 -> {
@@ -425,7 +487,9 @@ fun DrawScope.drawStageLabels(
                 stageWidth, stageDepth,
                 stageOriginX, stageOriginY,
                 canvasPixelW, canvasPixelH,
-                markerRadius
+                markerRadius,
+                panOffsetX, panOffsetY,
+                actualViewWidth, actualViewHeight
             )
         }
         1, 2 -> {
@@ -434,7 +498,9 @@ fun DrawScope.drawStageLabels(
                 stageDiameter,
                 stageOriginX, stageOriginY,
                 canvasPixelW, canvasPixelH,
-                markerRadius
+                markerRadius,
+                panOffsetX, panOffsetY,
+                actualViewWidth, actualViewHeight
             )
         }
     }
@@ -480,7 +546,11 @@ private fun DrawScope.drawCircularStageLabels(
     stageOriginY: Float,
     canvasPixelW: Float,
     canvasPixelH: Float,
-    markerRadius: Float = 0f
+    markerRadius: Float = 0f,
+    panOffsetX: Float = 0f,
+    panOffsetY: Float = 0f,
+    actualViewWidth: Float = stageDiameter,
+    actualViewHeight: Float = stageDiameter
 ) {
     if (stageDiameter <= 0f || canvasPixelW <= 0f || canvasPixelH <= 0f) return
 
@@ -494,41 +564,60 @@ private fun DrawScope.drawCircularStageLabels(
     val effectiveCanvasWidth = canvasPixelW - (markerRadius * 2f)
     val effectiveCanvasHeight = canvasPixelH - (markerRadius * 2f)
 
+    val viewWidth = if (actualViewWidth > 0f) actualViewWidth else stageDiameter
+    val viewHeight = if (actualViewHeight > 0f) actualViewHeight else stageDiameter
+
     val radius = stageDiameter / 2f
 
-    // Cardinal points in origin-relative coordinates
-    // Physical cardinal points are at (±radius, 0) and (0, ±radius)
-    // Origin-relative = physical - origin
-    val northY = radius - stageOriginY     // Top (back)
-    val southY = -radius - stageOriginY    // Bottom (front)
-    val eastX = radius - stageOriginX      // Right
-    val westX = -radius - stageOriginX     // Left
+    // Helper to convert physical stage position to canvas pixels
+    fun physicalToCanvas(physX: Float, physY: Float): Offset {
+        val viewX = physX - panOffsetX
+        val viewY = physY - panOffsetY
+        val canvasX = (viewX / viewWidth + 0.5f) * effectiveCanvasWidth + markerRadius
+        val canvasY = (0.5f - viewY / viewHeight) * effectiveCanvasHeight + markerRadius
+        return Offset(canvasX, canvasY)
+    }
 
-    // Draw labels at four cardinal positions
+    // Cardinal points in origin-relative coordinates
+    val northY = radius - stageOriginY
+    val southY = -radius - stageOriginY
+    val eastX = radius - stageOriginX
+    val westX = -radius - stageOriginX
+
+    // Draw labels at four cardinal positions (only if visible)
     // Top center (North/Back)
-    paint.textAlign = Paint.Align.CENTER
-    val topLabel = "(0, ${String.format(Locale.US, "%.1f", northY)})"
-    val topCanvasX = effectiveCanvasWidth / 2f + markerRadius
-    val topCanvasY = markerRadius + padding + abs(paint.fontMetrics.ascent)
-    drawContext.canvas.nativeCanvas.drawText(topLabel, topCanvasX, topCanvasY, paint)
+    val topPos = physicalToCanvas(0f, radius)
+    if (topPos.y >= markerRadius - 20f && topPos.y <= canvasPixelH - markerRadius + 20f) {
+        paint.textAlign = Paint.Align.CENTER
+        val topLabel = "(0, ${String.format(Locale.US, "%.1f", northY)})"
+        val topCanvasY = topPos.y + abs(paint.fontMetrics.ascent) + padding
+        drawContext.canvas.nativeCanvas.drawText(topLabel, topPos.x, topCanvasY, paint)
+    }
 
     // Bottom center (South/Front)
-    val bottomLabel = "(0, ${String.format(Locale.US, "%.1f", southY)})"
-    val bottomCanvasX = effectiveCanvasWidth / 2f + markerRadius
-    val bottomCanvasY = effectiveCanvasHeight + markerRadius - padding
-    drawContext.canvas.nativeCanvas.drawText(bottomLabel, bottomCanvasX, bottomCanvasY, paint)
+    val bottomPos = physicalToCanvas(0f, -radius)
+    if (bottomPos.y >= markerRadius - 20f && bottomPos.y <= canvasPixelH - markerRadius + 20f) {
+        paint.textAlign = Paint.Align.CENTER
+        val bottomLabel = "(0, ${String.format(Locale.US, "%.1f", southY)})"
+        val bottomCanvasY = bottomPos.y - padding
+        drawContext.canvas.nativeCanvas.drawText(bottomLabel, bottomPos.x, bottomCanvasY, paint)
+    }
 
     // Left center (West)
-    paint.textAlign = Paint.Align.LEFT
-    val leftLabel = "(${String.format(Locale.US, "%.1f", westX)}, 0)"
-    val leftCanvasX = markerRadius + padding
-    val leftCanvasY = effectiveCanvasHeight / 2f + markerRadius
-    drawContext.canvas.nativeCanvas.drawText(leftLabel, leftCanvasX, leftCanvasY, paint)
+    val leftPos = physicalToCanvas(-radius, 0f)
+    if (leftPos.x >= markerRadius - 50f && leftPos.x <= canvasPixelW - markerRadius + 50f) {
+        paint.textAlign = Paint.Align.LEFT
+        val leftLabel = "(${String.format(Locale.US, "%.1f", westX)}, 0)"
+        val leftCanvasX = leftPos.x + padding
+        drawContext.canvas.nativeCanvas.drawText(leftLabel, leftCanvasX, leftPos.y, paint)
+    }
 
     // Right center (East)
-    paint.textAlign = Paint.Align.RIGHT
-    val rightLabel = "(${String.format(Locale.US, "%.1f", eastX)}, 0)"
-    val rightCanvasX = effectiveCanvasWidth + markerRadius - padding
-    val rightCanvasY = effectiveCanvasHeight / 2f + markerRadius
-    drawContext.canvas.nativeCanvas.drawText(rightLabel, rightCanvasX, rightCanvasY, paint)
+    val rightPos = physicalToCanvas(radius, 0f)
+    if (rightPos.x >= markerRadius - 50f && rightPos.x <= canvasPixelW - markerRadius + 50f) {
+        paint.textAlign = Paint.Align.RIGHT
+        val rightLabel = "(${String.format(Locale.US, "%.1f", eastX)}, 0)"
+        val rightCanvasX = rightPos.x - padding
+        drawContext.canvas.nativeCanvas.drawText(rightLabel, rightCanvasX, rightPos.y, paint)
+    }
 }
