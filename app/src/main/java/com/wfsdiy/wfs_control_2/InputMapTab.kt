@@ -362,6 +362,9 @@ fun InputMapTab(
     // Only markers with "real" positions (from server or dragging) are stored here
     val markerStagePositions = remember { mutableStateMapOf<Int, Pair<Float, Float>>() }
 
+    // Version counter to trigger canvas position recalculation when stage positions change
+    var markerStagePositionsVersion by remember { mutableIntStateOf(0) }
+
     // Track the last known view parameters for markers without stage positions
     // This allows us to properly transform their canvas positions when view changes
     // Using a simple data holder (4 floats: panX, panY, viewW, viewH)
@@ -380,7 +383,7 @@ fun InputMapTab(
         val initialMarkerPosition: Offset,
         val initialTouchPosition: Offset,
         val currentTouchPosition: Offset,
-        val startZ: Float = 0f,           // For inputs: initial positionZ
+        val startZ: Float = 2f,           // For inputs: initial positionZ in meters
         val startRotation: Float = 0f     // For inputs: initial inputRotation, for clusters: cumulative rotation
     )
     val vectorControls = remember { mutableStateMapOf<Long, VectorControl>() }
@@ -418,7 +421,7 @@ fun InputMapTab(
             // textSize will be set in drawMarker based on marker.isVisible and zoom
         }
     }
-    
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val canvasWidth = constraints.maxWidth.toFloat()
         val canvasHeight = constraints.maxHeight.toFloat()
@@ -569,13 +572,15 @@ fun InputMapTab(
                         markerStagePositions[inputId] = Pair(posXMeters, posYMeters)
                     }
                 }
+                // Increment version to trigger canvas position recalculation
+                markerStagePositionsVersion++
             }
         }
 
-        // Recalculate canvas positions when view changes (pan/zoom)
+        // Recalculate canvas positions when view changes (pan/zoom) or stage positions change
         // Only affects markers that have stored stage positions (from server or dragging)
         // Markers without stage positions keep their canvas positions and get transformed relative to view changes
-        LaunchedEffect(panOffsetX, panOffsetY, actualViewWidth, actualViewHeight, canvasWidth, canvasHeight, markerRadius, stageOriginX, stageOriginY, numberOfInputs) {
+        LaunchedEffect(panOffsetX, panOffsetY, actualViewWidth, actualViewHeight, canvasWidth, canvasHeight, markerRadius, stageOriginX, stageOriginY, numberOfInputs, markerStagePositionsVersion) {
             if (canvasWidth > 0f && canvasHeight > 0f && numberOfInputs > 0 && actualViewWidth > 0f && actualViewHeight > 0f) {
                 val hasPrevView = lastViewInitialized && lastViewWidth > 0f && lastViewHeight > 0f
 
@@ -811,35 +816,50 @@ fun InputMapTab(
 
                                             // Calculate and send updates based on target type
                                             if (initialLayoutDone) {
-                                                // Use local position if available, otherwise use global position
-                                                val currentMarkerPosition = if (localMarkerPositions.containsKey(vectorControl.markerId)) {
-                                                    localMarkerPositions[vectorControl.markerId]!!
-                                                } else {
-                                                    currentMarkersState.find { it.id == vectorControl.markerId }?.position
-                                                }
+                                                if (vectorControl.targetType == 1) {
+                                                    // Cluster secondary touch: scale and rotation
+                                                    val barycenterPos = findClusterBarycenter(vectorControl.clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
+                                                        ?: findHiddenClusterReference(vectorControl.clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
+                                                    val currentRefPos = barycenterPos ?: vectorControl.initialMarkerPosition
 
-                                                if (currentMarkerPosition != null) {
+                                                    // Rotation: angle change from initial to current
                                                     val initialAngle = calculateAngle(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
-                                                    val currentAngle = calculateAngle(currentMarkerPosition, change.position)
+                                                    val currentAngle = calculateAngle(currentRefPos, change.position)
                                                     val angleChange = currentAngle - initialAngle
+                                                    onClusterRotation?.invoke(vectorControl.clusterId, angleChange)
 
+                                                    // Scale: pinch ratio
                                                     val initialDistance = calculateDistance(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
-                                                    val currentDistance = calculateDistance(currentMarkerPosition, change.position)
-                                                    val distanceRatio = if (initialDistance > 10f) currentDistance / initialDistance else 1f
-
-                                                    if (vectorControl.targetType == 0) {
-                                                        // Input target: pinch = height (Z), rotate = inputRotation
-                                                        // Update height based on distance ratio
-                                                        val newZ = vectorControl.startZ * distanceRatio
-                                                        onInputHeightChanged?.invoke(vectorControl.markerId, newZ)
-
-                                                        // Update rotation based on angle delta
-                                                        val newRotation = vectorControl.startRotation + angleChange
-                                                        onInputRotationChanged?.invoke(vectorControl.markerId, newRotation)
+                                                    val currentDistance = calculateDistance(currentRefPos, change.position)
+                                                    if (initialDistance > 10f) {
+                                                        val scaleFactor = currentDistance / initialDistance
+                                                        onClusterScale?.invoke(vectorControl.clusterId, scaleFactor)
+                                                    }
+                                                } else {
+                                                    // Input secondary touch: height and rotation
+                                                    val currentMarkerPosition = if (localMarkerPositions.containsKey(vectorControl.markerId)) {
+                                                        localMarkerPositions[vectorControl.markerId]!!
                                                     } else {
-                                                        // Cluster target: pinch = scale, rotate = rotation
-                                                        onClusterScale?.invoke(vectorControl.clusterId, distanceRatio)
-                                                        onClusterRotation?.invoke(vectorControl.clusterId, angleChange)
+                                                        currentMarkersState.find { it.id == vectorControl.markerId }?.position
+                                                    }
+
+                                                    if (currentMarkerPosition != null) {
+                                                        // Rotation: angle change from initial to current
+                                                        val initialAngle = calculateAngle(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
+                                                        val currentAngle = calculateAngle(currentMarkerPosition, change.position)
+                                                        val angleChange = currentAngle - initialAngle
+                                                        val newRotation = vectorControl.startRotation - angleChange
+                                                        onInputRotationChanged?.invoke(vectorControl.markerId, newRotation)
+
+                                                        // Height: pinch distance change maps to height delta (additive)
+                                                        val initialDistance = calculateDistance(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
+                                                        val currentDistance = calculateDistance(currentMarkerPosition, change.position)
+                                                        if (initialDistance > 10f) {
+                                                            val distanceRatio = currentDistance / initialDistance
+                                                            val heightDelta = (distanceRatio - 1f) * 3f  // 3m per doubling of pinch distance
+                                                            val newHeight = (vectorControl.startZ + heightDelta).coerceIn(0f, 20f)
+                                                            onInputHeightChanged?.invoke(vectorControl.markerId, newHeight)
+                                                        }
                                                     }
                                                 }
                                             }
@@ -904,8 +924,10 @@ fun InputMapTab(
                                                 }
                                             }
 
-                                            // If no cluster target found, check for vector control
+                                            // If no cluster target found, check for vector control (secondary touch)
                                             if (!clusterTargetFound) {
+                                                var vectorControlCreated = false
+
                                                 // Check for secondary touch on dragged cluster targets (barycenters or hidden refs)
                                                 val draggedClusterIds = (draggingBarycenters.values + draggingHiddenRefs.values).toSet()
                                                 val clustersWithVectorControl = vectorControls.values.filter { it.targetType == 1 }.map { it.clusterId }.toSet()
@@ -931,10 +953,13 @@ fun InputMapTab(
                                                                 startRotation = 0f  // Cluster rotation is cumulative
                                                             )
                                                             vectorControlsUpdateTrigger++
+                                                            vectorControlCreated = true
                                                         }
                                                     }
-                                                } else {
-                                                    // Check for secondary touch on dragged input markers
+                                                }
+
+                                                // Check for secondary touch on dragged input markers
+                                                if (!vectorControlCreated) {
                                                     val draggedMarkers = draggingMarkers.values.toSet()
                                                     val markersWithVectorControl = vectorControls.values.filter { it.targetType == 0 }.map { it.markerId }.toSet()
                                                     val availableMarkers = draggedMarkers - markersWithVectorControl
@@ -955,11 +980,11 @@ fun InputMapTab(
                                                                 val rotDef = InputParameterDefinitions.allParameters.find { it.variableName == "rotation" }
 
                                                                 val initialZ = channel?.parameters?.get("positionZ")?.let { param ->
-                                                                    posZDef?.let { def -> InputParameterDefinitions.applyFormula(def, param.normalizedValue) } ?: 0f
+                                                                    posZDef?.let { def -> InputParameterDefinitions.applyFormula(def, param.normalizedValue) } ?: param.normalizedValue * 10f
                                                                 } ?: 2f  // Default to 2m
 
                                                                 val initialRotation = channel?.parameters?.get("rotation")?.let { param ->
-                                                                    rotDef?.let { def -> InputParameterDefinitions.applyFormula(def, param.normalizedValue) } ?: 0f
+                                                                    rotDef?.let { def -> InputParameterDefinitions.applyFormula(def, param.normalizedValue) } ?: param.normalizedValue * 360f
                                                                 } ?: 0f
 
                                                                 vectorControls[pointerValue] = VectorControl(
@@ -1067,19 +1092,22 @@ fun InputMapTab(
                                                                 // Use local position for consistent calculations
                                                                 val currentMarkerPosition = localMarkerPositions[updatedMarker.id] ?: updatedMarker.position
 
+                                                                // Rotation: angle change from initial to current
                                                                 val initialAngle = calculateAngle(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
                                                                 val currentAngle = calculateAngle(currentMarkerPosition, vectorControl.currentTouchPosition)
                                                                 val angleChange = currentAngle - initialAngle
+                                                                val newRotation = vectorControl.startRotation - angleChange
+                                                                onInputRotationChanged?.invoke(vectorControl.markerId, newRotation)
 
+                                                                // Height: pinch distance change maps to height delta (additive)
                                                                 val initialDistance = calculateDistance(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
                                                                 val currentDistance = calculateDistance(currentMarkerPosition, vectorControl.currentTouchPosition)
-                                                                val distanceRatio = if (initialDistance > 10f) currentDistance / initialDistance else 1f
-
-                                                                // Send input height and rotation updates
-                                                                val newZ = vectorControl.startZ * distanceRatio
-                                                                onInputHeightChanged?.invoke(vectorControl.markerId, newZ)
-                                                                val newRotation = vectorControl.startRotation + angleChange
-                                                                onInputRotationChanged?.invoke(vectorControl.markerId, newRotation)
+                                                                if (initialDistance > 10f) {  // Avoid division by small numbers
+                                                                    val distanceRatio = currentDistance / initialDistance
+                                                                    val heightDelta = (distanceRatio - 1f) * 3f  // 3m per doubling of pinch distance
+                                                                    val newHeight = (vectorControl.startZ + heightDelta).coerceIn(0f, 20f)
+                                                                    onInputHeightChanged?.invoke(vectorControl.markerId, newHeight)
+                                                                }
                                                             }
                                                         }
                                                     }
@@ -1289,6 +1317,22 @@ fun InputMapTab(
         ) { // DrawScope
             drawRect(Color.Black) // Background for the canvas
 
+            // Draw secondary touch info above the grid
+            val secondaryTouchText = "2nd Finger: Input(Rotate/Pinch=Orient/Height) Cluster(Rotate/Pinch=Turn/Scale)"
+
+            val headerPaint = Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = 16f
+                textAlign = Paint.Align.CENTER
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
+            drawContext.canvas.nativeCanvas.drawText(
+                secondaryTouchText,
+                canvasWidth / 2f,
+                25f, // Position above the grid
+                headerPaint
+            )
+
             // Draw the stage boundary (rectangle for box, circle for cylinder/dome)
             drawStageBoundary(
                 stageShape = stageShape,
@@ -1382,8 +1426,8 @@ fun InputMapTab(
                         strokeWidth = 2f
                     )
 
-                    // Draw white active line (current position to current touch position)
-                    // For clusters, use a different color to distinguish
+                    // Draw active line (current position to current touch position)
+                    // For clusters, use cyan to distinguish from input white
                     val lineColor = if (vectorControl.targetType == 1) Color.Cyan else Color.White
                     drawLine(
                         color = lineColor,

@@ -7,6 +7,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -78,6 +79,24 @@ fun SettingsTab(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Secondary Touch Info
+            Text(
+                "Secondary Touch",
+                style = MaterialTheme.typography.headlineSmall.copy(color = Color.White),
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Text(
+                "While dragging, use a second finger to:\n\n" +
+                "Inputs:\n" +
+                "- Rotate: Change input orientation\n" +
+                "- Pinch: Change input height\n\n" +
+                "Clusters (barycenter):\n" +
+                "- Rotate: Turn cluster around reference\n" +
+                "- Pinch: Scale cluster size",
+                style = MaterialTheme.typography.bodyMedium.copy(color = Color.Gray),
+                modifier = Modifier.padding(bottom = 24.dp)
+            )
+
             // NetworkTab content
             NetworkTab(onNetworkParametersChanged = onNetworkParametersChanged)
 

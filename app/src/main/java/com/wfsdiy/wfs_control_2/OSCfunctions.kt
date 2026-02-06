@@ -1260,6 +1260,7 @@ fun startOscServer(
             }
             serverSocket = DatagramSocket(incomingPort)
             serverSocket.soTimeout = 1000 // Set 1 second timeout to prevent blocking
+            serverSocket.receiveBufferSize = 262144 // 256KB buffer to handle burst of messages during handshake
 
 
 
