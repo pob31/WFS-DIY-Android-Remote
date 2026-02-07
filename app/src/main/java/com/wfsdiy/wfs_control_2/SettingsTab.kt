@@ -79,24 +79,6 @@ fun SettingsTab(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Secondary Touch Info
-            Text(
-                "Secondary Touch",
-                style = MaterialTheme.typography.headlineSmall.copy(color = Color.White),
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            Text(
-                "While dragging, use a second finger to:\n\n" +
-                "Inputs:\n" +
-                "- Rotate: Change input orientation\n" +
-                "- Pinch: Change input height\n\n" +
-                "Clusters (barycenter):\n" +
-                "- Rotate: Turn cluster around reference\n" +
-                "- Pinch: Scale cluster size",
-                style = MaterialTheme.typography.bodyMedium.copy(color = Color.Gray),
-                modifier = Modifier.padding(bottom = 24.dp)
-            )
-
             // NetworkTab content
             NetworkTab(onNetworkParametersChanged = onNetworkParametersChanged)
 

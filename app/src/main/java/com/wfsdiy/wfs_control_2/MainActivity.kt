@@ -542,8 +542,8 @@ fun WFSControlApp() {
         }
     }
 
-    // Sync input names from inputParametersState to markers
-    // This ensures LockingTab, VisibilityTab, and other views have access to marker names
+    // Sync input names and cluster IDs from inputParametersState to markers
+    // This ensures LockingTab, VisibilityTab, and other views have access to marker names/clusters
     LaunchedEffect(inputParametersState?.revision, numberOfInputs) {
         val state = inputParametersState ?: return@LaunchedEffect
         if (numberOfInputs > 0) {
@@ -552,15 +552,24 @@ fun WFSControlApp() {
                 if (index < numberOfInputs) {
                     val inputId = marker.id
                     val channel = state.getChannel(inputId)
-                    val inputName = channel.parameters["inputName"]?.stringValue ?: ""
+                    var updatedMarker = marker
 
-                    // Only update if name has changed and new name is not empty
-                    if (inputName.isNotEmpty() && inputName != marker.name) {
+                    // Sync name
+                    val inputName = channel.parameters["inputName"]?.stringValue ?: ""
+                    if (inputName.isNotEmpty() && inputName != updatedMarker.name) {
                         hasChanges = true
-                        marker.copy(name = inputName)
-                    } else {
-                        marker
+                        updatedMarker = updatedMarker.copy(name = inputName)
                     }
+
+                    // Sync clusterId (normalizedValue stores the raw int for DROPDOWN types)
+                    val clusterParam = channel.parameters["cluster"]
+                    val newClusterId = clusterParam?.normalizedValue?.let { kotlin.math.round(it).toInt() } ?: 0
+                    if (newClusterId != updatedMarker.clusterId) {
+                        hasChanges = true
+                        updatedMarker = updatedMarker.copy(clusterId = newClusterId)
+                    }
+
+                    updatedMarker
                 } else {
                     marker
                 }

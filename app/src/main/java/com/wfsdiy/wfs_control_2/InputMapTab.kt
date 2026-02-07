@@ -353,6 +353,7 @@ fun InputMapTab(
     val draggingBarycenters = remember { mutableStateMapOf<Long, Int>() }  // pointerId -> clusterId
     val draggingHiddenRefs = remember { mutableStateMapOf<Long, Int>() }   // pointerId -> clusterId (for hidden reference markers in mode 0)
     val currentMarkersState by rememberUpdatedState(markers)
+    val currentClusterConfigs by rememberUpdatedState(clusterConfigs)
 
     // Local state for smooth dragging without blocking global updates
     val localMarkerPositions = remember { mutableStateMapOf<Int, Offset>() }
@@ -384,7 +385,9 @@ fun InputMapTab(
         val initialTouchPosition: Offset,
         val currentTouchPosition: Offset,
         val startZ: Float = 2f,           // For inputs: initial positionZ in meters
-        val startRotation: Float = 0f     // For inputs: initial inputRotation, for clusters: cumulative rotation
+        val startRotation: Float = 0f,    // For inputs: initial inputRotation, for clusters: cumulative rotation
+        val previousDistance: Float = 0f,  // For clusters: previous frame distance (incremental scale)
+        val previousAngle: Float = 0f     // For clusters: previous frame angle (incremental rotation)
     )
     val vectorControls = remember { mutableStateMapOf<Long, VectorControl>() }
     var vectorControlsUpdateTrigger: Int by remember { mutableIntStateOf(0) }
@@ -691,32 +694,8 @@ fun InputMapTab(
             }
         }
 
-        // Update marker names from server (separate from position updates)
-        LaunchedEffect(inputParametersState?.revision, numberOfInputs) {
-            if (inputParametersState != null && numberOfInputs > 0) {
-                val updatedMarkers = currentMarkersState.mapIndexed { index, marker ->
-                    if (index < numberOfInputs) {
-                        val channel = inputParametersState.getChannel(marker.id)
-                        val inputName = channel.parameters["inputName"]?.stringValue ?: ""
-                        if (inputName.isNotEmpty() && inputName != marker.name) {
-                            marker.copy(name = inputName)
-                        } else {
-                            marker
-                        }
-                    } else {
-                        marker
-                    }
-                }
-
-                val hasNameChanges = updatedMarkers.zip(currentMarkersState).any { (new, old) ->
-                    new.name != old.name
-                }
-
-                if (hasNameChanges) {
-                    onMarkersInitiallyPositioned(updatedMarkers)
-                }
-            }
-        }
+        // Note: marker names and clusterIds are synced in MainActivity's LaunchedEffect
+        // (inputParametersState?.revision, numberOfInputs) to avoid race conditions.
 
         LaunchedEffect(canvasWidth, canvasHeight, initialLayoutDone, numberOfInputs) {
             if (canvasWidth > 0f && canvasHeight > 0f && !initialLayoutDone && numberOfInputs > 0) {
@@ -803,7 +782,7 @@ fun InputMapTab(
                             val pointerValue = change.id.value // Using Long as key for draggingMarkers
                             
                             if (change.pressed) {
-                                if (!draggingMarkers.containsKey(pointerValue)) {
+                                if (!draggingMarkers.containsKey(pointerValue) && !draggingBarycenters.containsKey(pointerValue) && !draggingHiddenRefs.containsKey(pointerValue)) {
                                     // Check if this pointer has a vector control first
                                     if (vectorControls.containsKey(pointerValue)) {
                                         // Handle secondary finger movement
@@ -817,24 +796,34 @@ fun InputMapTab(
                                             // Calculate and send updates based on target type
                                             if (initialLayoutDone) {
                                                 if (vectorControl.targetType == 1) {
-                                                    // Cluster secondary touch: scale and rotation
-                                                    val barycenterPos = findClusterBarycenter(vectorControl.clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
-                                                        ?: findHiddenClusterReference(vectorControl.clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
-                                                    val currentRefPos = barycenterPos ?: vectorControl.initialMarkerPosition
+                                                    // Cluster secondary touch: incremental scale and rotation
+                                                    // Use fixed initial reference position (not live barycenter) so
+                                                    // distance/angle only depend on finger movement, not echo latency.
+                                                    val refPos = vectorControl.initialMarkerPosition
 
-                                                    // Rotation: angle change from initial to current
-                                                    val initialAngle = calculateAngle(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
-                                                    val currentAngle = calculateAngle(currentRefPos, change.position)
-                                                    val angleChange = currentAngle - initialAngle
-                                                    onClusterRotation?.invoke(vectorControl.clusterId, angleChange)
+                                                    // calculateAngle returns degrees, calculateDistance returns pixels
+                                                    val currentAngle = calculateAngle(refPos, change.position)
+                                                    val currentDistance = calculateDistance(refPos, change.position)
 
-                                                    // Scale: pinch ratio
-                                                    val initialDistance = calculateDistance(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
-                                                    val currentDistance = calculateDistance(currentRefPos, change.position)
-                                                    if (initialDistance > 10f) {
-                                                        val scaleFactor = currentDistance / initialDistance
+                                                    // Incremental rotation: delta from previous frame (both in degrees)
+                                                    var angleDelta = currentAngle - vectorControl.previousAngle
+                                                    // Normalize to -180..180
+                                                    while (angleDelta > 180f) angleDelta -= 360f
+                                                    while (angleDelta < -180f) angleDelta += 360f
+                                                    // Negate: screen Y is down, stage Y is up (matches JUCE MapTab)
+                                                    onClusterRotation?.invoke(vectorControl.clusterId, -angleDelta)
+
+                                                    // Incremental scale: ratio from previous frame
+                                                    if (vectorControl.previousDistance > 10f) {
+                                                        val scaleFactor = currentDistance / vectorControl.previousDistance
                                                         onClusterScale?.invoke(vectorControl.clusterId, scaleFactor)
                                                     }
+
+                                                    // Update previous values for next frame
+                                                    vectorControls[pointerValue] = updatedVectorControl.copy(
+                                                        previousDistance = currentDistance,
+                                                        previousAngle = currentAngle
+                                                    )
                                                 } else {
                                                     // Input secondary touch: height and rotation
                                                     val currentMarkerPosition = if (localMarkerPositions.containsKey(vectorControl.markerId)) {
@@ -868,64 +857,65 @@ fun InputMapTab(
                                     } else if (!pointersThatAttemptedGrab.contains(pointerId)) {
                                         pointersThatAttemptedGrab.add(pointerId)
                                         val touchPosition = change.position
-                                        val candidateMarkers =
-                                            activeMarkersSnapshot.filterIndexed { _, m -> // m is from activeMarkersSnapshot
-                                                // Get original marker from currentMarkersState to check lock/visibility
-                                                val originalMarker = currentMarkersState.getOrNull(m.id -1)
-                                                originalMarker != null && originalMarker.isVisible &&
-                                                        !originalMarker.isLocked &&
-                                                        !draggingMarkers.containsValue(m.id) && // Check against marker ID
-                                                        distance(
-                                                            touchPosition,
-                                                            m.position // m.position is from activeMarkersSnapshot
-                                                        ) <= m.radius * pickupRadiusMultiplier
-                                            }
 
-                                        if (candidateMarkers.isNotEmpty()) {
-                                            val markerToDrag = candidateMarkers.minWithOrNull(
-                                                compareBy<Marker> { marker -> distance(touchPosition, marker.position) }
-                                                    .thenBy { marker -> marker.id }
-                                            )
-                                            markerToDrag?.let {
-                                                if (draggingMarkers.size < 10) { // Limit concurrent drags
-                                                    draggingMarkers[pointerValue] = it.id // Store marker ID
-                                                    pointerIdToCurrentLogicalPosition[pointerId] = it.position
-                                                }
-                                            }
-                                        } else {
-                                            // No marker in pickup range - check for barycenter or hidden reference first
-                                            var clusterTargetFound = false
-                                            if (clusterConfigs.isNotEmpty()) {
-                                                // Check each cluster for barycenter (mode 1) or hidden reference (mode 0)
-                                                for (clusterId in 1..10) {
-                                                    if (draggingBarycenters.containsValue(clusterId) || draggingHiddenRefs.containsValue(clusterId)) continue
+                                        // Check for barycenter or hidden reference FIRST
+                                        // (barycenters overlap with markers, so must be checked before markers)
+                                        var clusterTargetFound = false
+                                        if (clusterConfigs.isNotEmpty()) {
+                                            for (clusterId in 1..10) {
+                                                if (draggingBarycenters.containsValue(clusterId) || draggingHiddenRefs.containsValue(clusterId)) continue
 
-                                                    // First check for barycenter (mode 1)
-                                                    val barycenter = findClusterBarycenter(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
-                                                    if (barycenter != null && distance(touchPosition, barycenter) <= markerRadius * pickupRadiusMultiplier) {
-                                                        if (draggingBarycenters.size + draggingMarkers.size + draggingHiddenRefs.size < 10) {
-                                                            draggingBarycenters[pointerValue] = clusterId
-                                                            pointerIdToCurrentLogicalPosition[pointerId] = barycenter
-                                                            clusterTargetFound = true
-                                                            break
-                                                        }
+                                                // Check for barycenter (mode 1)
+                                                val barycenter = findClusterBarycenter(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
+                                                if (barycenter != null && distance(touchPosition, barycenter) <= markerRadius * pickupRadiusMultiplier) {
+                                                    if (draggingBarycenters.size + draggingMarkers.size + draggingHiddenRefs.size < 10) {
+                                                        draggingBarycenters[pointerValue] = clusterId
+                                                        pointerIdToCurrentLogicalPosition[pointerId] = barycenter
+                                                        clusterTargetFound = true
+                                                        break
                                                     }
+                                                }
 
-                                                    // Then check for hidden reference (mode 0)
-                                                    val hiddenRef = findHiddenClusterReference(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
-                                                    if (hiddenRef != null && distance(touchPosition, hiddenRef) <= markerRadius * pickupRadiusMultiplier) {
-                                                        if (draggingBarycenters.size + draggingMarkers.size + draggingHiddenRefs.size < 10) {
-                                                            draggingHiddenRefs[pointerValue] = clusterId
-                                                            pointerIdToCurrentLogicalPosition[pointerId] = hiddenRef
-                                                            clusterTargetFound = true
-                                                            break
-                                                        }
+                                                // Check for hidden reference (mode 0)
+                                                val hiddenRef = findHiddenClusterReference(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
+                                                if (hiddenRef != null && distance(touchPosition, hiddenRef) <= markerRadius * pickupRadiusMultiplier) {
+                                                    if (draggingBarycenters.size + draggingMarkers.size + draggingHiddenRefs.size < 10) {
+                                                        draggingHiddenRefs[pointerValue] = clusterId
+                                                        pointerIdToCurrentLogicalPosition[pointerId] = hiddenRef
+                                                        clusterTargetFound = true
+                                                        break
                                                     }
                                                 }
                                             }
+                                        }
 
-                                            // If no cluster target found, check for vector control (secondary touch)
-                                            if (!clusterTargetFound) {
+                                        if (!clusterTargetFound) {
+                                            // No cluster target - check for regular marker
+                                            val candidateMarkers =
+                                                activeMarkersSnapshot.filterIndexed { _, m ->
+                                                    val originalMarker = currentMarkersState.getOrNull(m.id -1)
+                                                    originalMarker != null && originalMarker.isVisible &&
+                                                            !originalMarker.isLocked &&
+                                                            !draggingMarkers.containsValue(m.id) &&
+                                                            distance(
+                                                                touchPosition,
+                                                                m.position
+                                                            ) <= m.radius * pickupRadiusMultiplier
+                                                }
+
+                                            if (candidateMarkers.isNotEmpty()) {
+                                                val markerToDrag = candidateMarkers.minWithOrNull(
+                                                    compareBy<Marker> { marker -> distance(touchPosition, marker.position) }
+                                                        .thenBy { marker -> marker.id }
+                                                )
+                                                markerToDrag?.let {
+                                                    if (draggingMarkers.size < 10) {
+                                                        draggingMarkers[pointerValue] = it.id
+                                                        pointerIdToCurrentLogicalPosition[pointerId] = it.position
+                                                    }
+                                                }
+                                            } else {
+                                                // No cluster target and no marker found - check for vector control (secondary touch)
                                                 var vectorControlCreated = false
 
                                                 // Check for secondary touch on dragged cluster targets (barycenters or hidden refs)
@@ -942,6 +932,8 @@ fun InputMapTab(
                                                             ?: findHiddenClusterReference(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
 
                                                         referencePos?.let { refPos ->
+                                                            val initDist = calculateDistance(refPos, touchPosition)
+                                                            val initAngle = calculateAngle(refPos, touchPosition)
                                                             vectorControls[pointerValue] = VectorControl(
                                                                 markerId = 0,  // Not tracking a specific marker
                                                                 clusterId = clusterId,
@@ -950,7 +942,9 @@ fun InputMapTab(
                                                                 initialTouchPosition = touchPosition,
                                                                 currentTouchPosition = touchPosition,
                                                                 startZ = 0f,
-                                                                startRotation = 0f  // Cluster rotation is cumulative
+                                                                startRotation = 0f,  // Cluster rotation is cumulative
+                                                                previousDistance = initDist,
+                                                                previousAngle = initAngle
                                                             )
                                                             vectorControlsUpdateTrigger++
                                                             vectorControlCreated = true
@@ -1409,8 +1403,8 @@ fun InputMapTab(
                     }
                 } else {
                     // Cluster target: recalculate barycenter or hidden ref position
-                    findClusterBarycenter(vectorControl.clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
-                        ?: findHiddenClusterReference(vectorControl.clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
+                    findClusterBarycenter(vectorControl.clusterId, currentMarkersState.take(numberOfInputs), currentClusterConfigs)
+                        ?: findHiddenClusterReference(vectorControl.clusterId, currentMarkersState.take(numberOfInputs), currentClusterConfigs)
                 }
 
                 if (currentReferencePosition != null) {
@@ -1439,7 +1433,7 @@ fun InputMapTab(
             }
 
             // Draw cluster relationship lines (behind markers)
-            if (clusterConfigs.isNotEmpty()) {
+            if (currentClusterConfigs.isNotEmpty()) {
                 // Build markers with current positions (including local drag positions)
                 val displayMarkers = currentMarkersState.take(numberOfInputs).map { marker ->
                     if (localMarkerPositions.containsKey(marker.id)) {
@@ -1453,7 +1447,7 @@ fun InputMapTab(
                 }
                 drawClusterLines(
                     markers = displayMarkers,
-                    clusterConfigs = clusterConfigs,
+                    clusterConfigs = currentClusterConfigs,
                     barycenterRadius = markerRadius * 0.6f
                 )
             }

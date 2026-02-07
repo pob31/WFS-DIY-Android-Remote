@@ -522,17 +522,9 @@ class OscService : Service() {
             revision = currentState.revision + 1  // Increment to force Compose change detection
         )
 
-        // Special handling for cluster assignment: update marker's clusterId
-        if (oscPath == "/remoteInput/cluster" && intValue != null) {
-            val updatedMarkers = _markers.value.map { marker ->
-                if (marker.id == inputId) {
-                    marker.copy(clusterId = intValue)
-                } else {
-                    marker
-                }
-            }
-            _markers.value = updatedMarkers
-        }
+        // Note: cluster assignment (clusterId) is synced to markers via
+        // inputParametersState -> LaunchedEffect in MainActivity, not directly here.
+        // Direct _markers updates here would race with syncMarkers() from MainActivity.
     }
     
     fun startOscServerWithCanvasDimensions(canvasWidth: Float, canvasHeight: Float) {
