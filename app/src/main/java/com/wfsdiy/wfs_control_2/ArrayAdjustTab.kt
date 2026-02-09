@@ -56,11 +56,9 @@ fun ArrayAdjustTab() {
             .fillMaxSize()
             .background(Color.Black) // Overall background for the tab container
     ) {
-        Spacer(modifier = Modifier.weight(1f)) // Empty row above, proportional height
-
         Row(
             modifier = Modifier
-                .weight(9f) // Main content area, proportional height for 9 conceptual rows
+                .weight(1f) // Main content area fills available height
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp), // Padding for the group of columns
             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -70,7 +68,7 @@ fun ArrayAdjustTab() {
                 modifier = Modifier
                     .weight(sideColumnWeight)
                     .fillMaxHeight(),
-                arrayLabels = List(5) { "Array ${it + 1}" },
+                arrayLabels = List(10) { "Array ${it + 1}" },
                 arrayLabelFontSize = arrayLabelFontSize
             )
 
@@ -145,12 +143,11 @@ fun ArrayAdjustTab() {
                 modifier = Modifier
                     .weight(sideColumnWeight)
                     .fillMaxHeight(),
-                arrayLabels = List(5) { "Array ${it + 1}" },
+                arrayLabels = List(10) { "Array ${it + 1}" },
                 arrayLabelFontSize = arrayLabelFontSize
             )
         }
 
-        Spacer(modifier = Modifier.weight(1f)) // Empty row below, proportional height
     }
 }
 
@@ -168,7 +165,7 @@ fun ColumnScope.HeaderCell(text: String, themeColor: Color, fontSize: TextUnit =
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .weight(1f) // For the first conceptual row
+            .weight(0.5f) // Shorter header row to fit 10 array rows
             .background(themeColor.copy(alpha = 0.5f))
             .padding(vertical = 4.dp, horizontal = 2.dp),
         contentAlignment = Alignment.Center
@@ -182,7 +179,7 @@ fun ColumnScope.TwoSplitCell(labels: Pair<String, String>, themeColor: Color, la
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .weight(1f), // For this conceptual row's height in the parent Column
+            .weight(0.5f), // Shorter header row to fit 10 array rows
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(modifier = Modifier.weight(1f).fillMaxHeight().background(themeColor.copy(alpha = 0.3f)).padding(2.dp), contentAlignment = Alignment.Center) {
@@ -200,7 +197,7 @@ fun ColumnScope.FourSplitCell(labels: List<String>, themeColor: Color, labelFont
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .weight(1f), // For this conceptual row's height in the parent Column
+            .weight(0.5f), // Shorter header row to fit 10 array rows
         verticalAlignment = Alignment.CenterVertically
     ) {
         labels.forEachIndexed { index, label ->
@@ -216,7 +213,7 @@ fun ColumnScope.FourSplitCell(labels: List<String>, themeColor: Color, labelFont
 
 @Composable
 fun ButtonCell(
-    arrayNumber: Int, // 1 to 5
+    arrayNumber: Int, // 1 to 10
     buttonIndexInRow: Int, // 0 to 3
     columnIdentifier: String,
     themeColor: Color
@@ -273,12 +270,14 @@ fun SideColumn(modifier: Modifier = Modifier, arrayLabels: List<String>, arrayLa
         TwoSplitCell(labels = Pair(" ", " "), themeColor = defaultColumnColor, labelFontSize = 12.sp)
         FourSplitCell(labels = List(4) { " " }, themeColor = defaultColumnColor, labelFontSize = 12.sp)
 
-        // Rows 4-8: Array Labels
-        arrayLabels.forEach { label ->
+        // Array label rows with alternating backgrounds
+        arrayLabels.forEachIndexed { index, label ->
+            val rowBackground = if (index % 2 == 0) Color.Transparent else Color.White.copy(alpha = 0.15f)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .weight(1f)
+                    .background(rowBackground),
                 contentAlignment = Alignment.Center
             ) {
                  Text(label, fontSize = arrayLabelFontSize, color = Color.White, textAlign = TextAlign.Center)
@@ -310,12 +309,14 @@ fun ControlColumn(
         TwoSplitCell(labels = row2Labels, themeColor = themeColor, labelFontSize = row2FontSize)
         FourSplitCell(labels = row3AndLastLabels, themeColor = themeColor)
 
-        // Rows 4-8: Five rows of four temporary buttons
-        repeat(5) { arrayIndex -> // arrayIndex will be 0 to 4
+        // 10 rows of four buttons with alternating backgrounds
+        repeat(10) { arrayIndex -> // arrayIndex will be 0 to 9
+            val rowBackground = if (arrayIndex % 2 == 0) Color.Transparent else Color.White.copy(alpha = 0.15f)
              Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f), // Weight for this conceptual button row's height
+                    .weight(1f)
+                    .background(rowBackground), // Alternating dim rows
                 horizontalArrangement = Arrangement.spacedBy(1.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
