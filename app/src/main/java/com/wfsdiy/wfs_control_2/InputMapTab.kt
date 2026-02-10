@@ -1316,14 +1316,14 @@ fun InputMapTab(
 
             val headerPaint = Paint().apply {
                 color = android.graphics.Color.WHITE
-                textSize = 16f
+                textSize = canvasHeight / 40f
                 textAlign = Paint.Align.CENTER
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             }
             drawContext.canvas.nativeCanvas.drawText(
                 secondaryTouchText,
                 canvasWidth / 2f,
-                25f, // Position above the grid
+                canvasHeight / 40f + 8f, // Position above the grid
                 headerPaint
             )
 
@@ -1429,6 +1429,30 @@ fun InputMapTab(
                         end = vectorControl.currentTouchPosition,
                         strokeWidth = 2f
                     )
+
+                    // Draw height/rotation label for input targets
+                    if (vectorControl.targetType == 0) {
+                        val initialAngle = calculateAngle(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
+                        val currentAngle = calculateAngle(currentReferencePosition, vectorControl.currentTouchPosition)
+                        val newRotation = vectorControl.startRotation - (currentAngle - initialAngle)
+
+                        val initialDistance = calculateDistance(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
+                        val currentDistance = calculateDistance(currentReferencePosition, vectorControl.currentTouchPosition)
+                        val newHeight = if (initialDistance > 10f) {
+                            val distanceRatio = currentDistance / initialDistance
+                            (vectorControl.startZ + (distanceRatio - 1f) * 3f).coerceIn(0f, 20f)
+                        } else {
+                            vectorControl.startZ
+                        }
+
+                        drawHeightRotationLabel(
+                            anchorPosition = greyLineEnd,
+                            height = newHeight,
+                            rotationDegrees = newRotation,
+                            canvasWidth = canvasWidth,
+                            textPaint = textPaint
+                        )
+                    }
                 }
             }
 
@@ -1448,7 +1472,8 @@ fun InputMapTab(
                 drawClusterLines(
                     markers = displayMarkers,
                     clusterConfigs = currentClusterConfigs,
-                    barycenterRadius = markerRadius * 0.6f
+                    barycenterRadius = markerRadius * 0.6f,
+                    textPaint = textPaint
                 )
             }
 
@@ -1497,6 +1522,22 @@ fun InputMapTab(
 
                 // Assuming drawMarker is defined elsewhere and handles its own textPaint settings for visibility/zoom
                 drawMarker(displayMarker, draggingMarkers.containsValue(marker.id), textPaint, false, stageWidth, stageDepth, stageOriginX, stageOriginY, canvasWidth, canvasHeight, !isPhone)
+            }
+
+            // Draw drag coordinates for markers being dragged
+            draggingMarkers.values.toSet().forEach { markerId ->
+                val canvasPos = localMarkerPositions[markerId]
+                val stagePos = markerStagePositions[markerId]
+                if (canvasPos != null && stagePos != null) {
+                    drawDragCoordinates(
+                        position = canvasPos,
+                        stageX = stagePos.first,
+                        stageY = stagePos.second,
+                        canvasWidth = canvasWidth,
+                        markerRadius = markerRadius,
+                        textPaint = textPaint
+                    )
+                }
             }
         }
 

@@ -188,6 +188,8 @@ fun <T> DrawScope.drawMarker(
     val baseTextSize = referenceDimension / (if (isClusterMarker) 40f else 45f) // Larger text (was 45f/52.5f)
     val dynamicBaseTextSizePx = if (isTablet) baseTextSize * 0.9f else baseTextSize // 10% smaller on tablets
 
+    textPaint.textAlign = Paint.Align.CENTER
+    textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     textPaint.color = labelColor
     val idText = id.toString()
 
@@ -281,7 +283,8 @@ fun DrawScope.drawOriginMarker(
 fun DrawScope.drawClusterLines(
     markers: List<Marker>,
     clusterConfigs: List<ClusterConfig>,
-    barycenterRadius: Float = 20f
+    barycenterRadius: Float = 20f,
+    textPaint: Paint? = null
 ) {
     // Process each cluster configuration
     clusterConfigs.forEach { config ->
@@ -350,7 +353,15 @@ fun DrawScope.drawClusterLines(
             )
 
             // Draw cluster number in center
-            // Note: For text we'd need native canvas, keep it simple with just the circle
+            if (textPaint != null) {
+                textPaint.color = android.graphics.Color.BLACK
+                textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                textPaint.textSize = barycenterRadius * 1.2f
+                textPaint.textAlign = Paint.Align.CENTER
+                val metrics = textPaint.fontMetrics
+                val textY = barycenter.y - (metrics.ascent + metrics.descent) / 2f
+                drawContext.canvas.nativeCanvas.drawText(config.id.toString(), barycenter.x, textY, textPaint)
+            }
         }
 
         // Draw hidden reference marker if in First Input mode and reference is hidden
@@ -361,6 +372,17 @@ fun DrawScope.drawClusterLines(
                 radius = barycenterRadius,
                 center = referenceMarker.position
             )
+
+            // Draw cluster number in center
+            if (textPaint != null) {
+                textPaint.color = android.graphics.Color.BLACK
+                textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                textPaint.textSize = barycenterRadius * 1.2f
+                textPaint.textAlign = Paint.Align.CENTER
+                val metrics = textPaint.fontMetrics
+                val textY = referenceMarker.position.y - (metrics.ascent + metrics.descent) / 2f
+                drawContext.canvas.nativeCanvas.drawText(config.id.toString(), referenceMarker.position.x, textY, textPaint)
+            }
         }
     }
 }
@@ -629,5 +651,58 @@ private fun DrawScope.drawCircularStageLabels(
         val rightLabel = "(${String.format(Locale.US, "%.1f", eastX)}, 0)"
         val rightCanvasX = rightPos.x - padding
         drawContext.canvas.nativeCanvas.drawText(rightLabel, rightCanvasX, rightPos.y, paint)
+    }
+}
+
+/**
+ * Draw stage coordinates next to a marker being dragged.
+ * Yellow text "(X.X, Y.Y)" that flips left/right based on screen half.
+ */
+fun DrawScope.drawDragCoordinates(
+    position: Offset,
+    stageX: Float,
+    stageY: Float,
+    canvasWidth: Float,
+    markerRadius: Float,
+    textPaint: Paint
+) {
+    val label = "(${String.format(Locale.US, "%.1f", stageX)}, ${String.format(Locale.US, "%.1f", stageY)})"
+    textPaint.color = 0xFFFFFF00.toInt()  // Yellow
+    textPaint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+    textPaint.textSize = min(size.width, size.height) / 40f * 0.6f
+
+    val offset = markerRadius + 5f
+    if (position.x < canvasWidth / 2f) {
+        textPaint.textAlign = Paint.Align.LEFT
+        drawContext.canvas.nativeCanvas.drawText(label, position.x + offset, position.y, textPaint)
+    } else {
+        textPaint.textAlign = Paint.Align.RIGHT
+        drawContext.canvas.nativeCanvas.drawText(label, position.x - offset, position.y, textPaint)
+    }
+}
+
+/**
+ * Draw height and rotation values near the grey reference endpoint during secondary touch.
+ * Yellow text "Z=X.XXm  R=XXX°" that flips left/right based on screen half.
+ */
+fun DrawScope.drawHeightRotationLabel(
+    anchorPosition: Offset,
+    height: Float,
+    rotationDegrees: Float,
+    canvasWidth: Float,
+    textPaint: Paint
+) {
+    val label = "Z=${String.format(Locale.US, "%.2f", height)}m  R=${rotationDegrees.toInt()}\u00B0"
+    textPaint.color = 0xFFFFFF00.toInt()  // Yellow
+    textPaint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+    textPaint.textSize = min(size.width, size.height) / 40f * 0.6f
+
+    val offset = 8f
+    if (anchorPosition.x < canvasWidth / 2f) {
+        textPaint.textAlign = Paint.Align.LEFT
+        drawContext.canvas.nativeCanvas.drawText(label, anchorPosition.x + offset, anchorPosition.y, textPaint)
+    } else {
+        textPaint.textAlign = Paint.Align.RIGHT
+        drawContext.canvas.nativeCanvas.drawText(label, anchorPosition.x - offset, anchorPosition.y, textPaint)
     }
 }
