@@ -1316,9 +1316,9 @@ fun InputMapTab(
 
             val headerPaint = Paint().apply {
                 color = android.graphics.Color.WHITE
-                textSize = canvasHeight / 40f
+                textSize = canvasHeight / 60f
                 textAlign = Paint.Align.CENTER
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             }
             drawContext.canvas.nativeCanvas.drawText(
                 secondaryTouchText,

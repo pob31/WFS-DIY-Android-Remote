@@ -228,7 +228,7 @@ class MainActivity : ComponentActivity() {
     private fun hideSystemUI() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val controller = WindowCompat.getInsetsController(window, window.decorView)
-            controller?.apply {
+            controller.apply {
                 hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
                 systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
@@ -385,7 +385,7 @@ fun WFSControlApp() {
                 selectedTab == 3) {
                 // Get current selected input ID and request parameter refresh
                 val selectedInputId = inputParametersState?.selectedInputId ?: 1
-                viewModel?.requestInputParameters(selectedInputId)
+                viewModel.requestInputParameters(selectedInputId)
             }
         }
     }
@@ -619,10 +619,16 @@ fun WFSControlApp() {
         Column(modifier = Modifier.fillMaxSize()) {
             // Tab row with connection indicator
             Box(modifier = Modifier.height(dynamicTabRowHeight)) {
-                TabRow(
+                PrimaryTabRow(
                     selectedTabIndex = selectedTab,
                     modifier = Modifier.fillMaxSize(),
-                    containerColor = Color.DarkGray // Set a base color for the TabRow if needed, otherwise it might be transparent or themed
+                    containerColor = Color.DarkGray,
+                    indicator = {
+                        TabRowDefaults.PrimaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(selectedTab, matchContentSize = false),
+                            width = 60.dp
+                        )
+                    }
                 ) {
                     tabs.forEachIndexed { index, title ->
                         val isSelected = selectedTab == index
