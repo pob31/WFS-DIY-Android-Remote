@@ -4610,11 +4610,54 @@ private fun RenderLFOSection(
                     )
                 }
 
-                // Rate X + Amplitude X (stacked vertically) - Increased width
+                // Amplitude X + Rate X (stacked vertically) - Increased width
                 Column(
                     modifier = Modifier.weight(1.5f),
                     verticalArrangement = Arrangement.spacedBy(spacing.smallSpacing)
                 ) {
+                    // Amplitude X
+                    Column {
+                        Text("Amplitude X", fontSize = 12.sp, color = if (isAmplitudeXEnabled) Color.White else Color.Gray)
+                        BidirectionalSlider(
+                        value = LFOamplitudeXValue,
+                        onValueChange = { newValue ->
+                            LFOamplitudeXValue = newValue
+                            LFOamplitudeXDisplayValue = String.format(Locale.US, "%.2f", newValue)
+                            val normalized = newValue / 50f
+                            selectedChannel.setParameter("LFOamplitudeX", InputParameterValue(
+                                normalizedValue = normalized,
+                                stringValue = "",
+                                displayValue = "${String.format(Locale.US, "%.2f", newValue)}m"
+                            ))
+                            viewModel.sendInputParameterFloat("/remoteInput/LFOamplitudeX", inputId, newValue)
+                        },
+                        modifier = Modifier.fillMaxWidth().height(horizontalSliderHeight),
+                        sliderColor = if (isAmplitudeXEnabled) Color(0xFF4CAF50) else Color.Gray,
+                        trackBackgroundColor = Color.DarkGray,
+                        orientation = SliderOrientation.HORIZONTAL,
+                        valueRange = 0f..50f,
+                        displayedValue = LFOamplitudeXDisplayValue,
+                        isValueEditable = true,
+                        onDisplayedValueChange = { /* Typing handled internally */ },
+                        onValueCommit = { committedValue ->
+                            committedValue.toFloatOrNull()?.let { value ->
+                                val coercedValue = value.coerceIn(0f, 50f)
+                                LFOamplitudeXValue = coercedValue
+                                LFOamplitudeXDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
+                                val normalized = coercedValue / 50f
+                                selectedChannel.setParameter("LFOamplitudeX", InputParameterValue(
+                                    normalizedValue = normalized,
+                                    stringValue = "",
+                                    displayValue = "${String.format(Locale.US, "%.2f", coercedValue)}m"
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/LFOamplitudeX", inputId, coercedValue)
+                            }
+                        },
+                        valueUnit = "m",
+                        valueTextColor = if (isAmplitudeXEnabled) Color.White else Color.Gray
+                    )
+                    }
+
                     // Rate X
                     Column {
                         Text("Rate X", fontSize = 12.sp, color = if (isRateXEnabled) Color.White else Color.Gray)
@@ -4656,49 +4699,6 @@ private fun RenderLFOSection(
                         },
                         valueUnit = "x",
                         valueTextColor = if (isRateXEnabled) Color.White else Color.Gray
-                    )
-                    }
-
-                    // Amplitude X
-                    Column {
-                        Text("Amplitude X", fontSize = 12.sp, color = if (isAmplitudeXEnabled) Color.White else Color.Gray)
-                        BidirectionalSlider(
-                        value = LFOamplitudeXValue,
-                        onValueChange = { newValue ->
-                            LFOamplitudeXValue = newValue
-                            LFOamplitudeXDisplayValue = String.format(Locale.US, "%.2f", newValue)
-                            val normalized = newValue / 50f
-                            selectedChannel.setParameter("LFOamplitudeX", InputParameterValue(
-                                normalizedValue = normalized,
-                                stringValue = "",
-                                displayValue = "${String.format(Locale.US, "%.2f", newValue)}m"
-                            ))
-                            viewModel.sendInputParameterFloat("/remoteInput/LFOamplitudeX", inputId, newValue)
-                        },
-                        modifier = Modifier.fillMaxWidth().height(horizontalSliderHeight),
-                        sliderColor = if (isAmplitudeXEnabled) Color(0xFF4CAF50) else Color.Gray,
-                        trackBackgroundColor = Color.DarkGray,
-                        orientation = SliderOrientation.HORIZONTAL,
-                        valueRange = 0f..50f,
-                        displayedValue = LFOamplitudeXDisplayValue,
-                        isValueEditable = true,
-                        onDisplayedValueChange = { /* Typing handled internally */ },
-                        onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
-                                val coercedValue = value.coerceIn(0f, 50f)
-                                LFOamplitudeXValue = coercedValue
-                                LFOamplitudeXDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
-                                val normalized = coercedValue / 50f
-                                selectedChannel.setParameter("LFOamplitudeX", InputParameterValue(
-                                    normalizedValue = normalized,
-                                    stringValue = "",
-                                    displayValue = "${String.format(Locale.US, "%.2f", coercedValue)}m"
-                                ))
-                                viewModel.sendInputParameterFloat("/remoteInput/LFOamplitudeX", inputId, coercedValue)
-                            }
-                        },
-                        valueUnit = "m",
-                        valueTextColor = if (isAmplitudeXEnabled) Color.White else Color.Gray
                     )
                     }
                 }
@@ -4761,11 +4761,54 @@ private fun RenderLFOSection(
                     )
                 }
 
-                // Rate Y + Amplitude Y (stacked vertically) - Increased width
+                // Amplitude Y + Rate Y (stacked vertically) - Increased width
                 Column(
                     modifier = Modifier.weight(1.5f),
                     verticalArrangement = Arrangement.spacedBy(spacing.smallSpacing)
                 ) {
+                    // Amplitude Y
+                    Column {
+                        Text("Amplitude Y", fontSize = 12.sp, color = if (isAmplitudeYEnabled) Color.White else Color.Gray)
+                        BidirectionalSlider(
+                        value = LFOamplitudeYValue,
+                        onValueChange = { newValue ->
+                            LFOamplitudeYValue = newValue
+                            LFOamplitudeYDisplayValue = String.format(Locale.US, "%.2f", newValue)
+                            val normalized = newValue / 50f
+                            selectedChannel.setParameter("LFOamplitudeY", InputParameterValue(
+                                normalizedValue = normalized,
+                                stringValue = "",
+                                displayValue = "${String.format(Locale.US, "%.2f", newValue)}m"
+                            ))
+                            viewModel.sendInputParameterFloat("/remoteInput/LFOamplitudeY", inputId, newValue)
+                        },
+                        modifier = Modifier.fillMaxWidth().height(horizontalSliderHeight),
+                        sliderColor = if (isAmplitudeYEnabled) Color(0xFF4CAF50) else Color.Gray,
+                        trackBackgroundColor = Color.DarkGray,
+                        orientation = SliderOrientation.HORIZONTAL,
+                        valueRange = 0f..50f,
+                        displayedValue = LFOamplitudeYDisplayValue,
+                        isValueEditable = true,
+                        onDisplayedValueChange = { /* Typing handled internally */ },
+                        onValueCommit = { committedValue ->
+                            committedValue.toFloatOrNull()?.let { value ->
+                                val coercedValue = value.coerceIn(0f, 50f)
+                                LFOamplitudeYValue = coercedValue
+                                LFOamplitudeYDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
+                                val normalized = coercedValue / 50f
+                                selectedChannel.setParameter("LFOamplitudeY", InputParameterValue(
+                                    normalizedValue = normalized,
+                                    stringValue = "",
+                                    displayValue = "${String.format(Locale.US, "%.2f", coercedValue)}m"
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/LFOamplitudeY", inputId, coercedValue)
+                            }
+                        },
+                        valueUnit = "m",
+                        valueTextColor = if (isAmplitudeYEnabled) Color.White else Color.Gray
+                    )
+                    }
+
                     // Rate Y
                     Column {
                         Text("Rate Y", fontSize = 12.sp, color = if (isRateYEnabled) Color.White else Color.Gray)
@@ -4807,49 +4850,6 @@ private fun RenderLFOSection(
                         },
                         valueUnit = "x",
                         valueTextColor = if (isRateYEnabled) Color.White else Color.Gray
-                    )
-                    }
-
-                    // Amplitude Y
-                    Column {
-                        Text("Amplitude Y", fontSize = 12.sp, color = if (isAmplitudeYEnabled) Color.White else Color.Gray)
-                        BidirectionalSlider(
-                        value = LFOamplitudeYValue,
-                        onValueChange = { newValue ->
-                            LFOamplitudeYValue = newValue
-                            LFOamplitudeYDisplayValue = String.format(Locale.US, "%.2f", newValue)
-                            val normalized = newValue / 50f
-                            selectedChannel.setParameter("LFOamplitudeY", InputParameterValue(
-                                normalizedValue = normalized,
-                                stringValue = "",
-                                displayValue = "${String.format(Locale.US, "%.2f", newValue)}m"
-                            ))
-                            viewModel.sendInputParameterFloat("/remoteInput/LFOamplitudeY", inputId, newValue)
-                        },
-                        modifier = Modifier.fillMaxWidth().height(horizontalSliderHeight),
-                        sliderColor = if (isAmplitudeYEnabled) Color(0xFF4CAF50) else Color.Gray,
-                        trackBackgroundColor = Color.DarkGray,
-                        orientation = SliderOrientation.HORIZONTAL,
-                        valueRange = 0f..50f,
-                        displayedValue = LFOamplitudeYDisplayValue,
-                        isValueEditable = true,
-                        onDisplayedValueChange = { /* Typing handled internally */ },
-                        onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
-                                val coercedValue = value.coerceIn(0f, 50f)
-                                LFOamplitudeYValue = coercedValue
-                                LFOamplitudeYDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
-                                val normalized = coercedValue / 50f
-                                selectedChannel.setParameter("LFOamplitudeY", InputParameterValue(
-                                    normalizedValue = normalized,
-                                    stringValue = "",
-                                    displayValue = "${String.format(Locale.US, "%.2f", coercedValue)}m"
-                                ))
-                                viewModel.sendInputParameterFloat("/remoteInput/LFOamplitudeY", inputId, coercedValue)
-                            }
-                        },
-                        valueUnit = "m",
-                        valueTextColor = if (isAmplitudeYEnabled) Color.White else Color.Gray
                     )
                     }
                 }
@@ -4912,11 +4912,54 @@ private fun RenderLFOSection(
                     )
                 }
 
-                // Rate Z + Amplitude Z (stacked vertically) - Increased width
+                // Amplitude Z + Rate Z (stacked vertically) - Increased width
                 Column(
                     modifier = Modifier.weight(1.5f),
                     verticalArrangement = Arrangement.spacedBy(spacing.smallSpacing)
                 ) {
+                    // Amplitude Z
+                    Column {
+                        Text("Amplitude Z", fontSize = 12.sp, color = if (isAmplitudeZEnabled) Color.White else Color.Gray)
+                        BidirectionalSlider(
+                        value = LFOamplitudeZValue,
+                        onValueChange = { newValue ->
+                            LFOamplitudeZValue = newValue
+                            LFOamplitudeZDisplayValue = String.format(Locale.US, "%.2f", newValue)
+                            val normalized = newValue / 50f
+                            selectedChannel.setParameter("LFOamplitudeZ", InputParameterValue(
+                                normalizedValue = normalized,
+                                stringValue = "",
+                                displayValue = "${String.format(Locale.US, "%.2f", newValue)}m"
+                            ))
+                            viewModel.sendInputParameterFloat("/remoteInput/LFOamplitudeZ", inputId, newValue)
+                        },
+                        modifier = Modifier.fillMaxWidth().height(horizontalSliderHeight),
+                        sliderColor = if (isAmplitudeZEnabled) Color(0xFF4CAF50) else Color.Gray,
+                        trackBackgroundColor = Color.DarkGray,
+                        orientation = SliderOrientation.HORIZONTAL,
+                        valueRange = 0f..50f,
+                        displayedValue = LFOamplitudeZDisplayValue,
+                        isValueEditable = true,
+                        onDisplayedValueChange = { /* Typing handled internally */ },
+                        onValueCommit = { committedValue ->
+                            committedValue.toFloatOrNull()?.let { value ->
+                                val coercedValue = value.coerceIn(0f, 50f)
+                                LFOamplitudeZValue = coercedValue
+                                LFOamplitudeZDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
+                                val normalized = coercedValue / 50f
+                                selectedChannel.setParameter("LFOamplitudeZ", InputParameterValue(
+                                    normalizedValue = normalized,
+                                    stringValue = "",
+                                    displayValue = "${String.format(Locale.US, "%.2f", coercedValue)}m"
+                                ))
+                                viewModel.sendInputParameterFloat("/remoteInput/LFOamplitudeZ", inputId, coercedValue)
+                            }
+                        },
+                        valueUnit = "m",
+                        valueTextColor = if (isAmplitudeZEnabled) Color.White else Color.Gray
+                    )
+                    }
+
                     // Rate Z
                     Column {
                         Text("Rate Z", fontSize = 12.sp, color = if (isRateZEnabled) Color.White else Color.Gray)
@@ -4958,49 +5001,6 @@ private fun RenderLFOSection(
                         },
                         valueUnit = "x",
                         valueTextColor = if (isRateZEnabled) Color.White else Color.Gray
-                    )
-                    }
-
-                    // Amplitude Z
-                    Column {
-                        Text("Amplitude Z", fontSize = 12.sp, color = if (isAmplitudeZEnabled) Color.White else Color.Gray)
-                        BidirectionalSlider(
-                        value = LFOamplitudeZValue,
-                        onValueChange = { newValue ->
-                            LFOamplitudeZValue = newValue
-                            LFOamplitudeZDisplayValue = String.format(Locale.US, "%.2f", newValue)
-                            val normalized = newValue / 50f
-                            selectedChannel.setParameter("LFOamplitudeZ", InputParameterValue(
-                                normalizedValue = normalized,
-                                stringValue = "",
-                                displayValue = "${String.format(Locale.US, "%.2f", newValue)}m"
-                            ))
-                            viewModel.sendInputParameterFloat("/remoteInput/LFOamplitudeZ", inputId, newValue)
-                        },
-                        modifier = Modifier.fillMaxWidth().height(horizontalSliderHeight),
-                        sliderColor = if (isAmplitudeZEnabled) Color(0xFF4CAF50) else Color.Gray,
-                        trackBackgroundColor = Color.DarkGray,
-                        orientation = SliderOrientation.HORIZONTAL,
-                        valueRange = 0f..50f,
-                        displayedValue = LFOamplitudeZDisplayValue,
-                        isValueEditable = true,
-                        onDisplayedValueChange = { /* Typing handled internally */ },
-                        onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
-                                val coercedValue = value.coerceIn(0f, 50f)
-                                LFOamplitudeZValue = coercedValue
-                                LFOamplitudeZDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
-                                val normalized = coercedValue / 50f
-                                selectedChannel.setParameter("LFOamplitudeZ", InputParameterValue(
-                                    normalizedValue = normalized,
-                                    stringValue = "",
-                                    displayValue = "${String.format(Locale.US, "%.2f", coercedValue)}m"
-                                ))
-                                viewModel.sendInputParameterFloat("/remoteInput/LFOamplitudeZ", inputId, coercedValue)
-                            }
-                        },
-                        valueUnit = "m",
-                        valueTextColor = if (isAmplitudeZEnabled) Color.White else Color.Gray
                     )
                     }
                 }
