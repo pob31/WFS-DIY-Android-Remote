@@ -331,7 +331,7 @@ object InputParameterDefinitions {
             dataType = ParameterType.INT,
             minValue = 0f,
             maxValue = 1f,
-            enumValues = listOf("ON", "OFF")
+            enumValues = listOf("OFF", "ON")
         ),
         InputParameterDefinition(
             group = "Input",
@@ -489,7 +489,7 @@ object InputParameterDefinitions {
             dataType = ParameterType.INT,
             minValue = 0f,
             maxValue = 1f,
-            enumValues = listOf("ON", "OFF")
+            enumValues = listOf("OFF", "ON")
         ),
         InputParameterDefinition(
             group = "Live Source Attenuation",
@@ -606,7 +606,7 @@ object InputParameterDefinitions {
             dataType = ParameterType.INT,
             minValue = 0f,
             maxValue = 1f,
-            enumValues = listOf("ON", "OFF")
+            enumValues = listOf("OFF", "ON")
         ),
         InputParameterDefinition(
             group = "Floor Reflections",
@@ -634,14 +634,14 @@ object InputParameterDefinitions {
             dataType = ParameterType.INT,
             minValue = 0f,
             maxValue = 1f,
-            enumValues = listOf("ON", "OFF"),
+            enumValues = listOf("OFF", "ON"),
             conditionalEnable = "FRactive==1"
         ),
         InputParameterDefinition(
             group = "Floor Reflections",
             label = "Low Cut Freq",
             variableName = "FRlowCutFreq",
-            oscPath = "/remoteInput/FrlowCutFreq",
+            oscPath = "/remoteInput/FRlowCutFreq",
             isIncoming = true,
             isOutgoing = true,
             uiType = UIComponentType.H_SLIDER,
@@ -663,7 +663,7 @@ object InputParameterDefinitions {
             dataType = ParameterType.INT,
             minValue = 0f,
             maxValue = 1f,
-            enumValues = listOf("ON", "OFF"),
+            enumValues = listOf("OFF", "ON"),
             conditionalEnable = "FRactive==1"
         ),
         InputParameterDefinition(
@@ -754,7 +754,7 @@ object InputParameterDefinitions {
             dataType = ParameterType.INT,
             minValue = 0f,
             maxValue = 1f,
-            enumValues = listOf("ON", "OFF")
+            enumValues = listOf("OFF", "ON")
         ),
         InputParameterDefinition(
             group = "LFO",

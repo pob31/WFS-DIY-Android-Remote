@@ -432,50 +432,42 @@ class OscService : Service() {
                 )
             }
             intValue != null -> {
-                // Check if this is an ON/OFF switch that needs value inversion
-                val isOnOffSwitch = definition.enumValues != null &&
-                                   definition.enumValues.size == 2 &&
-                                   definition.enumValues[0] == "ON" &&
-                                   definition.enumValues[1] == "OFF"
-
-                // Invert for ON/OFF switches: OSC 1 (ON) -> UI index 0, OSC 0 (OFF) -> UI index 1
-                val uiValue = if (isOnOffSwitch) 1 - intValue else intValue
-
                 // For dropdowns and text buttons, don't normalize - store the integer directly
+                // ON/OFF switches use 0=OFF, 1=ON matching JUCE convention (no inversion needed)
                 // For direction dials, we need special handling to normalize with proper range coercion
                 val shouldNotNormalize = definition.uiType == UIComponentType.DROPDOWN ||
                                         definition.uiType == UIComponentType.TEXT_BUTTON ||
                                         (definition.formula == "x*360" && definition.dataType == ParameterType.INT)
 
                 val normalized = if (shouldNotNormalize) {
-                    uiValue.toFloat()
+                    intValue.toFloat()
                 } else if (definition.uiType == UIComponentType.DIRECTION_DIAL) {
                     // Special handling for direction dials: coerce to range and normalize
                     val coercedValue = when {
                         definition.formula == "(x*360)-180" -> {
                             // For rotation (-179 to 180): coerce using modulo and normalize
-                            val coerced = ((uiValue % 360) + 360) % 360
+                            val coerced = ((intValue % 360) + 360) % 360
                             val rangeValue = if (coerced > 180) coerced - 360 else coerced
                             (rangeValue + 180f) / 360f
                         }
                         else -> {
                             // For other direction dials, use standard reverse formula
-                            InputParameterDefinitions.reverseFormula(definition, uiValue.toFloat())
+                            InputParameterDefinitions.reverseFormula(definition, intValue.toFloat())
                         }
                     }
                     coercedValue
                 } else {
-                    InputParameterDefinitions.reverseFormula(definition, uiValue.toFloat())
+                    InputParameterDefinitions.reverseFormula(definition, intValue.toFloat())
                 }
 
                 val actualValue = if (shouldNotNormalize) {
-                    uiValue.toFloat()
+                    intValue.toFloat()
                 } else {
                     InputParameterDefinitions.applyFormula(definition, normalized)
                 }
 
-                val displayText = if (definition.enumValues != null && uiValue >= 0 && uiValue < definition.enumValues.size) {
-                    definition.enumValues[uiValue]
+                val displayText = if (definition.enumValues != null && intValue >= 0 && intValue < definition.enumValues.size) {
+                    definition.enumValues[intValue]
                 } else {
                     "${actualValue.toInt()}${definition.unit ?: ""}"
                 }

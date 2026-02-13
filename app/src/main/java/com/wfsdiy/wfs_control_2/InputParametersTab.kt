@@ -602,10 +602,10 @@ private fun RenderInputSection(
             ParameterDropdown(
                 label = "Cluster",
                 selectedIndex = clusterIndex,
-                options = listOf("none", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5", "Cluster 6", "Cluster 7", "Cluster 8", "Cluster 9", "Cluster 10"),
+                options = listOf("Single", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5", "Cluster 6", "Cluster 7", "Cluster 8", "Cluster 9", "Cluster 10"),
                 onSelectionChange = { index ->
                     clusterIndex = index
-                    val options = listOf("none", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5", "Cluster 6", "Cluster 7", "Cluster 8", "Cluster 9", "Cluster 10")
+                    val options = listOf("Single", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5", "Cluster 6", "Cluster 7", "Cluster 8", "Cluster 9", "Cluster 10")
                     selectedChannel.setParameter("cluster", InputParameterValue(
                         normalizedValue = index.toFloat(),
                         stringValue = "",
@@ -739,10 +739,10 @@ private fun RenderInputSection(
                 ParameterDropdown(
                     label = "Cluster",
                     selectedIndex = clusterIndex,
-                    options = listOf("none", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5", "Cluster 6", "Cluster 7", "Cluster 8", "Cluster 9", "Cluster 10"),
+                    options = listOf("Single", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5", "Cluster 6", "Cluster 7", "Cluster 8", "Cluster 9", "Cluster 10"),
                     onSelectionChange = { index ->
                         clusterIndex = index
-                        val options = listOf("none", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5", "Cluster 6", "Cluster 7", "Cluster 8", "Cluster 9", "Cluster 10")
+                        val options = listOf("Single", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5", "Cluster 6", "Cluster 7", "Cluster 8", "Cluster 9", "Cluster 10")
                         selectedChannel.setParameter("cluster", InputParameterValue(
                             normalizedValue = index.toFloat(),
                             stringValue = "",
@@ -1448,7 +1448,7 @@ private fun RenderInputSection(
 
     // Max Speed
     val maxSpeed = selectedChannel.getParameter("maxSpeed")
-    val isMaxSpeedEnabled = maxSpeedActiveIndex == 0 // 0 = ON, 1 = OFF
+    val isMaxSpeedEnabled = maxSpeedActiveIndex == 1 // 0 = OFF, 1 = ON
     var maxSpeedValue by remember { mutableStateOf(maxSpeed.normalizedValue) }
     var maxSpeedDisplayValue by remember {
         mutableStateOf(maxSpeed.displayValue.replace("m/s", "").trim().ifEmpty { "0.01" })
@@ -1539,18 +1539,18 @@ private fun RenderInputSection(
             ParameterTextButton(
                 label = "",
                 selectedIndex = maxSpeedActiveIndex,
-                options = listOf("Max Speed Limited", "Max Speed Unlimited"),
+                options = listOf("Max Speed Unlimited", "Max Speed Limited"),
                 onSelectionChange = { index ->
                     maxSpeedActiveIndex = index
                     selectedChannel.setParameter("maxSpeedActive", InputParameterValue(
                         normalizedValue = index.toFloat(),
                         stringValue = "",
-                        displayValue = listOf("Max Speed Limited", "Max Speed Unlimited")[index]
+                        displayValue = listOf("Max Speed Unlimited", "Max Speed Limited")[index]
                     ))
-                    viewModel.sendInputParameterInt("/remoteInput/maxSpeedActive", inputId, 1 - index)
+                    viewModel.sendInputParameterInt("/remoteInput/maxSpeedActive", inputId, index)
                 },
+                activeIndex = 1,
                 activeColor = getRowColorActive(3),
-                inactiveColor = getRowColorLight(3),
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -2338,7 +2338,7 @@ private fun RenderLiveSourceSection(
         liveSourceActiveIndex = liveSourceActive.normalizedValue.toInt().coerceIn(0, 1)
     }
 
-    val isLiveSourceEnabled = liveSourceActiveIndex == 0 // 0 = ON, 1 = OFF
+    val isLiveSourceEnabled = liveSourceActiveIndex == 1 // 0 = OFF, 1 = ON
 
     // Radius (greyed out when inactive) - Width Expansion Slider
     val radius = selectedChannel.getParameter("liveSourceRadius")
@@ -2480,18 +2480,18 @@ private fun RenderLiveSourceSection(
                         ParameterTextButton(
                             label = "",
                             selectedIndex = liveSourceActiveIndex,
-                            options = listOf("Enabled", "Disabled"),
+                            options = listOf("Disabled", "Enabled"),
                             onSelectionChange = { index ->
                                 liveSourceActiveIndex = index
                                 selectedChannel.setParameter("liveSourceActive", InputParameterValue(
                                     normalizedValue = index.toFloat(),
                                     stringValue = "",
-                                    displayValue = listOf("Enabled", "Disabled")[index]
+                                    displayValue = listOf("Disabled", "Enabled")[index]
                                 ))
-                                viewModel.sendInputParameterInt("/remoteInput/liveSourceActive", inputId, 1 - index)
+                                viewModel.sendInputParameterInt("/remoteInput/liveSourceActive", inputId, index)
                             },
+                            activeIndex = 1,
                             activeColor = getRowColorActive(5),
-                            inactiveColor = getRowColorLight(5),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -2821,18 +2821,18 @@ private fun RenderLiveSourceSection(
                     ParameterTextButton(
                         label = "",
                         selectedIndex = liveSourceActiveIndex,
-                        options = listOf("Enabled", "Disabled"),
+                        options = listOf("Disabled", "Enabled"),
                         onSelectionChange = { index ->
                             liveSourceActiveIndex = index
                             selectedChannel.setParameter("liveSourceActive", InputParameterValue(
                                 normalizedValue = index.toFloat(),
                                 stringValue = "",
-                                displayValue = listOf("Enabled", "Disabled")[index]
+                                displayValue = listOf("Disabled", "Enabled")[index]
                             ))
-                            viewModel.sendInputParameterInt("/remoteInput/liveSourceActive", inputId, 1 - index)
+                            viewModel.sendInputParameterInt("/remoteInput/liveSourceActive", inputId, index)
                         },
+                        activeIndex = 1,
                         activeColor = getRowColorActive(5),
-                        inactiveColor = getRowColorLight(5),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -3178,7 +3178,7 @@ private fun RenderFloorReflectionsSection(
         FRactiveIndex = FRactive.normalizedValue.toInt().coerceIn(0, 1)
     }
 
-    val isFREnabled = FRactiveIndex == 0 // 0 = ON, 1 = OFF
+    val isFREnabled = FRactiveIndex == 1 // 0 = OFF, 1 = ON
 
     // FRattenuation
     val FRattenuation = selectedChannel.getParameter("FRattenuation")
@@ -3202,7 +3202,7 @@ private fun RenderFloorReflectionsSection(
         FRlowCutActiveIndex = FRlowCutActive.normalizedValue.toInt().coerceIn(0, 1)
     }
 
-    val isFRLowCutEnabled = isFREnabled && FRlowCutActiveIndex == 0
+    val isFRLowCutEnabled = isFREnabled && FRlowCutActiveIndex == 1
 
     // Low Cut Freq
     val FRlowCutFreq = selectedChannel.getParameter("FRlowCutFreq")
@@ -3226,7 +3226,7 @@ private fun RenderFloorReflectionsSection(
         FRhighShelfActiveIndex = FRhighShelfActive.normalizedValue.toInt().coerceIn(0, 1)
     }
 
-    val isFRHighShelfEnabled = isFREnabled && FRhighShelfActiveIndex == 0
+    val isFRHighShelfEnabled = isFREnabled && FRhighShelfActiveIndex == 1
 
     // High Shelf Freq
     val FRhighShelfFreq = selectedChannel.getParameter("FRhighShelfFreq")
@@ -3331,18 +3331,18 @@ private fun RenderFloorReflectionsSection(
                         ParameterTextButton(
                             label = "",
                             selectedIndex = FRactiveIndex,
-                            options = listOf("Enabled", "Disabled"),
+                            options = listOf("Disabled", "Enabled"),
                             onSelectionChange = { index ->
                                 FRactiveIndex = index
                                 selectedChannel.setParameter("FRactive", InputParameterValue(
                                     normalizedValue = index.toFloat(),
                                     stringValue = "",
-                                    displayValue = listOf("Enabled", "Disabled")[index]
+                                    displayValue = listOf("Disabled", "Enabled")[index]
                                 ))
-                                viewModel.sendInputParameterInt("/remoteInput/FRactive", inputId, 1 - index)
+                                viewModel.sendInputParameterInt("/remoteInput/FRactive", inputId, index)
                             },
+                            activeIndex = 1,
                             activeColor = getRowColorActive(7),
-                            inactiveColor = getRowColorLight(7),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -3404,18 +3404,19 @@ private fun RenderFloorReflectionsSection(
                         ParameterTextButton(
                             label = "",
                             selectedIndex = FRlowCutActiveIndex,
-                            options = listOf("Low Cut Enabled", "Low Cut Disabled"),
+                            options = listOf("Low Cut Disabled", "Low Cut Enabled"),
                             onSelectionChange = { index ->
                                 FRlowCutActiveIndex = index
                                 selectedChannel.setParameter("FRlowCutActive", InputParameterValue(
                                     normalizedValue = index.toFloat(),
                                     stringValue = "",
-                                    displayValue = listOf("Low Cut Enabled", "Low Cut Disabled")[index]
+                                    displayValue = listOf("Low Cut Disabled", "Low Cut Enabled")[index]
                                 ))
-                                viewModel.sendInputParameterInt("/remoteInput/FRlowCutActive", inputId, 1 - index)
+                                viewModel.sendInputParameterInt("/remoteInput/FRlowCutActive", inputId, index)
                             },
+                            activeIndex = 1,
+                            dimmed = !isFREnabled,
                             activeColor = getRowColorActive(7),
-                            inactiveColor = getRowColorLight(7),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -3435,7 +3436,7 @@ private fun RenderFloorReflectionsSection(
                                     stringValue = "",
                                     displayValue = "${actualValue.toInt()}Hz"
                                 ))
-                                viewModel.sendInputParameterInt("/remoteInput/FrlowCutFreq", inputId, actualValue.toInt())
+                                viewModel.sendInputParameterInt("/remoteInput/FRlowCutFreq", inputId, actualValue.toInt())
                             },
                             modifier = Modifier.width(horizontalSliderWidth).height(horizontalSliderHeight),
                             sliderColor = if (isFRLowCutEnabled) getRowColor(7) else Color.Gray,
@@ -3457,7 +3458,7 @@ private fun RenderFloorReflectionsSection(
                                         stringValue = "",
                                         displayValue = "${coercedValue}Hz"
                                     ))
-                                    viewModel.sendInputParameterInt("/remoteInput/FrlowCutFreq", inputId, coercedValue)
+                                    viewModel.sendInputParameterInt("/remoteInput/FRlowCutFreq", inputId, coercedValue)
                                 }
                             },
                             valueUnit = "Hz",
@@ -3478,18 +3479,19 @@ private fun RenderFloorReflectionsSection(
                         ParameterTextButton(
                             label = "",
                             selectedIndex = FRhighShelfActiveIndex,
-                            options = listOf("High Shelf Enabled", "High Shelf Disabled"),
+                            options = listOf("High Shelf Disabled", "High Shelf Enabled"),
                             onSelectionChange = { index ->
                                 FRhighShelfActiveIndex = index
                                 selectedChannel.setParameter("FRhighShelfActive", InputParameterValue(
                                     normalizedValue = index.toFloat(),
                                     stringValue = "",
-                                    displayValue = listOf("High Shelf Enabled", "High Shelf Disabled")[index]
+                                    displayValue = listOf("High Shelf Disabled", "High Shelf Enabled")[index]
                                 ))
-                                viewModel.sendInputParameterInt("/remoteInput/FRhighShelfActive", inputId, 1 - index)
+                                viewModel.sendInputParameterInt("/remoteInput/FRhighShelfActive", inputId, index)
                             },
+                            activeIndex = 1,
+                            dimmed = !isFREnabled,
                             activeColor = getRowColorActive(8),
-                            inactiveColor = getRowColorLight(8),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -3699,18 +3701,18 @@ private fun RenderFloorReflectionsSection(
                     ParameterTextButton(
                         label = "",
                         selectedIndex = FRactiveIndex,
-                        options = listOf("Enabled", "Disabled"),
+                        options = listOf("Disabled", "Enabled"),
                         onSelectionChange = { index ->
                             FRactiveIndex = index
                             selectedChannel.setParameter("FRactive", InputParameterValue(
                                 normalizedValue = index.toFloat(),
                                 stringValue = "",
-                                displayValue = listOf("Enabled", "Disabled")[index]
+                                displayValue = listOf("Disabled", "Enabled")[index]
                             ))
-                            viewModel.sendInputParameterInt("/remoteInput/FRactive", inputId, 1 - index)
+                            viewModel.sendInputParameterInt("/remoteInput/FRactive", inputId, index)
                         },
+                        activeIndex = 1,
                         activeColor = getRowColorActive(7),
-                        inactiveColor = getRowColorLight(7),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -3764,18 +3766,19 @@ private fun RenderFloorReflectionsSection(
                     ParameterTextButton(
                         label = "",
                         selectedIndex = FRlowCutActiveIndex,
-                        options = listOf("Low Cut Enabled", "Low Cut Disabled"),
+                        options = listOf("Low Cut Disabled", "Low Cut Enabled"),
                         onSelectionChange = { index ->
                             FRlowCutActiveIndex = index
                             selectedChannel.setParameter("FRlowCutActive", InputParameterValue(
                                 normalizedValue = index.toFloat(),
                                 stringValue = "",
-                                displayValue = listOf("Low Cut Enabled", "Low Cut Disabled")[index]
+                                displayValue = listOf("Low Cut Disabled", "Low Cut Enabled")[index]
                             ))
-                            viewModel.sendInputParameterInt("/remoteInput/FRlowCutActive", inputId, 1 - index)
+                            viewModel.sendInputParameterInt("/remoteInput/FRlowCutActive", inputId, index)
                         },
+                        activeIndex = 1,
+                        dimmed = !isFREnabled,
                         activeColor = getRowColorActive(7),
-                        inactiveColor = getRowColorLight(7),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -3795,7 +3798,7 @@ private fun RenderFloorReflectionsSection(
                                 stringValue = "",
                                 displayValue = "${actualValue.toInt()}Hz"
                             ))
-                            viewModel.sendInputParameterInt("/remoteInput/FrlowCutFreq", inputId, actualValue.toInt())
+                            viewModel.sendInputParameterInt("/remoteInput/FRlowCutFreq", inputId, actualValue.toInt())
                         },
                         modifier = Modifier.width(horizontalSliderWidth).height(horizontalSliderHeight),
                         sliderColor = if (isFRLowCutEnabled) getRowColor(7) else Color.Gray,
@@ -3817,7 +3820,7 @@ private fun RenderFloorReflectionsSection(
                                     stringValue = "",
                                     displayValue = "${coercedValue}Hz"
                                 ))
-                                viewModel.sendInputParameterInt("/remoteInput/FrlowCutFreq", inputId, coercedValue)
+                                viewModel.sendInputParameterInt("/remoteInput/FRlowCutFreq", inputId, coercedValue)
                             }
                         },
                         valueUnit = "Hz",
@@ -3839,18 +3842,19 @@ private fun RenderFloorReflectionsSection(
                     ParameterTextButton(
                         label = "",
                         selectedIndex = FRhighShelfActiveIndex,
-                        options = listOf("High Shelf Enabled", "High Shelf Disabled"),
+                        options = listOf("High Shelf Disabled", "High Shelf Enabled"),
                         onSelectionChange = { index ->
                             FRhighShelfActiveIndex = index
                             selectedChannel.setParameter("FRhighShelfActive", InputParameterValue(
                                 normalizedValue = index.toFloat(),
                                 stringValue = "",
-                                displayValue = listOf("High Shelf Enabled", "High Shelf Disabled")[index]
+                                displayValue = listOf("High Shelf Disabled", "High Shelf Enabled")[index]
                             ))
-                            viewModel.sendInputParameterInt("/remoteInput/FRhighShelfActive", inputId, 1 - index)
+                            viewModel.sendInputParameterInt("/remoteInput/FRhighShelfActive", inputId, index)
                         },
+                        activeIndex = 1,
+                        dimmed = !isFREnabled,
                         activeColor = getRowColorActive(8),
-                        inactiveColor = getRowColorLight(8),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -4222,7 +4226,7 @@ private fun RenderLFOSection(
         LFOactiveIndex = LFOactive.normalizedValue.toInt().coerceIn(0, 1)
     }
     
-    val isLFOEnabled = LFOactiveIndex == 0 // 0 = ON, 1 = OFF
+    val isLFOEnabled = LFOactiveIndex == 1 // 0 = OFF, 1 = ON
 
     // Period
     val LFOperiod = selectedChannel.getParameter("LFOperiod")
@@ -4467,19 +4471,18 @@ private fun RenderLFOSection(
                     ParameterTextButton(
                         label = "",
                         selectedIndex = LFOactiveIndex,
-                        options = listOf("Enabled", "Disabled"),
+                        options = listOf("Disabled", "Enabled"),
                         onSelectionChange = { index ->
                             LFOactiveIndex = index
                             selectedChannel.setParameter("LFOactive", InputParameterValue(
                                 normalizedValue = index.toFloat(),
                                 stringValue = "",
-                                displayValue = listOf("Enabled", "Disabled")[index]
+                                displayValue = listOf("Disabled", "Enabled")[index]
                             ))
-                            // Invert for OSC: UI index 0 (ON) -> OSC 1, UI index 1 (OFF) -> OSC 0
-                            viewModel.sendInputParameterInt("/remoteInput/LFOactive", inputId, 1 - index)
+                            viewModel.sendInputParameterInt("/remoteInput/LFOactive", inputId, index)
                         },
+                        activeIndex = 1,
                         activeColor = getRowColorActive(0),
-                        inactiveColor = getRowColorLight(0),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

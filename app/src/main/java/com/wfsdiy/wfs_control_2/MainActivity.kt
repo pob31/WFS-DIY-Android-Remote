@@ -379,11 +379,9 @@ fun WFSControlApp() {
             previousConnectionState = connectionState
             connectionState = newState
 
-            // On reconnection (was disconnected, now connected), request param refresh if on Input Parameters tab
+            // On reconnection (was disconnected, now connected), request param refresh
             if (previousConnectionState == OscService.RemoteConnectionState.DISCONNECTED &&
-                newState == OscService.RemoteConnectionState.CONNECTED &&
-                selectedTab == 3) {
-                // Get current selected input ID and request parameter refresh
+                newState == OscService.RemoteConnectionState.CONNECTED) {
                 val selectedInputId = inputParametersState?.selectedInputId ?: 1
                 viewModel.requestInputParameters(selectedInputId)
             }

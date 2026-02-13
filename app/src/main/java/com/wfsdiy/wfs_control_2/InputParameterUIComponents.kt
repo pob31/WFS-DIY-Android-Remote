@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
@@ -106,21 +107,24 @@ fun ParameterTextButton(
     options: List<String>,
     onSelectionChange: (Int) -> Unit,
     enabled: Boolean = true,
+    activeIndex: Int = 0,
+    dimmed: Boolean = false,
     activeColor: Color = Color(0xFF2196F3),
     inactiveColor: Color = Color.DarkGray,
     modifier: Modifier = Modifier
 ) {
     // Determine the button color based on the selected option
-    // For ON/OFF buttons: index 0 = ON (active color with higher opacity for better contrast),
-    // index 1 = OFF (inactive color with lower opacity)
+    // activeIndex indicates which index represents the "active" (highlighted) state
+    // dimmed: visually muted but still clickable (e.g. sub-toggle when parent feature is off)
+    val dimAlpha = if (dimmed) 0.4f else 1f
     val buttonColor = if (enabled) {
-        if (selectedIndex == 0) activeColor.copy(alpha = 0.75f) else inactiveColor
+        if (selectedIndex == activeIndex) activeColor.copy(alpha = 0.75f * dimAlpha) else inactiveColor.copy(alpha = dimAlpha)
     } else {
         Color.DarkGray
     }
 
     Column(
-        modifier = modifier,
+        modifier = modifier.then(if (dimmed) Modifier.alpha(dimAlpha) else Modifier),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
