@@ -436,8 +436,7 @@ class OscService : Service() {
                 // ON/OFF switches use 0=OFF, 1=ON matching JUCE convention (no inversion needed)
                 // For direction dials, we need special handling to normalize with proper range coercion
                 val shouldNotNormalize = definition.uiType == UIComponentType.DROPDOWN ||
-                                        definition.uiType == UIComponentType.TEXT_BUTTON ||
-                                        (definition.formula == "x*360" && definition.dataType == ParameterType.INT)
+                                        definition.uiType == UIComponentType.TEXT_BUTTON
 
                 val normalized = if (shouldNotNormalize) {
                     intValue.toFloat()
@@ -449,6 +448,11 @@ class OscService : Service() {
                             val coerced = ((intValue % 360) + 360) % 360
                             val rangeValue = if (coerced > 180) coerced - 360 else coerced
                             (rangeValue + 180f) / 360f
+                        }
+                        definition.formula == "x*359-179" -> {
+                            // For phase (-179 to 180): convert from any range and normalize
+                            val rangeValue = if (intValue > 180) intValue - 360 else if (intValue < -179) intValue + 360 else intValue
+                            (rangeValue.coerceIn(-179, 180) + 179f) / 359f
                         }
                         else -> {
                             // For other direction dials, use standard reverse formula
@@ -478,7 +482,13 @@ class OscService : Service() {
                 )
             }
             floatValue != null -> {
-                val normalized = InputParameterDefinitions.reverseFormula(definition, floatValue)
+                // For phase dials, incoming floats from JUCE state dump may be in 0-360 range
+                val adjustedFloat = if (definition.formula == "x*359-179" && floatValue > 180f) {
+                    floatValue - 360f
+                } else {
+                    floatValue
+                }
+                val normalized = InputParameterDefinitions.reverseFormula(definition, adjustedFloat)
                 val actualValue = InputParameterDefinitions.applyFormula(definition, normalized)
                 InputParameterValue(
                     normalizedValue = normalized,

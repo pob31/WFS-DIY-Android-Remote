@@ -732,7 +732,7 @@ fun AngleDial(
  */
 @Composable
 fun PhaseDial(
-    value: Float, // 0° to 359°
+    value: Float, // -179° to 180°
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
     dialColor: Color = Color.DarkGray,
@@ -750,13 +750,13 @@ fun PhaseDial(
     val strokeWidth = responsiveSizes.strokeWidth * sizeMultiplier
     val textSize = responsiveSizes.dialSize // Original size for text, unaffected by multiplier
 
-    // Normalize value to 0-359 range
-    val normalizedValue = ((value % 360f) + 360f) % 360f
+    // Clamp value to -179..180 range
+    val clampedValue = value.coerceIn(-179f, 180f)
 
-    // Convert value (0° to 359°) to Compose angle
+    // Convert value (-179° to 180°) to Compose angle
     // Value 0° = top = 270° in Compose (-90°)
-    // Goes clockwise: 90° value = 0° Compose (right), 180° value = 90° Compose (bottom), etc.
-    val currentAngle = normalizedValue - 90f
+    // Positive clockwise (right), negative counter-clockwise (left)
+    val currentAngle = clampedValue - 90f
 
     Box(
         modifier = modifier.size(dialSize),
@@ -781,13 +781,14 @@ fun PhaseDial(
 
                                 // Convert Compose angle to phase value
                                 // Compose: 0° = right, 90° = bottom, 180° = left, 270° = top
-                                // Phase: 0° = top, 90° = right, 180° = bottom, 270° = left
+                                // Phase: 0° = top, positive clockwise, negative counter-clockwise
                                 val phaseValue = touchAngle + 90f
 
-                                // Normalize to 0-359
-                                val normalized = ((phaseValue % 360f) + 360f) % 360f
+                                // Convert to -179..180 range
+                                val wrapped = ((phaseValue % 360f) + 360f) % 360f
+                                val clamped = if (wrapped > 180f) wrapped - 360f else wrapped
 
-                                onValueChange(normalized)
+                                onValueChange(clamped.coerceIn(-179f, 180f))
                             }
                         )
                     }
@@ -831,12 +832,12 @@ fun PhaseDial(
             contentAlignment = Alignment.Center
         ) {
             if (isValueEditable) {
-                var textFieldValue by remember { mutableStateOf(TextFieldValue(String.format(Locale.US, "%.0f", normalizedValue))) }
+                var textFieldValue by remember { mutableStateOf(TextFieldValue(String.format(Locale.US, "%.0f", clampedValue))) }
                 val focusManager = LocalFocusManager.current
 
                 // Update text when value changes
-                LaunchedEffect(normalizedValue) {
-                    textFieldValue = TextFieldValue(String.format(Locale.US, "%.0f", normalizedValue))
+                LaunchedEffect(clampedValue) {
+                    textFieldValue = TextFieldValue(String.format(Locale.US, "%.0f", clampedValue))
                 }
 
                 Row(
@@ -861,12 +862,11 @@ fun PhaseDial(
                         ),
                         keyboardActions = KeyboardActions(
                             onDone = {
-                                // Normalize value to 0-359 when Done is pressed
+                                // Clamp value to -179..180 when Done is pressed
                                 try {
                                     val parsedValue = textFieldValue.text.toFloatOrNull()
                                     if (parsedValue != null) {
-                                        val normalized = ((parsedValue % 360f) + 360f) % 360f
-                                        onValueChange(normalized)
+                                        onValueChange(parsedValue.coerceIn(-179f, 180f))
                                     }
                                 } catch (e: NumberFormatException) {
                                     // Ignore invalid input
@@ -886,12 +886,11 @@ fun PhaseDial(
                                         selection = androidx.compose.ui.text.TextRange(0, text.length)
                                     )
                                 } else {
-                                    // Normalize value to 0-359 when focus is lost
+                                    // Clamp value to -179..180 when focus is lost
                                     try {
                                         val parsedValue = textFieldValue.text.toFloatOrNull()
                                         if (parsedValue != null) {
-                                            val normalized = ((parsedValue % 360f) + 360f) % 360f
-                                            onValueChange(normalized)
+                                            onValueChange(parsedValue.coerceIn(-179f, 180f))
                                         }
                                     } catch (e: NumberFormatException) {
                                         // Ignore invalid input
@@ -908,7 +907,7 @@ fun PhaseDial(
                 }
             } else {
                 Text(
-                    text = "${String.format(Locale.US, "%.0f", normalizedValue)}°",
+                    text = "${String.format(Locale.US, "%.0f", clampedValue)}°",
                     color = valueTextColor,
                     fontSize = (textSize.value * 0.12f).sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center

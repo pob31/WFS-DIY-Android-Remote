@@ -4247,8 +4247,8 @@ private fun RenderLFOSection(
     var LFOphaseValue by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(inputId, LFOphase.normalizedValue) {
-        // Phase values are stored directly (0-360), no formula application needed
-        LFOphaseValue = LFOphase.normalizedValue
+        val definition = InputParameterDefinitions.parametersByVariableName["LFOphase"]!!
+        LFOphaseValue = InputParameterDefinitions.applyFormula(definition, LFOphase.normalizedValue)
     }
 
     // Gyrophone
@@ -4392,8 +4392,8 @@ private fun RenderLFOSection(
     var LFOphaseXValue by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(inputId, LFOphaseX.normalizedValue) {
-        // Phase values are stored directly (0-360), no formula application needed
-        LFOphaseXValue = LFOphaseX.normalizedValue
+        val definition = InputParameterDefinitions.parametersByVariableName["LFOphaseX"]!!
+        LFOphaseXValue = InputParameterDefinitions.applyFormula(definition, LFOphaseX.normalizedValue)
     }
 
     val isPhaseXEnabled = isLFOEnabled && LFOshapeXIndex != 0
@@ -4403,8 +4403,8 @@ private fun RenderLFOSection(
     var LFOphaseYValue by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(inputId, LFOphaseY.normalizedValue) {
-        // Phase values are stored directly (0-360), no formula application needed
-        LFOphaseYValue = LFOphaseY.normalizedValue
+        val definition = InputParameterDefinitions.parametersByVariableName["LFOphaseY"]!!
+        LFOphaseYValue = InputParameterDefinitions.applyFormula(definition, LFOphaseY.normalizedValue)
     }
 
     val isPhaseYEnabled = isLFOEnabled && LFOshapeYIndex != 0
@@ -4414,8 +4414,8 @@ private fun RenderLFOSection(
     var LFOphaseZValue by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(inputId, LFOphaseZ.normalizedValue) {
-        // Phase values are stored directly (0-360), no formula application needed
-        LFOphaseZValue = LFOphaseZ.normalizedValue
+        val definition = InputParameterDefinitions.parametersByVariableName["LFOphaseZ"]!!
+        LFOphaseZValue = InputParameterDefinitions.applyFormula(definition, LFOphaseZ.normalizedValue)
     }
 
     val isPhaseZEnabled = isLFOEnabled && LFOshapeZIndex != 0
@@ -4539,7 +4539,8 @@ private fun RenderLFOSection(
                         value = LFOphaseValue,
                         onValueChange = { newValue ->
                             LFOphaseValue = newValue
-                            val normalized = newValue / 360f
+                            val definition = InputParameterDefinitions.parametersByVariableName["LFOphase"]!!
+                            val normalized = InputParameterDefinitions.reverseFormula(definition, newValue)
                             selectedChannel.setParameter("LFOphase", InputParameterValue(
                                 normalizedValue = normalized,
                                 stringValue = "",
@@ -4710,7 +4711,8 @@ private fun RenderLFOSection(
                         value = LFOphaseXValue,
                         onValueChange = { newValue ->
                             LFOphaseXValue = newValue
-                            val normalized = newValue / 360f
+                            val definition = InputParameterDefinitions.parametersByVariableName["LFOphaseX"]!!
+                            val normalized = InputParameterDefinitions.reverseFormula(definition, newValue)
                             selectedChannel.setParameter("LFOphaseX", InputParameterValue(
                                 normalizedValue = normalized,
                                 stringValue = "",
@@ -4861,7 +4863,8 @@ private fun RenderLFOSection(
                         value = LFOphaseYValue,
                         onValueChange = { newValue ->
                             LFOphaseYValue = newValue
-                            val normalized = newValue / 360f
+                            val definition = InputParameterDefinitions.parametersByVariableName["LFOphaseY"]!!
+                            val normalized = InputParameterDefinitions.reverseFormula(definition, newValue)
                             selectedChannel.setParameter("LFOphaseY", InputParameterValue(
                                 normalizedValue = normalized,
                                 stringValue = "",
@@ -5012,7 +5015,8 @@ private fun RenderLFOSection(
                         value = LFOphaseZValue,
                         onValueChange = { newValue ->
                             LFOphaseZValue = newValue
-                            val normalized = newValue / 360f
+                            val definition = InputParameterDefinitions.parametersByVariableName["LFOphaseZ"]!!
+                            val normalized = InputParameterDefinitions.reverseFormula(definition, newValue)
                             selectedChannel.setParameter("LFOphaseZ", InputParameterValue(
                                 normalizedValue = normalized,
                                 stringValue = "",

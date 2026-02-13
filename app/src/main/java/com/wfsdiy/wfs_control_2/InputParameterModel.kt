@@ -780,9 +780,9 @@ object InputParameterDefinitions {
             isOutgoing = true,
             uiType = UIComponentType.DIRECTION_DIAL,
             dataType = ParameterType.INT,
-            minValue = 0f,
-            maxValue = 360f,
-            formula = "x*360",
+            minValue = -179f,
+            maxValue = 180f,
+            formula = "x*359-179",
             unit = "°",
             conditionalEnable = "LFOactive==1"
         ),
@@ -927,9 +927,9 @@ object InputParameterDefinitions {
             isOutgoing = true,
             uiType = UIComponentType.DIRECTION_DIAL,
             dataType = ParameterType.INT,
-            minValue = 0f,
-            maxValue = 360f,
-            formula = "x*360",
+            minValue = -179f,
+            maxValue = 180f,
+            formula = "x*359-179",
             unit = "°",
             conditionalEnable = "LFOactive==1&&LFOshapeX>0"
         ),
@@ -942,9 +942,9 @@ object InputParameterDefinitions {
             isOutgoing = true,
             uiType = UIComponentType.DIRECTION_DIAL,
             dataType = ParameterType.INT,
-            minValue = 0f,
-            maxValue = 360f,
-            formula = "x*360",
+            minValue = -179f,
+            maxValue = 180f,
+            formula = "x*359-179",
             unit = "°",
             conditionalEnable = "LFOactive==1&&LFOshapeY>0"
         ),
@@ -957,9 +957,9 @@ object InputParameterDefinitions {
             isOutgoing = true,
             uiType = UIComponentType.DIRECTION_DIAL,
             dataType = ParameterType.INT,
-            minValue = 0f,
-            maxValue = 360f,
-            formula = "x*360",
+            minValue = -179f,
+            maxValue = 180f,
+            formula = "x*359-179",
             unit = "°",
             conditionalEnable = "LFOactive==1&&LFOshapeZ>0"
         ),
@@ -1025,6 +1025,7 @@ object InputParameterDefinitions {
                         "10*pow(x,2)" -> 10f * x.pow(2)
                         "pow(10.0,sqrt(x)*4.0-2.0)" -> 10f.pow(kotlin.math.sqrt(x) * 4f - 2f)
                         "x*360" -> x * 360f
+                        "x*359-179" -> x * 359f - 179f
                         "pow(10.0,(x*4.0)-2.0)" -> 10f.pow((x * 4f) - 2f)
                         else -> definition.minValue + (x * (definition.maxValue - definition.minValue))
                     }
@@ -1093,6 +1094,7 @@ object InputParameterDefinitions {
                         "10*pow(x,2)" -> kotlin.math.sqrt(y / 10f)
                         "pow(10.0,sqrt(x)*4.0-2.0)" -> ((log10(y) + 2f) / 4f).pow(2)
                         "x*360" -> y / 360f
+                        "x*359-179" -> (y + 179f) / 359f
                         "pow(10.0,(x*4.0)-2.0)" -> (log10(y) + 2f) / 4f
                         else -> (y - definition.minValue) / (definition.maxValue - definition.minValue)
                     }
