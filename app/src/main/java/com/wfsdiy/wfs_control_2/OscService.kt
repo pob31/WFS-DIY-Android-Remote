@@ -362,6 +362,20 @@ class OscService : Service() {
     }
 
     fun sendInputParameterIncDec(oscPath: String, inputId: Int, direction: String, value: Float) {
+        // Compute new value locally and update state immediately (like sendInputParameterFloat does)
+        // This prevents stale number boxes since JUCE won't echo values back to the remote sender
+        val paramName = oscPath.removePrefix("/remoteInput/")
+        val definition = InputParameterDefinitions.parametersByVariableName[paramName]
+        if (definition != null) {
+            val currentState = _inputParametersState.value
+            val channel = currentState.getChannel(inputId)
+            val currentParam = channel.getParameter(paramName)
+            val currentActual = InputParameterDefinitions.applyFormula(definition, currentParam.normalizedValue)
+            val increment = if (direction == "inc") value else -value
+            val newActual = (currentActual + increment).coerceIn(definition.minValue, definition.maxValue)
+            updateInputParameterFromOsc(oscPath, inputId, floatValue = newActual)
+        }
+
         serviceScope.launch {
             sendOscInputParameterIncDec(this@OscService, oscPath, inputId, direction, value)
         }

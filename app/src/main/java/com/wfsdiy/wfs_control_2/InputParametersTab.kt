@@ -774,48 +774,130 @@ private fun RenderInputSection(
         0
     }
 
+    // Get tracking state: when fully tracked, joystick/slider control offset instead of position
+    val isFullyTracked = selectedChannel.getParameter("isFullyTracked").normalizedValue.toInt() == 1
+
     // Dynamic labels and units based on coordinate mode
     // 0=Cartesian: X(m), Y(m), Z(m)
-    // 1=Cylindrical: Distance(m), Azimuth(°), Height(m)
-    // 2=Spherical: Distance(m), Azimuth(°), Elevation(°)
+    // 1=Cylindrical: Radius(m), Azimuth(°), Height(m)
+    // 2=Spherical: Radius(m), Azimuth(°), Elevation(°)
     val (labelX, labelY, labelZ) = when (coordinateMode) {
-        1 -> Triple("Distance", "Azimuth", "Height")      // Cylindrical
-        2 -> Triple("Distance", "Azimuth", "Elevation")   // Spherical
+        1 -> Triple("Radius", "Azimuth", "Height")        // Cylindrical
+        2 -> Triple("Radius", "Azimuth", "Elevation")     // Spherical
         else -> Triple("Position X", "Position Y", "Position Z")  // Cartesian (default)
     }
 
     // Units for each coordinate based on mode
     val (unitX, unitY, unitZ) = when (coordinateMode) {
-        1 -> Triple("m", "°", "m")      // Cylindrical: Distance(m), Azimuth(°), Height(m)
-        2 -> Triple("m", "°", "°")      // Spherical: Distance(m), Azimuth(°), Elevation(°)
+        1 -> Triple("m", "°", "m")      // Cylindrical: Radius(m), Azimuth(°), Height(m)
+        2 -> Triple("m", "°", "°")      // Spherical: Radius(m), Azimuth(°), Elevation(°)
         else -> Triple("m", "m", "m")   // Cartesian: all meters
     }
 
-    // Helper to strip any unit and get clean number
-    fun cleanValue(displayValue: String): String {
-        return displayValue.replace("m", "").replace("°", "").trim().ifEmpty { "0.00" }
-    }
+    // Convert normalized parameter value (0-1) to actual meters (-50 to 50)
+    fun normalizedToMeters(normalizedValue: Float): Float = -50f + (normalizedValue * 100f)
+    fun metersToNormalized(meters: Float): Float = (meters + 50f) / 100f
 
     val positionX = selectedChannel.getParameter("positionX")
-    var positionXValue by remember {
-        mutableStateOf(cleanValue(positionX.displayValue))
-    }
-
     val positionY = selectedChannel.getParameter("positionY")
-    var positionYValue by remember {
-        mutableStateOf(cleanValue(positionY.displayValue))
-    }
-
     val positionZ = selectedChannel.getParameter("positionZ")
-    var positionZValue by remember {
-        mutableStateOf(cleanValue(positionZ.displayValue))
+
+    // Compute display values by converting Cartesian to the active coordinate system
+    fun computeDisplayValues(): Triple<String, String, String> {
+        val cartX = normalizedToMeters(positionX.normalizedValue)
+        val cartY = normalizedToMeters(positionY.normalizedValue)
+        val cartZ = normalizedToMeters(positionZ.normalizedValue)
+        val (v1, v2, v3) = CoordinateConverter.cartesianToDisplay(coordinateMode, cartX, cartY, cartZ)
+        return Triple(
+            String.format(Locale.US, "%.2f", v1),
+            String.format(Locale.US, "%.2f", v2),
+            String.format(Locale.US, "%.2f", v3)
+        )
     }
 
-    // Update position values when they change (triggered by refreshTrigger via channel dump or direct changes)
-    LaunchedEffect(inputId, refreshTrigger, positionX.normalizedValue, positionY.normalizedValue, positionZ.normalizedValue) {
-        positionXValue = cleanValue(positionX.displayValue)
-        positionYValue = cleanValue(positionY.displayValue)
-        positionZValue = cleanValue(positionZ.displayValue)
+    val initialDisplay = computeDisplayValues()
+    var positionXValue by remember { mutableStateOf(initialDisplay.first) }
+    var positionYValue by remember { mutableStateOf(initialDisplay.second) }
+    var positionZValue by remember { mutableStateOf(initialDisplay.third) }
+
+    // Update display values when underlying Cartesian values or coordinate mode change
+    LaunchedEffect(inputId, refreshTrigger, positionX.normalizedValue, positionY.normalizedValue, positionZ.normalizedValue, coordinateMode) {
+        val (v1, v2, v3) = computeDisplayValues()
+        positionXValue = v1
+        positionYValue = v2
+        positionZValue = v3
+    }
+
+    // Shared commit helper: converts display values back to Cartesian and sends to JUCE
+    fun commitPositionValue(editedComponent: Int, newValue: Float) {
+        if (coordinateMode == 0) {
+            // Cartesian mode: direct send of the single parameter
+            val paramName = when (editedComponent) {
+                0 -> "positionX"
+                1 -> "positionY"
+                else -> "positionZ"
+            }
+            val coerced = newValue.coerceIn(-50f, 50f)
+            val formatted = String.format(Locale.US, "%.2f", coerced)
+            when (editedComponent) {
+                0 -> positionXValue = formatted
+                1 -> positionYValue = formatted
+                else -> positionZValue = formatted
+            }
+            selectedChannel.setParameter(paramName, InputParameterValue(
+                normalizedValue = metersToNormalized(coerced),
+                stringValue = "",
+                displayValue = "${formatted}m"
+            ))
+            viewModel.sendInputParameterFloat("/remoteInput/$paramName", inputId, coerced)
+        } else {
+            // Cylindrical or Spherical mode: convert all three back to Cartesian
+            val currentV1 = positionXValue.toFloatOrNull() ?: 0f
+            val currentV2 = positionYValue.toFloatOrNull() ?: 0f
+            val currentV3 = positionZValue.toFloatOrNull() ?: 0f
+
+            val v1: Float
+            val v2: Float
+            val v3: Float
+            when (editedComponent) {
+                0 -> { v1 = newValue.coerceAtLeast(0f); v2 = currentV2; v3 = currentV3 }
+                1 -> { v1 = currentV1; v2 = CoordinateConverter.normalizeAngle(newValue); v3 = currentV3 }
+                else -> {
+                    v1 = currentV1; v2 = currentV2
+                    v3 = if (coordinateMode == 2) newValue.coerceIn(-90f, 90f) else newValue.coerceIn(-50f, 50f)
+                }
+            }
+
+            val (cartX, cartY, cartZ) = CoordinateConverter.displayToCartesian(coordinateMode, v1, v2, v3)
+            val clampedX = cartX.coerceIn(-50f, 50f)
+            val clampedY = cartY.coerceIn(-50f, 50f)
+            val clampedZ = cartZ.coerceIn(-50f, 50f)
+
+            // Re-convert to display to reflect clamping
+            val (finalV1, finalV2, finalV3) = CoordinateConverter.cartesianToDisplay(coordinateMode, clampedX, clampedY, clampedZ)
+            positionXValue = String.format(Locale.US, "%.2f", finalV1)
+            positionYValue = String.format(Locale.US, "%.2f", finalV2)
+            positionZValue = String.format(Locale.US, "%.2f", finalV3)
+
+            // Update all three Cartesian parameters in local state
+            selectedChannel.setParameter("positionX", InputParameterValue(
+                normalizedValue = metersToNormalized(clampedX), stringValue = "",
+                displayValue = "${String.format(Locale.US, "%.2f", clampedX)}m"
+            ))
+            selectedChannel.setParameter("positionY", InputParameterValue(
+                normalizedValue = metersToNormalized(clampedY), stringValue = "",
+                displayValue = "${String.format(Locale.US, "%.2f", clampedY)}m"
+            ))
+            selectedChannel.setParameter("positionZ", InputParameterValue(
+                normalizedValue = metersToNormalized(clampedZ), stringValue = "",
+                displayValue = "${String.format(Locale.US, "%.2f", clampedZ)}m"
+            ))
+
+            // Send all three Cartesian values to JUCE
+            viewModel.sendInputParameterFloat("/remoteInput/positionX", inputId, clampedX)
+            viewModel.sendInputParameterFloat("/remoteInput/positionY", inputId, clampedY)
+            viewModel.sendInputParameterFloat("/remoteInput/positionZ", inputId, clampedZ)
+        }
     }
 
     // Offset X, Y, Z state management
@@ -870,15 +952,7 @@ private fun RenderInputSection(
                         },
                         onValueCommit = { committedValue ->
                             committedValue.toFloatOrNull()?.let { value ->
-                                // For cylindrical/spherical mode (distance), use 0 to 50 range
-                                val coerced = if (coordinateMode != 0) value.coerceIn(0f, 50f) else value.coerceIn(-50f, 50f)
-                                positionXValue = String.format(Locale.US, "%.2f", coerced)
-                                selectedChannel.setParameter("positionX", InputParameterValue(
-                                    normalizedValue = (coerced + 50f) / 100f,
-                                    stringValue = "",
-                                    displayValue = "${String.format(Locale.US, "%.2f", coerced)}$unitX"
-                                ))
-                                viewModel.sendInputParameterFloat("/remoteInput/positionX", inputId, coerced)
+                                commitPositionValue(0, value)
                             }
                         },
                         unit = unitX,
@@ -902,15 +976,7 @@ private fun RenderInputSection(
                         },
                         onValueCommit = { committedValue ->
                             committedValue.toFloatOrNull()?.let { value ->
-                                // For cylindrical/spherical mode (azimuth), use -180 to 180 range
-                                    val coerced = if (coordinateMode != 0) value.coerceIn(-180f, 180f) else value.coerceIn(-50f, 50f)
-                                positionYValue = String.format(Locale.US, "%.2f", coerced)
-                                selectedChannel.setParameter("positionY", InputParameterValue(
-                                    normalizedValue = (coerced + 50f) / 100f,
-                                    stringValue = "",
-                                    displayValue = "${String.format(Locale.US, "%.2f", coerced)}$unitY"
-                                ))
-                                viewModel.sendInputParameterFloat("/remoteInput/positionY", inputId, coerced)
+                                commitPositionValue(1, value)
                             }
                         },
                         unit = unitY,
@@ -934,15 +1000,7 @@ private fun RenderInputSection(
                         },
                         onValueCommit = { committedValue ->
                             committedValue.toFloatOrNull()?.let { value ->
-                                // For spherical mode (elevation), use -90 to 90 range
-                                val coerced = if (coordinateMode == 2) value.coerceIn(-90f, 90f) else value.coerceIn(-50f, 50f)
-                                positionZValue = String.format(Locale.US, "%.2f", coerced)
-                                selectedChannel.setParameter("positionZ", InputParameterValue(
-                                    normalizedValue = (coerced + 50f) / 100f,
-                                    stringValue = "",
-                                    displayValue = "${String.format(Locale.US, "%.2f", coerced)}$unitZ"
-                                ))
-                                viewModel.sendInputParameterFloat("/remoteInput/positionZ", inputId, coerced)
+                                commitPositionValue(2, value)
                             }
                         },
                         unit = unitZ,
@@ -1066,36 +1124,38 @@ private fun RenderInputSection(
                     val xIncrement = x * 1.0f
                     val yIncrement = y * 1.0f
 
-                    // Send inc/dec OSC messages for position X
+                    // When fully tracked, joystick controls offset; otherwise position
+                    val xPath = if (isFullyTracked) "/remoteInput/offsetX" else "/remoteInput/positionX"
+                    val yPath = if (isFullyTracked) "/remoteInput/offsetY" else "/remoteInput/positionY"
+
                     if (xIncrement != 0f) {
                         val direction = if (xIncrement > 0f) "inc" else "dec"
                         val absValue = kotlin.math.abs(xIncrement)
-                        viewModel.sendInputParameterIncDec("/remoteInput/positionX", inputId, direction, absValue)
+                        viewModel.sendInputParameterIncDec(xPath, inputId, direction, absValue)
                     }
 
-                    // Send inc/dec OSC messages for position Y
                     if (yIncrement != 0f) {
                         val direction = if (yIncrement > 0f) "inc" else "dec"
                         val absValue = kotlin.math.abs(yIncrement)
-                        viewModel.sendInputParameterIncDec("/remoteInput/positionY", inputId, direction, absValue)
+                        viewModel.sendInputParameterIncDec(yPath, inputId, direction, absValue)
                     }
                 }
             )
 
             Spacer(modifier = Modifier.width(screenWidthDp * 0.05f))
 
-            // Auto-return vertical slider for Z position control
+            // Auto-return vertical slider for Z position/offset control
             var zSliderValue by remember { mutableFloatStateOf(0f) }
 
-            LaunchedEffect(zSliderValue) {
-                // Continuously send inc/dec OSC messages for position Z while slider is deflected
+            LaunchedEffect(zSliderValue, isFullyTracked) {
+                // Continuously send inc/dec OSC messages while slider is deflected
                 while (zSliderValue != 0f) {
                     val zIncrement = zSliderValue * 1.0f
+                    val zPath = if (isFullyTracked) "/remoteInput/offsetZ" else "/remoteInput/positionZ"
 
-                    // Send inc/dec OSC message
                     val direction = if (zIncrement > 0f) "inc" else "dec"
                     val absValue = kotlin.math.abs(zIncrement)
-                    viewModel.sendInputParameterIncDec("/remoteInput/positionZ", inputId, direction, absValue)
+                    viewModel.sendInputParameterIncDec(zPath, inputId, direction, absValue)
 
                     kotlinx.coroutines.delay(100) // Update every 100ms
                 }
@@ -1160,15 +1220,7 @@ private fun RenderInputSection(
                             },
                             onValueCommit = { committedValue ->
                                 committedValue.toFloatOrNull()?.let { value ->
-                                    // For cylindrical/spherical mode (distance), use 0 to 50 range
-                                    val coerced = if (coordinateMode != 0) value.coerceIn(0f, 50f) else value.coerceIn(-50f, 50f)
-                                    positionXValue = String.format(Locale.US, "%.2f", coerced)
-                                    selectedChannel.setParameter("positionX", InputParameterValue(
-                                        normalizedValue = (coerced + 50f) / 100f,
-                                        stringValue = "",
-                                        displayValue = "${String.format(Locale.US, "%.2f", coerced)}$unitX"
-                                    ))
-                                    viewModel.sendInputParameterFloat("/remoteInput/positionX", inputId, coerced)
+                                    commitPositionValue(0, value)
                                 }
                             },
                             unit = unitX,
@@ -1197,15 +1249,7 @@ private fun RenderInputSection(
                             },
                             onValueCommit = { committedValue ->
                                 committedValue.toFloatOrNull()?.let { value ->
-                                    // For cylindrical/spherical mode (azimuth), use -180 to 180 range
-                                    val coerced = if (coordinateMode != 0) value.coerceIn(-180f, 180f) else value.coerceIn(-50f, 50f)
-                                    positionYValue = String.format(Locale.US, "%.2f", coerced)
-                                    selectedChannel.setParameter("positionY", InputParameterValue(
-                                        normalizedValue = (coerced + 50f) / 100f,
-                                        stringValue = "",
-                                        displayValue = "${String.format(Locale.US, "%.2f", coerced)}$unitY"
-                                    ))
-                                    viewModel.sendInputParameterFloat("/remoteInput/positionY", inputId, coerced)
+                                    commitPositionValue(1, value)
                                 }
                             },
                             unit = unitY,
@@ -1234,15 +1278,7 @@ private fun RenderInputSection(
                             },
                             onValueCommit = { committedValue ->
                                 committedValue.toFloatOrNull()?.let { value ->
-                                    // For spherical mode (elevation), use -90 to 90 range
-                                    val coerced = if (coordinateMode == 2) value.coerceIn(-90f, 90f) else value.coerceIn(-50f, 50f)
-                                    positionZValue = String.format(Locale.US, "%.2f", coerced)
-                                    selectedChannel.setParameter("positionZ", InputParameterValue(
-                                        normalizedValue = (coerced + 50f) / 100f,
-                                        stringValue = "",
-                                        displayValue = "${String.format(Locale.US, "%.2f", coerced)}$unitZ"
-                                    ))
-                                    viewModel.sendInputParameterFloat("/remoteInput/positionZ", inputId, coerced)
+                                    commitPositionValue(2, value)
                                 }
                             },
                             unit = unitZ,
@@ -1385,34 +1421,36 @@ private fun RenderInputSection(
                         val xIncrement = x * 1.0f
                         val yIncrement = y * 1.0f
 
-                        // Send inc/dec OSC messages for position X
+                        // When fully tracked, joystick controls offset; otherwise position
+                        val xPath = if (isFullyTracked) "/remoteInput/offsetX" else "/remoteInput/positionX"
+                        val yPath = if (isFullyTracked) "/remoteInput/offsetY" else "/remoteInput/positionY"
+
                         if (xIncrement != 0f) {
                             val direction = if (xIncrement > 0f) "inc" else "dec"
                             val absValue = kotlin.math.abs(xIncrement)
-                            viewModel.sendInputParameterIncDec("/remoteInput/positionX", inputId, direction, absValue)
+                            viewModel.sendInputParameterIncDec(xPath, inputId, direction, absValue)
                         }
 
-                        // Send inc/dec OSC messages for position Y
                         if (yIncrement != 0f) {
                             val direction = if (yIncrement > 0f) "inc" else "dec"
                             val absValue = kotlin.math.abs(yIncrement)
-                            viewModel.sendInputParameterIncDec("/remoteInput/positionY", inputId, direction, absValue)
+                            viewModel.sendInputParameterIncDec(yPath, inputId, direction, absValue)
                         }
                     }
                 )
 
-                // Auto-return vertical slider for Z position control
+                // Auto-return vertical slider for Z position/offset control
                 var zSliderValueTablet by remember { mutableFloatStateOf(0f) }
 
-                LaunchedEffect(zSliderValueTablet) {
-                    // Continuously send inc/dec OSC messages for position Z while slider is deflected
+                LaunchedEffect(zSliderValueTablet, isFullyTracked) {
+                    // Continuously send inc/dec OSC messages while slider is deflected
                     while (zSliderValueTablet != 0f) {
                         val zIncrement = zSliderValueTablet * 1.0f
+                        val zPath = if (isFullyTracked) "/remoteInput/offsetZ" else "/remoteInput/positionZ"
 
-                        // Send inc/dec OSC message
                         val direction = if (zIncrement > 0f) "inc" else "dec"
                         val absValue = kotlin.math.abs(zIncrement)
-                        viewModel.sendInputParameterIncDec("/remoteInput/positionZ", inputId, direction, absValue)
+                        viewModel.sendInputParameterIncDec(zPath, inputId, direction, absValue)
 
                         kotlinx.coroutines.delay(100)
                     }

@@ -267,6 +267,20 @@ object InputParameterDefinitions {
         ),
         InputParameterDefinition(
             group = "Input",
+            label = "Fully Tracked",
+            variableName = "isFullyTracked",
+            oscPath = "/remoteInput/isFullyTracked",
+            isIncoming = true,
+            isOutgoing = false,  // Read-only computed state from JUCE
+            uiType = UIComponentType.DROPDOWN,
+            dataType = ParameterType.INT,
+            minValue = 0f,
+            maxValue = 1f,
+            enumValues = listOf("OFF", "ON"),
+            note = "Computed: global tracking && protocol enabled && per-input tracking active"
+        ),
+        InputParameterDefinition(
+            group = "Input",
             label = "Constraint Distance",
             variableName = "constraintDistance",
             oscPath = "/remoteInput/constraintDistance",
