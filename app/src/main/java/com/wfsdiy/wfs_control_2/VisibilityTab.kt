@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 import CustomToggleButton
+import com.wfsdiy.wfs_control_2.localization.loc
 
 @Composable
 fun VisibilityTab(
@@ -54,7 +55,8 @@ fun VisibilityTab(
             ) {
                 rowMarkers.forEach { marker ->
                     val markerName = marker.name.takeIf { it.isNotBlank() }
-                    val buttonText = "View ${marker.id}" +
+                    val viewPrefix = loc("remote.visibility.prefix")
+                    val buttonText = "$viewPrefix ${marker.id}" +
                             if (markerName != null) "\n\n${markerName.take(12)}" else ""
 
                     CustomToggleButton(

@@ -49,7 +49,9 @@ data class InputParameterDefinition(
     val unit: String? = null,
     val enumValues: List<String>? = null,  // For dropdowns and text buttons
     val note: String? = null,
-    val conditionalEnable: String? = null  // Condition for greying out
+    val conditionalEnable: String? = null,  // Condition for greying out
+    val locKey: String? = null,          // Localization key for label, e.g. "inputs.labels.attenuation"
+    val enumLocKeys: List<String>? = null // Localization keys for enum values
 )
 
 /**
@@ -124,7 +126,8 @@ object InputParameterDefinitions {
             uiType = UIComponentType.TEXT_BOX,
             dataType = ParameterType.STRING,
             minValue = 0f,
-            maxValue = 0f
+            maxValue = 0f,
+            locKey = "inputs.labels.name"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -138,7 +141,8 @@ object InputParameterDefinitions {
             minValue = -92f,
             maxValue = 0f,
             formula = "20*log10(pow(10,-92./20.)+((1-pow(10,-92./20.))*pow(x,2)))",
-            unit = "dB"
+            unit = "dB",
+            locKey = "inputs.labels.attenuation"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -152,7 +156,8 @@ object InputParameterDefinitions {
             minValue = -100f,
             maxValue = 100f,
             formula = "(x*200.0)-100.0",
-            unit = "ms"
+            unit = "ms",
+            locKey = "inputs.labels.delayLatency"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -165,7 +170,9 @@ object InputParameterDefinitions {
             dataType = ParameterType.INT,
             minValue = 0f,
             maxValue = 1f,
-            enumValues = listOf("Acoustic Precedence", "Minimal Latency")
+            enumValues = listOf("Acoustic Precedence", "Minimal Latency"),
+            locKey = "inputs.labels.minimalLatency",
+            enumLocKeys = listOf("inputs.toggles.acousticPrecedence", "inputs.toggles.minimalLatency")
         ),
         InputParameterDefinition(
             group = "Input",
@@ -179,7 +186,8 @@ object InputParameterDefinitions {
             minValue = -50f,
             maxValue = 50f,
             unit = "m",
-            note = "incremented or decremented by horizontal axis of JoystickXY"
+            note = "incremented or decremented by horizontal axis of JoystickXY",
+            locKey = "inputs.labels.positionX"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -193,7 +201,8 @@ object InputParameterDefinitions {
             minValue = -50f,
             maxValue = 50f,
             unit = "m",
-            note = "incremented or decremented by vertical axis of JoystickXY"
+            note = "incremented or decremented by vertical axis of JoystickXY",
+            locKey = "inputs.labels.positionY"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -207,7 +216,8 @@ object InputParameterDefinitions {
             minValue = -50f,
             maxValue = 50f,
             unit = "m",
-            note = "incremented or decremented by V slider with return to zero"
+            note = "incremented or decremented by V slider with return to zero",
+            locKey = "inputs.labels.positionZ"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -221,7 +231,8 @@ object InputParameterDefinitions {
             minValue = -50f,
             maxValue = 50f,
             unit = "m",
-            note = "Offset applied to Position X"
+            note = "Offset applied to Position X",
+            locKey = "inputs.labels.offsetX"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -235,7 +246,8 @@ object InputParameterDefinitions {
             minValue = -50f,
             maxValue = 50f,
             unit = "m",
-            note = "Offset applied to Position Y"
+            note = "Offset applied to Position Y",
+            locKey = "inputs.labels.offsetY"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -249,7 +261,8 @@ object InputParameterDefinitions {
             minValue = -50f,
             maxValue = 50f,
             unit = "m",
-            note = "Offset applied to Position Z"
+            note = "Offset applied to Position Z",
+            locKey = "inputs.labels.offsetZ"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -263,7 +276,9 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 2f,
             enumValues = listOf("Cartesian", "Cylindrical", "Spherical"),
-            note = "Coordinate system for position input (read-only)"
+            note = "Coordinate system for position input (read-only)",
+            locKey = "inputs.labels.coordinateMode",
+            enumLocKeys = listOf("inputs.coordinates.cartesian", "inputs.coordinates.cylindrical", "inputs.coordinates.spherical")
         ),
         InputParameterDefinition(
             group = "Input",
@@ -277,7 +292,8 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 1f,
             enumValues = listOf("OFF", "ON"),
-            note = "Computed: global tracking && protocol enabled && per-input tracking active"
+            note = "Computed: global tracking && protocol enabled && per-input tracking active",
+            locKey = "inputs.labels.fullyTracked"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -291,7 +307,8 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 1f,
             enumValues = listOf("OFF", "ON"),
-            note = "Enable tracking for this input"
+            note = "Enable tracking for this input",
+            locKey = "inputs.labels.trackingActive"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -305,7 +322,8 @@ object InputParameterDefinitions {
             minValue = 1f,
             maxValue = 64f,
             enumValues = (1..64).map { it.toString() },
-            note = "Tracking marker ID to follow (1-64)"
+            note = "Tracking marker ID to follow (1-64)",
+            locKey = "inputs.labels.trackingId"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -320,7 +338,8 @@ object InputParameterDefinitions {
             maxValue = 100f,
             formula = "x*100",
             unit = "%",
-            note = "Tracking smoothing factor (0-100%)"
+            note = "Tracking smoothing factor (0-100%)",
+            locKey = "inputs.labels.trackingSmooth"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -334,7 +353,8 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 1f,
             enumValues = listOf("OFF", "ON"),
-            note = "Auto-mute at stage edges"
+            note = "Auto-mute at stage edges",
+            locKey = "inputs.labels.sidelinesActive"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -349,7 +369,8 @@ object InputParameterDefinitions {
             maxValue = 10f,
             formula = "(x*9.9)+0.1",
             unit = "m",
-            note = "Sideline fringe size in meters"
+            note = "Sideline fringe size in meters",
+            locKey = "inputs.labels.sidelinesFringe"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -363,7 +384,8 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 1f,
             enumValues = listOf("OFF", "ON"),
-            note = "Path recording/playback mode"
+            note = "Path recording/playback mode",
+            locKey = "inputs.labels.pathMode"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -377,7 +399,8 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 1f,
             enumValues = listOf("OFF", "ON"),
-            note = "Enable distance constraint for Cylindrical/Spherical modes"
+            note = "Enable distance constraint for Cylindrical/Spherical modes",
+            locKey = "inputs.labels.constraintDistance"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -391,7 +414,8 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 50f,
             unit = "m",
-            note = "Minimum distance from origin"
+            note = "Minimum distance from origin",
+            locKey = "inputs.labels.constraintDistanceMin"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -405,7 +429,8 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 50f,
             unit = "m",
-            note = "Maximum distance from origin"
+            note = "Maximum distance from origin",
+            locKey = "inputs.labels.constraintDistanceMax"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -418,7 +443,9 @@ object InputParameterDefinitions {
             dataType = ParameterType.INT,
             minValue = 0f,
             maxValue = 10f,
-            enumValues = listOf("none", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5", "Cluster 6", "Cluster 7", "Cluster 8", "Cluster 9", "Cluster 10")
+            enumValues = listOf("none", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5", "Cluster 6", "Cluster 7", "Cluster 8", "Cluster 9", "Cluster 10"),
+            locKey = "inputs.labels.cluster",
+            enumLocKeys = listOf("inputs.clusters.single", "inputs.clusters.clusterPrefix")
         ),
         InputParameterDefinition(
             group = "Input",
@@ -431,7 +458,8 @@ object InputParameterDefinitions {
             dataType = ParameterType.INT,
             minValue = 0f,
             maxValue = 1f,
-            enumValues = listOf("OFF", "ON")
+            enumValues = listOf("OFF", "ON"),
+            locKey = "inputs.labels.maxSpeedActive"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -445,7 +473,8 @@ object InputParameterDefinitions {
             minValue = 0.01f,
             maxValue = 20f,
             formula = "x*19.99+0.01",
-            unit = "m/s"
+            unit = "m/s",
+            locKey = "inputs.labels.maxSpeed"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -459,7 +488,8 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 100f,
             formula = "x*100",
-            unit = "%"
+            unit = "%",
+            locKey = "inputs.labels.heightFactor"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -472,7 +502,9 @@ object InputParameterDefinitions {
             dataType = ParameterType.INT,
             minValue = 0f,
             maxValue = 1f,
-            enumValues = listOf("Log", "1/d²")
+            enumValues = listOf("Log", "1/d²"),
+            locKey = "inputs.labels.attenuationLaw",
+            enumLocKeys = listOf("inputs.toggles.attenuationLawLog", "inputs.toggles.attenuationLaw1d2")
         ),
         InputParameterDefinition(
             group = "Input",
@@ -487,7 +519,8 @@ object InputParameterDefinitions {
             maxValue = 0f,
             formula = "(x*6.0)-6.0",
             unit = "dB/m",
-            note = "visible if AttenuationLaw == 0 (shares the same position as Dial distanceRatio)"
+            note = "visible if AttenuationLaw == 0 (shares the same position as Dial distanceRatio)",
+            locKey = "inputs.labels.distanceAttenuation"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -502,7 +535,8 @@ object InputParameterDefinitions {
             maxValue = 10f,
             formula = "pow(10.0,(x*2.0)-1.0)",
             unit = "x",
-            note = "visible if AttenuationLaw == 1 (shares the same position as Dial distanceAttenuation)"
+            note = "visible if AttenuationLaw == 1 (shares the same position as Dial distanceAttenuation)",
+            locKey = "inputs.labels.distanceRatio"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -516,7 +550,8 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 100f,
             formula = "x*100",
-            unit = "%"
+            unit = "%",
+            locKey = "inputs.labels.commonAttenuation"
         ),
         
         // Directivity group
@@ -532,7 +567,8 @@ object InputParameterDefinitions {
             minValue = 2f,
             maxValue = 360f,
             formula = "(x*358)+2",
-            unit = "°"
+            unit = "°",
+            locKey = "inputs.labels.directivity"
         ),
         InputParameterDefinition(
             group = "Directivity",
@@ -546,7 +582,8 @@ object InputParameterDefinitions {
             minValue = -179f,
             maxValue = 180f,
             formula = "(x*360)-180",
-            unit = "°"
+            unit = "°",
+            locKey = "inputs.labels.rotation"
         ),
         InputParameterDefinition(
             group = "Directivity",
@@ -560,7 +597,8 @@ object InputParameterDefinitions {
             minValue = -90f,
             maxValue = 90f,
             formula = "(x*180)-90",
-            unit = "°"
+            unit = "°",
+            locKey = "inputs.labels.tilt"
         ),
         InputParameterDefinition(
             group = "Directivity",
@@ -574,7 +612,8 @@ object InputParameterDefinitions {
             minValue = -24f,
             maxValue = 0f,
             formula = "20*log10(pow(10,-24./20.)+((1-pow(10,-24./20.))*pow(x,2)))",
-            unit = "dB"
+            unit = "dB",
+            locKey = "inputs.labels.hfShelf"
         ),
         
         // Live Source Attenuation group
@@ -589,7 +628,8 @@ object InputParameterDefinitions {
             dataType = ParameterType.INT,
             minValue = 0f,
             maxValue = 1f,
-            enumValues = listOf("OFF", "ON")
+            enumValues = listOf("OFF", "ON"),
+            locKey = "inputs.labels.liveSourceActive"
         ),
         InputParameterDefinition(
             group = "Live Source Attenuation",
@@ -604,7 +644,8 @@ object InputParameterDefinitions {
             maxValue = 50f,
             formula = "x*50.0",
             unit = "m",
-            conditionalEnable = "liveSourceActive==1"
+            conditionalEnable = "liveSourceActive==1",
+            locKey = "inputs.labels.radius"
         ),
         InputParameterDefinition(
             group = "Live Source Attenuation",
@@ -618,7 +659,9 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 3f,
             enumValues = listOf("linear", "log", "square d²", "sine"),
-            conditionalEnable = "liveSourceActive==1"
+            conditionalEnable = "liveSourceActive==1",
+            locKey = "inputs.labels.liveSourceShape",
+            enumLocKeys = listOf("inputs.liveSource.linear", "inputs.liveSource.log", "inputs.liveSource.squareD2", "inputs.liveSource.sine")
         ),
         InputParameterDefinition(
             group = "Live Source Attenuation",
@@ -633,7 +676,8 @@ object InputParameterDefinitions {
             maxValue = 0f,
             formula = "20*log10(pow(10,-24./20.)+((1-pow(10,-24./20.))*pow(x,2)))",
             unit = "dB",
-            conditionalEnable = "liveSourceActive==1"
+            conditionalEnable = "liveSourceActive==1",
+            locKey = "inputs.labels.liveSourceAttenuation"
         ),
         InputParameterDefinition(
             group = "Live Source Attenuation",
@@ -648,7 +692,8 @@ object InputParameterDefinitions {
             maxValue = 0f,
             formula = "20*log10(pow(10,-48./20.)+((1-pow(10,-48./20.))*pow(x,2)))",
             unit = "dB",
-            conditionalEnable = "liveSourceActive==1"
+            conditionalEnable = "liveSourceActive==1",
+            locKey = "inputs.labels.peakThreshold"
         ),
         InputParameterDefinition(
             group = "Live Source Attenuation",
@@ -662,7 +707,8 @@ object InputParameterDefinitions {
             minValue = 1f,
             maxValue = 10f,
             formula = "(x*9.0)+1",
-            conditionalEnable = "liveSourceActive==1"
+            conditionalEnable = "liveSourceActive==1",
+            locKey = "inputs.labels.peakRatio"
         ),
         InputParameterDefinition(
             group = "Live Source Attenuation",
@@ -677,7 +723,8 @@ object InputParameterDefinitions {
             maxValue = 0f,
             formula = "20*log10(pow(10,-48./20.)+((1-pow(10,-48./20.))*pow(x,2)))",
             unit = "dB",
-            conditionalEnable = "liveSourceActive==1"
+            conditionalEnable = "liveSourceActive==1",
+            locKey = "inputs.labels.slowThreshold"
         ),
         InputParameterDefinition(
             group = "Live Source Attenuation",
@@ -691,7 +738,8 @@ object InputParameterDefinitions {
             minValue = 1f,
             maxValue = 10f,
             formula = "(x*9.0)+1",
-            conditionalEnable = "liveSourceActive==1"
+            conditionalEnable = "liveSourceActive==1",
+            locKey = "inputs.labels.slowRatio"
         ),
         
         // Floor Reflections group
@@ -706,7 +754,8 @@ object InputParameterDefinitions {
             dataType = ParameterType.INT,
             minValue = 0f,
             maxValue = 1f,
-            enumValues = listOf("OFF", "ON")
+            enumValues = listOf("OFF", "ON"),
+            locKey = "inputs.labels.floorReflectionsActive"
         ),
         InputParameterDefinition(
             group = "Floor Reflections",
@@ -721,7 +770,8 @@ object InputParameterDefinitions {
             maxValue = 0f,
             formula = "20*log10(pow(10,-60./20.)+((1-pow(10,-60./20.))*pow(x,2)))",
             unit = "dB",
-            conditionalEnable = "FRactive==1"
+            conditionalEnable = "FRactive==1",
+            locKey = "inputs.labels.floorReflectionsAttenuation"
         ),
         InputParameterDefinition(
             group = "Floor Reflections",
@@ -735,7 +785,8 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 1f,
             enumValues = listOf("OFF", "ON"),
-            conditionalEnable = "FRactive==1"
+            conditionalEnable = "FRactive==1",
+            locKey = "inputs.labels.lowCutActive"
         ),
         InputParameterDefinition(
             group = "Floor Reflections",
@@ -750,7 +801,8 @@ object InputParameterDefinitions {
             maxValue = 20000f,
             formula = "20*pow(10,4*x)",
             unit = "Hz",
-            conditionalEnable = "FRactive==1&&FRlowCutActive==1"
+            conditionalEnable = "FRactive==1&&FRlowCutActive==1",
+            locKey = "inputs.labels.lowCutFreq"
         ),
         InputParameterDefinition(
             group = "Floor Reflections",
@@ -764,7 +816,8 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 1f,
             enumValues = listOf("OFF", "ON"),
-            conditionalEnable = "FRactive==1"
+            conditionalEnable = "FRactive==1",
+            locKey = "inputs.labels.highShelfActive"
         ),
         InputParameterDefinition(
             group = "Floor Reflections",
@@ -779,7 +832,8 @@ object InputParameterDefinitions {
             maxValue = 20000f,
             formula = "20*pow(10,4*x)",
             unit = "Hz",
-            conditionalEnable = "FRactive==1&&FRhighShelfActive==1"
+            conditionalEnable = "FRactive==1&&FRhighShelfActive==1",
+            locKey = "inputs.labels.highShelfFreq"
         ),
         InputParameterDefinition(
             group = "Floor Reflections",
@@ -794,7 +848,8 @@ object InputParameterDefinitions {
             maxValue = 0f,
             formula = "20*log10(pow(10,-24./20.)+((1-pow(10,-24./20.))*pow(x,2)))",
             unit = "dB",
-            conditionalEnable = "FRactive==1&&FRhighShelfActive==1"
+            conditionalEnable = "FRactive==1&&FRhighShelfActive==1",
+            locKey = "inputs.labels.highShelfGain"
         ),
         InputParameterDefinition(
             group = "Floor Reflections",
@@ -808,7 +863,8 @@ object InputParameterDefinitions {
             minValue = 0.1f,
             maxValue = 0.9f,
             formula = "(x*0.8)+0.1",
-            conditionalEnable = "FRactive==1&&FRhighShelfActive==1"
+            conditionalEnable = "FRactive==1&&FRhighShelfActive==1",
+            locKey = "inputs.labels.highShelfSlope"
         ),
         InputParameterDefinition(
             group = "Floor Reflections",
@@ -823,7 +879,8 @@ object InputParameterDefinitions {
             maxValue = 100f,
             formula = "x*100",
             unit = "%",
-            conditionalEnable = "FRactive==1"
+            conditionalEnable = "FRactive==1",
+            locKey = "inputs.labels.diffusion"
         ),
         
         // Jitter group
@@ -839,7 +896,8 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 10f,
             formula = "10*pow(x,2)",
-            unit = "m"
+            unit = "m",
+            locKey = "inputs.labels.jitter"
         ),
         
         // LFO group
@@ -854,7 +912,8 @@ object InputParameterDefinitions {
             dataType = ParameterType.INT,
             minValue = 0f,
             maxValue = 1f,
-            enumValues = listOf("OFF", "ON")
+            enumValues = listOf("OFF", "ON"),
+            locKey = "inputs.labels.lfoActive"
         ),
         InputParameterDefinition(
             group = "LFO",
@@ -869,7 +928,8 @@ object InputParameterDefinitions {
             maxValue = 100f,
             formula = "pow(10.0,sqrt(x)*4.0-2.0)",
             unit = "s",
-            conditionalEnable = "LFOactive==1"
+            conditionalEnable = "LFOactive==1",
+            locKey = "inputs.labels.period"
         ),
         InputParameterDefinition(
             group = "LFO",
@@ -884,7 +944,8 @@ object InputParameterDefinitions {
             maxValue = 180f,
             formula = "x*359-179",
             unit = "°",
-            conditionalEnable = "LFOactive==1"
+            conditionalEnable = "LFOactive==1",
+            locKey = "inputs.labels.phase"
         ),
         InputParameterDefinition(
             group = "LFO",
@@ -898,7 +959,9 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 8f,
             enumValues = listOf("OFF", "sine", "square", "sawtooth", "triangle", "keystone", "log", "exp", "random"),
-            conditionalEnable = "LFOactive==1"
+            conditionalEnable = "LFOactive==1",
+            locKey = "inputs.labels.shapeX",
+            enumLocKeys = listOf("inputs.lfo.shapes.off", "inputs.lfo.shapes.sine", "inputs.lfo.shapes.square", "inputs.lfo.shapes.sawtooth", "inputs.lfo.shapes.triangle", "inputs.lfo.shapes.keystone", "inputs.lfo.shapes.log", "inputs.lfo.shapes.exp", "inputs.lfo.shapes.random")
         ),
         InputParameterDefinition(
             group = "LFO",
@@ -912,7 +975,9 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 8f,
             enumValues = listOf("OFF", "sine", "square", "sawtooth", "triangle", "keystone", "log", "exp", "random"),
-            conditionalEnable = "LFOactive==1"
+            conditionalEnable = "LFOactive==1",
+            locKey = "inputs.labels.shapeY",
+            enumLocKeys = listOf("inputs.lfo.shapes.off", "inputs.lfo.shapes.sine", "inputs.lfo.shapes.square", "inputs.lfo.shapes.sawtooth", "inputs.lfo.shapes.triangle", "inputs.lfo.shapes.keystone", "inputs.lfo.shapes.log", "inputs.lfo.shapes.exp", "inputs.lfo.shapes.random")
         ),
         InputParameterDefinition(
             group = "LFO",
@@ -926,7 +991,9 @@ object InputParameterDefinitions {
             minValue = 0f,
             maxValue = 8f,
             enumValues = listOf("OFF", "sine", "square", "sawtooth", "triangle", "keystone", "log", "exp", "random"),
-            conditionalEnable = "LFOactive==1"
+            conditionalEnable = "LFOactive==1",
+            locKey = "inputs.labels.shapeZ",
+            enumLocKeys = listOf("inputs.lfo.shapes.off", "inputs.lfo.shapes.sine", "inputs.lfo.shapes.square", "inputs.lfo.shapes.sawtooth", "inputs.lfo.shapes.triangle", "inputs.lfo.shapes.keystone", "inputs.lfo.shapes.log", "inputs.lfo.shapes.exp", "inputs.lfo.shapes.random")
         ),
         InputParameterDefinition(
             group = "LFO",
@@ -941,7 +1008,8 @@ object InputParameterDefinitions {
             maxValue = 100f,
             formula = "pow(10.0,(x*4.0)-2.0)",
             unit = "x",
-            conditionalEnable = "LFOactive==1&&LFOshapeX>0"
+            conditionalEnable = "LFOactive==1&&LFOshapeX>0",
+            locKey = "inputs.labels.rateX"
         ),
         InputParameterDefinition(
             group = "LFO",
@@ -956,7 +1024,8 @@ object InputParameterDefinitions {
             maxValue = 100f,
             formula = "pow(10.0,(x*4.0)-2.0)",
             unit = "x",
-            conditionalEnable = "LFOactive==1&&LFOshapeY>0"
+            conditionalEnable = "LFOactive==1&&LFOshapeY>0",
+            locKey = "inputs.labels.rateY"
         ),
         InputParameterDefinition(
             group = "LFO",
@@ -971,7 +1040,8 @@ object InputParameterDefinitions {
             maxValue = 100f,
             formula = "pow(10.0,(x*4.0)-2.0)",
             unit = "x",
-            conditionalEnable = "LFOactive==1&&LFOshapeZ>0"
+            conditionalEnable = "LFOactive==1&&LFOshapeZ>0",
+            locKey = "inputs.labels.rateZ"
         ),
         InputParameterDefinition(
             group = "LFO",
@@ -986,7 +1056,8 @@ object InputParameterDefinitions {
             maxValue = 50f,
             formula = "x*50.0",
             unit = "m",
-            conditionalEnable = "LFOactive==1&&LFOshapeX>0"
+            conditionalEnable = "LFOactive==1&&LFOshapeX>0",
+            locKey = "inputs.labels.amplitudeX"
         ),
         InputParameterDefinition(
             group = "LFO",
@@ -1001,7 +1072,8 @@ object InputParameterDefinitions {
             maxValue = 50f,
             formula = "x*50.0",
             unit = "m",
-            conditionalEnable = "LFOactive==1&&LFOshapeY>0"
+            conditionalEnable = "LFOactive==1&&LFOshapeY>0",
+            locKey = "inputs.labels.amplitudeY"
         ),
         InputParameterDefinition(
             group = "LFO",
@@ -1016,7 +1088,8 @@ object InputParameterDefinitions {
             maxValue = 50f,
             formula = "x*50.0",
             unit = "m",
-            conditionalEnable = "LFOactive==1&&LFOshapeZ>0"
+            conditionalEnable = "LFOactive==1&&LFOshapeZ>0",
+            locKey = "inputs.labels.amplitudeZ"
         ),
         InputParameterDefinition(
             group = "LFO",
@@ -1031,7 +1104,8 @@ object InputParameterDefinitions {
             maxValue = 180f,
             formula = "x*359-179",
             unit = "°",
-            conditionalEnable = "LFOactive==1&&LFOshapeX>0"
+            conditionalEnable = "LFOactive==1&&LFOshapeX>0",
+            locKey = "inputs.labels.phaseX"
         ),
         InputParameterDefinition(
             group = "LFO",
@@ -1046,7 +1120,8 @@ object InputParameterDefinitions {
             maxValue = 180f,
             formula = "x*359-179",
             unit = "°",
-            conditionalEnable = "LFOactive==1&&LFOshapeY>0"
+            conditionalEnable = "LFOactive==1&&LFOshapeY>0",
+            locKey = "inputs.labels.phaseY"
         ),
         InputParameterDefinition(
             group = "LFO",
@@ -1061,7 +1136,8 @@ object InputParameterDefinitions {
             maxValue = 180f,
             formula = "x*359-179",
             unit = "°",
-            conditionalEnable = "LFOactive==1&&LFOshapeZ>0"
+            conditionalEnable = "LFOactive==1&&LFOshapeZ>0",
+            locKey = "inputs.labels.phaseZ"
         ),
         InputParameterDefinition(
             group = "LFO",
@@ -1075,7 +1151,9 @@ object InputParameterDefinitions {
             minValue = -1f,
             maxValue = 1f,
             enumValues = listOf("Anti-Clockwise", "OFF", "Clockwise"),
-            conditionalEnable = "LFOactive==1"
+            conditionalEnable = "LFOactive==1",
+            locKey = "inputs.labels.gyrophone",
+            enumLocKeys = listOf("inputs.lfo.gyrophone.antiClockwise", "inputs.lfo.gyrophone.off", "inputs.lfo.gyrophone.clockwise")
         )
     )
     

@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import com.wfsdiy.wfs_control_2.localization.locStatic
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 
@@ -692,11 +693,11 @@ class OscService : Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID, 
-                "OSC Service", 
+                NOTIFICATION_CHANNEL_ID,
+                locStatic("remote.notification.channelName"),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Background service for OSC communication"
+                description = locStatic("remote.notification.channelDescription")
                 setShowBadge(false)
                 enableLights(false)
                 enableVibration(false)
@@ -721,8 +722,8 @@ class OscService : Service() {
             val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, pendingIntentFlags)
 
             NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-                .setContentTitle("WFS Control")
-                .setContentText("OSC Service is running.")
+                .setContentTitle(locStatic("remote.notification.title"))
+                .setContentText(locStatic("remote.notification.text"))
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
@@ -732,8 +733,8 @@ class OscService : Service() {
                 .build()
         } catch (e: Exception) {
             NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-                .setContentTitle("WFS Control")
-                .setContentText("OSC Service is running.")
+                .setContentTitle(locStatic("remote.notification.title"))
+                .setContentText(locStatic("remote.notification.text"))
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)

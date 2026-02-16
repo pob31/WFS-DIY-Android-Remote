@@ -41,6 +41,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.wfsdiy.wfs_control_2.localization.loc
+import com.wfsdiy.wfs_control_2.localization.locStatic
 import java.net.InetAddress
 import java.net.NetworkInterface
 
@@ -135,7 +137,7 @@ fun NetworkTab(
         }
     ) {
         Text(
-            "Network Configuration",
+            loc("remote.settings.networkConfig"),
             style = MaterialTheme.typography.headlineSmall.copy(color = Color.White),
             modifier = Modifier.padding(bottom = 8.dp)
         )
@@ -167,7 +169,7 @@ fun NetworkTab(
             OutlinedTextField(
                 value = currentIpAddress,
                 onValueChange = { }, // No-op since it's read-only
-                label = { Text("Device IP") },
+                label = { Text(loc("remote.settings.deviceIp")) },
                 textStyle = textStyle,
                 colors = textFieldColors,
                 readOnly = true,
@@ -181,7 +183,7 @@ fun NetworkTab(
                     incomingPort = it
                     incomingPortError = !isValidPort(it)
                 },
-                label = { Text("Incoming Port") },
+                label = { Text(loc("remote.settings.incomingPort")) },
                 textStyle = textStyle,
                 colors = textFieldColors,
                 keyboardOptions = KeyboardOptions(
@@ -194,7 +196,7 @@ fun NetworkTab(
                 modifier = Modifier.weight(1f),
                 isError = incomingPortError,
                 supportingText = {
-                    if (incomingPortError) Text("Invalid", fontSize = 10.sp)
+                    if (incomingPortError) Text(loc("common.invalid"), fontSize = 10.sp)
                 }
             )
 
@@ -204,7 +206,7 @@ fun NetworkTab(
                     outgoingPort = it
                     outgoingPortError = !isValidPort(it)
                 },
-                label = { Text("Outgoing Port") },
+                label = { Text(loc("remote.settings.outgoingPort")) },
                 textStyle = textStyle,
                 colors = textFieldColors,
                 keyboardOptions = KeyboardOptions(
@@ -217,7 +219,7 @@ fun NetworkTab(
                 modifier = Modifier.weight(1f),
                 isError = outgoingPortError,
                 supportingText = {
-                    if (outgoingPortError) Text("Invalid", fontSize = 10.sp)
+                    if (outgoingPortError) Text(loc("common.invalid"), fontSize = 10.sp)
                 }
             )
 
@@ -227,7 +229,7 @@ fun NetworkTab(
                     ipAddress = it
                     ipAddressError = !isValidIpAddress(it)
                 },
-                label = { Text("IP Address") },
+                label = { Text(loc("remote.settings.ipAddress")) },
                 textStyle = textStyle,
                 colors = textFieldColors,
                 keyboardOptions = KeyboardOptions(
@@ -240,7 +242,7 @@ fun NetworkTab(
                 modifier = Modifier.weight(1f),
                 isError = ipAddressError,
                 supportingText = {
-                    if (ipAddressError) Text("Invalid", fontSize = 10.sp)
+                    if (ipAddressError) Text(loc("common.invalid"), fontSize = 10.sp)
                 }
             )
         }
@@ -250,7 +252,7 @@ fun NetworkTab(
         OutlinedTextField(
             value = findDevicePassword,
             onValueChange = { findDevicePassword = it },
-            label = { Text("Find Device Password (Optional)") },
+            label = { Text(loc("remote.settings.findDevicePassword")) },
             textStyle = textStyle,
             colors = textFieldColors,
             keyboardOptions = KeyboardOptions(
@@ -262,7 +264,7 @@ fun NetworkTab(
             ),
             modifier = Modifier.fillMaxWidth(0.8f),
             supportingText = {
-                Text("Password for /findDevice OSC command. Leave empty to disable.")
+                Text(loc("remote.settings.findDevicePasswordHint"))
             }
         )
 
@@ -271,7 +273,7 @@ fun NetworkTab(
         // Show warning if there are unsaved changes
         if (hasChanges) {
             Text(
-                "⚠ You have unsaved changes",
+                "⚠ ${loc("common.unsavedChanges")}",
                 style = TextStyle(
                     color = Color(0xFFFFAA00),
                     fontSize = 14.sp,
@@ -311,9 +313,9 @@ fun NetworkTab(
                     originalFindDevicePassword = findDevicePassword
 
                     onNetworkParametersChanged?.invoke()
-                    Toast.makeText(context, "Network settings saved", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, locStatic("remote.settings.networkSettingsSaved"), Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(context, "Please correct the errors in the network fields", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, locStatic("remote.settings.networkFieldsError"), Toast.LENGTH_LONG).show()
                 }
             },
             modifier = Modifier.fillMaxWidth(0.8f),
@@ -323,7 +325,7 @@ fun NetworkTab(
             ),
             shape = RoundedCornerShape(4.dp)
         ) {
-            Text(if (hasChanges) "Apply Changes" else "Apply Network Settings")
+            Text(if (hasChanges) loc("remote.settings.applyChanges") else loc("remote.settings.applyNetworkSettings"))
         }
     }
 }

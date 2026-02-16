@@ -43,6 +43,11 @@ import kotlin.math.max
 import kotlin.math.sqrt
 import kotlinx.parcelize.Parcelize
 
+import androidx.compose.runtime.CompositionLocalProvider
+import com.wfsdiy.wfs_control_2.localization.LocalLanguage
+import com.wfsdiy.wfs_control_2.localization.LocalizationManager
+import com.wfsdiy.wfs_control_2.localization.loc
+
 
 // SharedPreferences Constants
 internal const val PREFS_NAME = "network_prefs"
@@ -57,40 +62,42 @@ internal const val KEY_FIND_DEVICE_PASSWORD = "find_device_password"
 // Maximum number of inputs the system can handle
 internal const val MAX_INPUTS = 64
 
-enum class SecondaryTouchFunction(val modeNumber: Int, val displayName: String) {
-    OFF(-1, "OFF"),
-    ATTENUATION(0, "Attenuation"),
-    LATENCY_COMPENSATION(1, "Latency Compensation / Delay"),
-    HEIGHT(2, "Height"),
-    MAX_SPEED(3, "Height Factor"),
-    HEIGHT_FACTOR(4, "Max Speed"),
-    DISTANCE_ATTENUATION(5, "Distance Attenuation"),
-    DISTANCE_RATIO(6, "Distance Ratio"),
-    COMMON_ATTENUATION(7, "Common Attenuation"),
-    ROTATION(8, "Rotation"),
-    TILT(9, "Tilt"),
-    DIRECTIVITY(10, "Directivity"),
-    HF_SHELF(11, "HF Shelf"),
-    LIVE_SOURCE_FIXED_RADIUS(12, "Live Source Fixed Attenuation"),
-    LIVE_SOURCE_ATTENUATION(13, "Live Source Radius"),
-    LIVE_SOURCE_PEAK_COMPRESSION_THRESHOLD(14, "Live Source Peak Compression Threshold"),
-    LIVE_SOURCE_PEAK_COMPRESSION_RATIO(15, "Live Source Peak Compression Ratio"),
-    LIVE_SOURCE_SLOW_COMPRESSION_THRESHOLD(16, "Live Source Slow Compression Threshold"),
-    LIVE_SOURCE_SLOW_COMPRESSION_RATIO(17, "Live Source Slow Compression Ratio"),
-    FLOOR_REFLECTIONS_ATTENUATION(18, "Floor Reflections Attenuation"),
-    FLOOR_REFLECTIONS_DIFFUSION(19, "Floor Reflections Diffusion"),
-    JITTER(20, "Jitter"),
-    LFO_RATE_X(21, "LFO Rate X"),
-    LFO_AMPLITUDE_X(22, "LFO Amplitude X"),
-    LFO_PHASE_X(23, "LFO Phase X"),
-    LFO_PERIOD(24, "LFO Period"),
-    LFO_RATE_Y(25, "LFO Rate Y"),
-    LFO_AMPLITUDE_Y(26, "LFO Amplitude Y"),
-    LFO_PHASE_Y(27, "LFO Phase Y"),
-    LFO_PHASE(28, "LFO Phase"),
-    LFO_RATE_Z(29, "LFO Rate Z"),
-    LFO_AMPLITUDE_Z(30, "LFO Amplitude Z"),
-    LFO_PHASE_Z(31, "LFO Phase Z")
+enum class SecondaryTouchFunction(val modeNumber: Int, val locKey: String) {
+    OFF(-1, "remote.secondaryTouch.off"),
+    ATTENUATION(0, "remote.secondaryTouch.attenuation"),
+    LATENCY_COMPENSATION(1, "remote.secondaryTouch.latencyCompensation"),
+    HEIGHT(2, "remote.secondaryTouch.height"),
+    MAX_SPEED(3, "remote.secondaryTouch.heightFactor"),
+    HEIGHT_FACTOR(4, "remote.secondaryTouch.maxSpeed"),
+    DISTANCE_ATTENUATION(5, "remote.secondaryTouch.distanceAttenuation"),
+    DISTANCE_RATIO(6, "remote.secondaryTouch.distanceRatio"),
+    COMMON_ATTENUATION(7, "remote.secondaryTouch.commonAttenuation"),
+    ROTATION(8, "remote.secondaryTouch.rotation"),
+    TILT(9, "remote.secondaryTouch.tilt"),
+    DIRECTIVITY(10, "remote.secondaryTouch.directivity"),
+    HF_SHELF(11, "remote.secondaryTouch.hfShelf"),
+    LIVE_SOURCE_FIXED_RADIUS(12, "remote.secondaryTouch.liveSourceFixedAttenuation"),
+    LIVE_SOURCE_ATTENUATION(13, "remote.secondaryTouch.liveSourceRadius"),
+    LIVE_SOURCE_PEAK_COMPRESSION_THRESHOLD(14, "remote.secondaryTouch.liveSourcePeakCompressionThreshold"),
+    LIVE_SOURCE_PEAK_COMPRESSION_RATIO(15, "remote.secondaryTouch.liveSourcePeakCompressionRatio"),
+    LIVE_SOURCE_SLOW_COMPRESSION_THRESHOLD(16, "remote.secondaryTouch.liveSourceSlowCompressionThreshold"),
+    LIVE_SOURCE_SLOW_COMPRESSION_RATIO(17, "remote.secondaryTouch.liveSourceSlowCompressionRatio"),
+    FLOOR_REFLECTIONS_ATTENUATION(18, "remote.secondaryTouch.floorReflectionsAttenuation"),
+    FLOOR_REFLECTIONS_DIFFUSION(19, "remote.secondaryTouch.floorReflectionsDiffusion"),
+    JITTER(20, "remote.secondaryTouch.jitter"),
+    LFO_RATE_X(21, "remote.secondaryTouch.lfoRateX"),
+    LFO_AMPLITUDE_X(22, "remote.secondaryTouch.lfoAmplitudeX"),
+    LFO_PHASE_X(23, "remote.secondaryTouch.lfoPhaseX"),
+    LFO_PERIOD(24, "remote.secondaryTouch.lfoPeriod"),
+    LFO_RATE_Y(25, "remote.secondaryTouch.lfoRateY"),
+    LFO_AMPLITUDE_Y(26, "remote.secondaryTouch.lfoAmplitudeY"),
+    LFO_PHASE_Y(27, "remote.secondaryTouch.lfoPhaseY"),
+    LFO_PHASE(28, "remote.secondaryTouch.lfoPhase"),
+    LFO_RATE_Z(29, "remote.secondaryTouch.lfoRateZ"),
+    LFO_AMPLITUDE_Z(30, "remote.secondaryTouch.lfoAmplitudeZ"),
+    LFO_PHASE_Z(31, "remote.secondaryTouch.lfoPhaseZ");
+
+    val displayName: String get() = LocalizationManager.get(locKey)
 }
 
 // Define the Marker data class
@@ -198,9 +205,12 @@ class MainActivity : ComponentActivity() {
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         hideSystemUI()
-        
+
         // Keep screen on to prevent it from turning off
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        // Initialize localization before setting content
+        LocalizationManager.init(this)
 
         // Handle notification intent
         handleNotificationIntent(intent)
@@ -326,7 +336,14 @@ fun WFSControlApp() {
     var selectedTab by remember { mutableIntStateOf(0) }
     var mapTabVisitCount by remember { mutableIntStateOf(0) }  // Increments each time Map tab is selected
     var inputParamsTabVisitCount by remember { mutableIntStateOf(0) }  // Increments each time Input Parameters tab is selected
-    val tabs = listOf("Map", "Lock Input Markers", "View Input Markers", "Input Parameters", "Array Adjust", "Settings")
+    val tabs = listOf(
+        loc("remote.tabs.map"),
+        loc("remote.tabs.lockInputMarkers"),
+        loc("remote.tabs.viewInputMarkers"),
+        loc("remote.tabs.inputParameters"),
+        loc("remote.tabs.arrayAdjust"),
+        loc("remote.tabs.settings")
+    )
 
     val dynamicTabFontSize: TextUnit = remember(screenWidthDp) {
         val baseSize = screenWidthDp.value / 66f  // Changed from /60f to /66f for 10% smaller
@@ -614,6 +631,8 @@ fun WFSControlApp() {
         initialInputLayoutDone = false
     }
 
+    val currentLanguage by LocalizationManager.currentLanguage.collectAsState()
+    CompositionLocalProvider(LocalLanguage provides currentLanguage) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Tab row with connection indicator
             Box(modifier = Modifier.height(dynamicTabRowHeight)) {
@@ -743,7 +762,7 @@ fun WFSControlApp() {
                 3 -> {
                     viewModel?.let { vm ->
                         InputParametersTab(viewModel = vm, refreshTrigger = inputParamsTabVisitCount)
-                    } ?: Text("Loading...", color = Color.White)
+                    } ?: Text(loc("common.loading"), color = Color.White)
                 }
                 4 -> ArrayAdjustTab()
                 5 -> SettingsTab(
@@ -761,6 +780,7 @@ fun WFSControlApp() {
                 )
         }
     }
+    } // CompositionLocalProvider
 }
 
 @Composable

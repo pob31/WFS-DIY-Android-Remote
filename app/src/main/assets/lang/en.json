@@ -1,0 +1,262 @@
+{
+  "meta": {
+    "language": "English",
+    "locale": "en"
+  },
+
+  "common": {
+    "on": "ON",
+    "off": "OFF",
+    "cancel": "Cancel",
+    "reset": "Reset",
+    "apply": "Apply",
+    "loading": "Loading...",
+    "invalid": "Invalid",
+    "unsavedChanges": "You have unsaved changes"
+  },
+
+  "remote": {
+    "tabs": {
+      "map": "Map",
+      "lockInputMarkers": "Lock Input Markers",
+      "viewInputMarkers": "View Input Markers",
+      "inputParameters": "Input Parameters",
+      "arrayAdjust": "Array Adjust",
+      "settings": "Settings"
+    },
+
+    "settings": {
+      "language": "Language",
+      "networkConfig": "Network Configuration",
+      "deviceIp": "Device IP",
+      "incomingPort": "Incoming Port",
+      "outgoingPort": "Outgoing Port",
+      "ipAddress": "IP Address",
+      "findDevicePassword": "Find Device Password (Optional)",
+      "findDevicePasswordHint": "Password for /findDevice OSC command. Leave empty to disable.",
+      "applyChanges": "Apply Changes",
+      "applyNetworkSettings": "Apply Network Settings",
+      "networkSettingsSaved": "Network settings saved",
+      "networkFieldsError": "Please correct the errors in the network fields",
+      "resetAppSettings": "Reset App Settings to Defaults",
+      "shutdownApplication": "Shutdown Application",
+      "confirmReset": "Confirm Reset",
+      "confirmResetMessage": "Are you sure you want to reset the number of inputs, lock states, and visibility states to their defaults?",
+      "confirmShutdown": "Confirm Shutdown",
+      "confirmShutdownMessage": "Are you sure you want to shut down the application and OSC server?",
+      "shutdown": "Shutdown"
+    },
+
+    "lock": {
+      "prefix": "Lock"
+    },
+
+    "visibility": {
+      "prefix": "View"
+    },
+
+    "map": {
+      "secondaryTouchInfo": "2nd Finger: Input(Rotate/Pinch=Orient/Height) Cluster(Rotate/Pinch=Turn/Scale)",
+      "fitStage": "Fit Stage",
+      "fitAllInputs": "Fit All Inputs"
+    },
+
+    "arrayAdjust": {
+      "arrayPrefix": "Array",
+      "time": "TIME",
+      "level": "LEVEL",
+      "horizontalParallax": "HORIZONTAL PARALLAX",
+      "verticalParallax": "VERTICAL PARALLAX",
+      "timeIncrease": "Increase Delay",
+      "timeCompensate": "Compensate Latency",
+      "levelQuieter": "Quieter",
+      "levelLouder": "Louder",
+      "hParallaxCloser": "Bring Closer",
+      "hParallaxFarther": "Send Farther",
+      "vParallaxLower": "Lower Speaker",
+      "vParallaxRaise": "Raise Speaker"
+    },
+
+    "notification": {
+      "title": "WFS Control",
+      "text": "OSC Service is running.",
+      "channelName": "OSC Service",
+      "channelDescription": "Background service for OSC communication"
+    },
+
+    "secondaryTouch": {
+      "off": "OFF",
+      "attenuation": "Attenuation",
+      "latencyCompensation": "Latency Compensation / Delay",
+      "height": "Height",
+      "heightFactor": "Height Factor",
+      "maxSpeed": "Max Speed",
+      "distanceAttenuation": "Distance Attenuation",
+      "distanceRatio": "Distance Ratio",
+      "commonAttenuation": "Common Attenuation",
+      "rotation": "Rotation",
+      "tilt": "Tilt",
+      "directivity": "Directivity",
+      "hfShelf": "HF Shelf",
+      "liveSourceFixedAttenuation": "Live Source Fixed Attenuation",
+      "liveSourceRadius": "Live Source Radius",
+      "liveSourcePeakCompressionThreshold": "Live Source Peak Compression Threshold",
+      "liveSourcePeakCompressionRatio": "Live Source Peak Compression Ratio",
+      "liveSourceSlowCompressionThreshold": "Live Source Slow Compression Threshold",
+      "liveSourceSlowCompressionRatio": "Live Source Slow Compression Ratio",
+      "floorReflectionsAttenuation": "Floor Reflections Attenuation",
+      "floorReflectionsDiffusion": "Floor Reflections Diffusion",
+      "jitter": "Jitter",
+      "lfoRateX": "LFO Rate X",
+      "lfoAmplitudeX": "LFO Amplitude X",
+      "lfoPhaseX": "LFO Phase X",
+      "lfoPeriod": "LFO Period",
+      "lfoRateY": "LFO Rate Y",
+      "lfoAmplitudeY": "LFO Amplitude Y",
+      "lfoPhaseY": "LFO Phase Y",
+      "lfoPhase": "LFO Phase",
+      "lfoRateZ": "LFO Rate Z",
+      "lfoAmplitudeZ": "LFO Amplitude Z",
+      "lfoPhaseZ": "LFO Phase Z",
+      "unavailable": "\"{name}\" unavailable (selected by other control)"
+    },
+
+    "shortcuts": {
+      "scrollToTop": "Scroll to the Top"
+    },
+
+    "inputSelector": {
+      "inputChannel": "Input Channel",
+      "inputPrefix": "Input",
+      "selectInputChannel": "Select Input Channel",
+      "showingInputs": "Showing 1-{max} of 64 inputs",
+      "inputName": "Input Name"
+    }
+  },
+
+  "inputs": {
+    "sections": {
+      "channel": "Channel",
+      "position": "Position",
+      "attenuation": "Attenuation",
+      "directivity": "Directivity",
+      "liveSource": "Live Source Attenuation",
+      "floorReflections": "Floor Reflections",
+      "jitter": "Jitter",
+      "lfo": "LFO"
+    },
+
+    "labels": {
+      "name": "Name:",
+      "cluster": "Cluster:",
+      "attenuation": "Attenuation",
+      "delayLatency": "Latency compensation / Delay",
+      "positionX": "Position X",
+      "positionY": "Position Y",
+      "positionZ": "Position Z",
+      "offsetX": "Offset X",
+      "offsetY": "Offset Y",
+      "offsetZ": "Offset Z",
+      "coordinateMode": "Coordinate Mode",
+      "fullyTracked": "Fully Tracked",
+      "trackingActive": "Tracking Active",
+      "trackingId": "Tracking ID",
+      "trackingSmooth": "Tracking Smooth",
+      "sidelinesActive": "Sidelines Active",
+      "sidelinesFringe": "Sidelines Fringe",
+      "pathMode": "Path Mode",
+      "constraintDistance": "Constraint Distance",
+      "constraintDistanceMin": "Constraint Distance Min",
+      "constraintDistanceMax": "Constraint Distance Max",
+      "maxSpeedActive": "Max Speed Active",
+      "maxSpeed": "Max Speed",
+      "heightFactor": "Height Factor",
+      "attenuationLaw": "Attenuation Law",
+      "distanceAttenuation": "Distance Attenuation",
+      "distanceRatio": "Distance Ratio",
+      "commonAttenuation": "Common Attenuation",
+      "directivity": "Directivity",
+      "rotation": "Rotation",
+      "tilt": "Tilt",
+      "hfShelf": "HF Shelf",
+      "liveSourceActive": "Active",
+      "radius": "Radius",
+      "liveSourceShape": "Shape",
+      "liveSourceAttenuation": "Attenuation",
+      "peakThreshold": "Peak Threshold",
+      "peakRatio": "Peak Ratio",
+      "slowThreshold": "Slow Threshold",
+      "slowRatio": "Slow Ratio",
+      "floorReflectionsActive": "Active",
+      "floorReflectionsAttenuation": "Attenuation",
+      "lowCutActive": "Low Cut Active",
+      "lowCutFreq": "Low Cut Freq",
+      "highShelfActive": "High Shelf Active",
+      "highShelfFreq": "High Shelf Freq",
+      "highShelfGain": "High Shelf Gain",
+      "highShelfSlope": "High Shelf Slope",
+      "diffusion": "Diffusion",
+      "jitter": "Jitter",
+      "lfoActive": "Active",
+      "period": "Period",
+      "phase": "Phase",
+      "shapeX": "Shape X",
+      "shapeY": "Shape Y",
+      "shapeZ": "Shape Z",
+      "rateX": "Rate X",
+      "rateY": "Rate Y",
+      "rateZ": "Rate Z",
+      "amplitudeX": "Amplitude X",
+      "amplitudeY": "Amplitude Y",
+      "amplitudeZ": "Amplitude Z",
+      "phaseX": "Phase X",
+      "phaseY": "Phase Y",
+      "phaseZ": "Phase Z",
+      "gyrophone": "Gyrophone"
+    },
+
+    "toggles": {
+      "acousticPrecedence": "Acoustic Precedence",
+      "minimalLatency": "Minimal Latency",
+      "attenuationLawLog": "Log",
+      "attenuationLaw1d2": "1/d\u00b2"
+    },
+
+    "clusters": {
+      "single": "none",
+      "clusterPrefix": "Cluster"
+    },
+
+    "coordinates": {
+      "cartesian": "Cartesian",
+      "cylindrical": "Cylindrical",
+      "spherical": "Spherical"
+    },
+
+    "lfo": {
+      "shapes": {
+        "off": "OFF",
+        "sine": "sine",
+        "square": "square",
+        "sawtooth": "sawtooth",
+        "triangle": "triangle",
+        "keystone": "keystone",
+        "log": "log",
+        "exp": "exp",
+        "random": "random"
+      },
+      "gyrophone": {
+        "antiClockwise": "Anti-Clockwise",
+        "off": "OFF",
+        "clockwise": "Clockwise"
+      }
+    },
+
+    "liveSource": {
+      "linear": "linear",
+      "log": "log",
+      "squareD2": "square d\u00b2",
+      "sine": "sine"
+    }
+  }
+}

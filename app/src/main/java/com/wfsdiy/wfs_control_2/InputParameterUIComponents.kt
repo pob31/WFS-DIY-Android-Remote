@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.wfsdiy.wfs_control_2.localization.loc
 
 /**
  * Dropdown menu for selecting enum values
@@ -346,7 +347,7 @@ fun InputChannelSelector(
 
     Column(modifier = modifier) {
         Text(
-            text = "Input Channel",
+            text = loc("remote.inputSelector.inputChannel"),
             fontSize = 14.sp,
             color = Color.White,
             modifier = Modifier.padding(bottom = 4.dp)
@@ -368,7 +369,7 @@ fun InputChannelSelector(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Input $selectedInputId",
+                    text = "${loc("remote.inputSelector.inputPrefix")} $selectedInputId",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -424,7 +425,7 @@ fun InputChannelGridOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Select Input Channel",
+                    text = loc("remote.inputSelector.selectInputChannel"),
                     fontSize = 20.sp,
                     color = Color.White,
                     fontWeight = FontWeight.Bold
@@ -504,7 +505,7 @@ fun InputChannelGridOverlay(
             
             // Footer info
             Text(
-                text = "Showing 1-$maxInputs of 64 inputs",
+                text = loc("remote.inputSelector.showingInputs", "max" to maxInputs.toString()),
                 fontSize = 12.sp,
                 color = Color.Gray
             )
@@ -741,7 +742,7 @@ fun ModeGridOverlay(
             // Footer info
             if (excludedMode != null && excludedMode != SecondaryTouchFunction.OFF) {
                 Text(
-                    text = "\"${excludedMode.displayName}\" unavailable (selected by other control)",
+                    text = loc("remote.secondaryTouch.unavailable", "name" to excludedMode.displayName),
                     fontSize = 12.sp,
                     color = Color.Yellow,
                     textAlign = TextAlign.Center

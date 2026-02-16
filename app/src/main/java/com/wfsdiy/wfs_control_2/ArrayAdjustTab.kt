@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import com.wfsdiy.wfs_control_2.localization.loc
 import kotlin.math.sqrt
 
 // Theme Colors (Placeholders)
@@ -64,11 +65,13 @@ fun ArrayAdjustTab() {
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             // Column 1
+            val arrayPrefix = loc("remote.arrayAdjust.arrayPrefix")
+            val arrayLabels = List(10) { "$arrayPrefix ${it + 1}" }
             SideColumn(
                 modifier = Modifier
                     .weight(sideColumnWeight)
                     .fillMaxHeight(),
-                arrayLabels = List(10) { "Array ${it + 1}" },
+                arrayLabels = arrayLabels,
                 arrayLabelFontSize = arrayLabelFontSize
             )
 
@@ -79,8 +82,8 @@ fun ArrayAdjustTab() {
                 modifier = Modifier
                     .weight(1.5f)
                     .fillMaxHeight(),
-                columnTitle = "TIME",
-                row2Labels = Pair("Increase Delay", "Compensate Latency"),
+                columnTitle = loc("remote.arrayAdjust.time"),
+                row2Labels = Pair(loc("remote.arrayAdjust.timeIncrease"), loc("remote.arrayAdjust.timeCompensate")),
                 row3AndLastLabels = listOf("-1.0s", "-0.1s", "+0.1s", "+1.0s"),
                 themeColor = timeColumnColor,
                 columnIdentifier = "time",
@@ -95,8 +98,8 @@ fun ArrayAdjustTab() {
                 modifier = Modifier
                     .weight(1.5f)
                     .fillMaxHeight(),
-                columnTitle = "LEVEL",
-                row2Labels = Pair("Quieter", "Louder"),
+                columnTitle = loc("remote.arrayAdjust.level"),
+                row2Labels = Pair(loc("remote.arrayAdjust.levelQuieter"), loc("remote.arrayAdjust.levelLouder")),
                 row3AndLastLabels = listOf("-1.0dB", "-0.1dB", "+0.1dB", "+1.0dB"),
                 themeColor = levelColumnColor,
                 columnIdentifier = "level",
@@ -111,8 +114,8 @@ fun ArrayAdjustTab() {
                 modifier = Modifier
                     .weight(1.5f)
                     .fillMaxHeight(),
-                columnTitle = "HORIZONTAL PARALLAX",
-                row2Labels = Pair("Bring Closer", "Send Farther"),
+                columnTitle = loc("remote.arrayAdjust.horizontalParallax"),
+                row2Labels = Pair(loc("remote.arrayAdjust.hParallaxCloser"), loc("remote.arrayAdjust.hParallaxFarther")),
                 row3AndLastLabels = listOf("-1.0m", "-0.1m", "+0.1m", "+1.0m"),
                 themeColor = horizontalParallaxColor,
                 columnIdentifier = "h_parallax",
@@ -127,8 +130,8 @@ fun ArrayAdjustTab() {
                 modifier = Modifier
                     .weight(1.5f)
                     .fillMaxHeight(),
-                columnTitle = "VERTICAL PARALLAX",
-                row2Labels = Pair("Lower Speaker", "Raise Speaker"),
+                columnTitle = loc("remote.arrayAdjust.verticalParallax"),
+                row2Labels = Pair(loc("remote.arrayAdjust.vParallaxLower"), loc("remote.arrayAdjust.vParallaxRaise")),
                 row3AndLastLabels = listOf("-1.0m", "-0.1m", "+0.1m", "+1.0m"),
                 themeColor = verticalParallaxColor,
                 columnIdentifier = "v_parallax",
@@ -143,7 +146,7 @@ fun ArrayAdjustTab() {
                 modifier = Modifier
                     .weight(sideColumnWeight)
                     .fillMaxHeight(),
-                arrayLabels = List(10) { "Array ${it + 1}" },
+                arrayLabels = arrayLabels,
                 arrayLabelFontSize = arrayLabelFontSize
             )
         }

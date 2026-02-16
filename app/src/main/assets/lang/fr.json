@@ -1,0 +1,262 @@
+{
+  "meta": {
+    "language": "Français",
+    "locale": "fr"
+  },
+
+  "common": {
+    "on": "ON",
+    "off": "OFF",
+    "cancel": "Annuler",
+    "reset": "Réinitialiser",
+    "apply": "Appliquer",
+    "loading": "Chargement...",
+    "invalid": "Invalide",
+    "unsavedChanges": "Vous avez des modifications non enregistrées"
+  },
+
+  "remote": {
+    "tabs": {
+      "map": "Carte",
+      "lockInputMarkers": "Verrouiller les marqueurs",
+      "viewInputMarkers": "Affichage des marqueurs",
+      "inputParameters": "Paramètres d'entrée",
+      "arrayAdjust": "Réglage des groupes",
+      "settings": "Paramètres"
+    },
+
+    "settings": {
+      "language": "Langue",
+      "networkConfig": "Configuration réseau",
+      "deviceIp": "IP de l'appareil",
+      "incomingPort": "Port entrant",
+      "outgoingPort": "Port sortant",
+      "ipAddress": "Adresse IP",
+      "findDevicePassword": "Mot de passe Trouver l'appareil (Optionnel)",
+      "findDevicePasswordHint": "Mot de passe pour la commande OSC /findDevice. Laisser vide pour désactiver.",
+      "applyChanges": "Appliquer les modifications",
+      "applyNetworkSettings": "Appliquer les paramètres réseau",
+      "networkSettingsSaved": "Paramètres réseau enregistrés",
+      "networkFieldsError": "Veuillez corriger les erreurs dans les champs réseau",
+      "resetAppSettings": "Réinitialiser les paramètres par défaut",
+      "shutdownApplication": "Arrêter l'application",
+      "confirmReset": "Confirmer la réinitialisation",
+      "confirmResetMessage": "Êtes-vous sûr de vouloir réinitialiser le nombre d'entrées, les états de verrouillage et de visibilité à leurs valeurs par défaut ?",
+      "confirmShutdown": "Confirmer l'arrêt",
+      "confirmShutdownMessage": "Êtes-vous sûr de vouloir arrêter l'application et le serveur OSC ?",
+      "shutdown": "Arrêter"
+    },
+
+    "lock": {
+      "prefix": "Verr."
+    },
+
+    "visibility": {
+      "prefix": "Affich."
+    },
+
+    "map": {
+      "secondaryTouchInfo": "2ème doigt : Entrée(Rotation/Pincer=Orient./Hauteur) Cluster(Rotation/Pincer=Tourner/Échelle)",
+      "fitStage": "Ajuster la scène",
+      "fitAllInputs": "Ajuster toutes les entrées"
+    },
+
+    "arrayAdjust": {
+      "arrayPrefix": "Groupe",
+      "time": "DÉLAI",
+      "level": "NIVEAU",
+      "horizontalParallax": "PARALLAXE HORIZONTALE",
+      "verticalParallax": "PARALLAXE VERTICALE",
+      "timeIncrease": "Augmenter le délai",
+      "timeCompensate": "Compenser la latence",
+      "levelQuieter": "Plus silencieux",
+      "levelLouder": "Plus fort",
+      "hParallaxCloser": "Rapprocher",
+      "hParallaxFarther": "Éloigner",
+      "vParallaxLower": "Baisser l'enceinte",
+      "vParallaxRaise": "Monter l'enceinte"
+    },
+
+    "notification": {
+      "title": "WFS Control",
+      "text": "Le service OSC est en cours d'exécution.",
+      "channelName": "Service OSC",
+      "channelDescription": "Service en arrière-plan pour la communication OSC"
+    },
+
+    "secondaryTouch": {
+      "off": "OFF",
+      "attenuation": "Atténuation",
+      "latencyCompensation": "Compensation de latence / Délai",
+      "height": "Hauteur",
+      "heightFactor": "Facteur de hauteur",
+      "maxSpeed": "Vitesse max",
+      "distanceAttenuation": "Atténuation distance",
+      "distanceRatio": "Ratio distance",
+      "commonAttenuation": "Atténuation commune",
+      "rotation": "Rotation",
+      "tilt": "Inclinaison",
+      "directivity": "Directivité",
+      "hfShelf": "Atténuation HF",
+      "liveSourceFixedAttenuation": "Atténuation fixe Source Live",
+      "liveSourceRadius": "Rayon Source Live",
+      "liveSourcePeakCompressionThreshold": "Seuil compression crête Source Live",
+      "liveSourcePeakCompressionRatio": "Ratio compression crête Source Live",
+      "liveSourceSlowCompressionThreshold": "Seuil compression lente Source Live",
+      "liveSourceSlowCompressionRatio": "Ratio compression lente Source Live",
+      "floorReflectionsAttenuation": "Atténuation réflexions du sol",
+      "floorReflectionsDiffusion": "Diffusion réflexions du sol",
+      "jitter": "Gigue",
+      "lfoRateX": "LFO Taux X",
+      "lfoAmplitudeX": "LFO Amplitude X",
+      "lfoPhaseX": "LFO Phase X",
+      "lfoPeriod": "LFO Période",
+      "lfoRateY": "LFO Taux Y",
+      "lfoAmplitudeY": "LFO Amplitude Y",
+      "lfoPhaseY": "LFO Phase Y",
+      "lfoPhase": "LFO Phase",
+      "lfoRateZ": "LFO Taux Z",
+      "lfoAmplitudeZ": "LFO Amplitude Z",
+      "lfoPhaseZ": "LFO Phase Z",
+      "unavailable": "\"{name}\" indisponible (sélectionné par un autre contrôle)"
+    },
+
+    "shortcuts": {
+      "scrollToTop": "Défiler vers le haut"
+    },
+
+    "inputSelector": {
+      "inputChannel": "Canal d'entrée",
+      "inputPrefix": "Entrée",
+      "selectInputChannel": "Sélectionner le canal d'entrée",
+      "showingInputs": "Affichage 1-{max} sur 64 entrées",
+      "inputName": "Nom de l'entrée"
+    }
+  },
+
+  "inputs": {
+    "sections": {
+      "channel": "Canal",
+      "position": "Position",
+      "attenuation": "Atténuation",
+      "directivity": "Directivité",
+      "liveSource": "Dompteur de Source Live",
+      "floorReflections": "Réflexions du sol",
+      "jitter": "Gigue",
+      "lfo": "LFO"
+    },
+
+    "labels": {
+      "name": "Nom :",
+      "cluster": "Groupe :",
+      "attenuation": "Atténuation",
+      "delayLatency": "Compensation de latence / Délai",
+      "positionX": "Position X",
+      "positionY": "Position Y",
+      "positionZ": "Position Z",
+      "offsetX": "Décalage X",
+      "offsetY": "Décalage Y",
+      "offsetZ": "Décalage Z",
+      "coordinateMode": "Mode de coordonnées",
+      "fullyTracked": "Entièrement suivi",
+      "trackingActive": "Tracking actif",
+      "trackingId": "ID Tracking",
+      "trackingSmooth": "Lissage Tracking",
+      "sidelinesActive": "Lignes latérales actives",
+      "sidelinesFringe": "Bordure lignes latérales",
+      "pathMode": "Mode chemin",
+      "constraintDistance": "Contrainte distance",
+      "constraintDistanceMin": "Contrainte distance min",
+      "constraintDistanceMax": "Contrainte distance max",
+      "maxSpeedActive": "Vitesse max active",
+      "maxSpeed": "Vitesse max",
+      "heightFactor": "Facteur de hauteur",
+      "attenuationLaw": "Loi d'atténuation",
+      "distanceAttenuation": "Atténuation distance",
+      "distanceRatio": "Ratio distance",
+      "commonAttenuation": "Atténuation commune",
+      "directivity": "Directivité",
+      "rotation": "Rotation",
+      "tilt": "Inclinaison",
+      "hfShelf": "Atténuation HF",
+      "liveSourceActive": "Actif",
+      "radius": "Rayon",
+      "liveSourceShape": "Forme",
+      "liveSourceAttenuation": "Atténuation",
+      "peakThreshold": "Seuil crête",
+      "peakRatio": "Ratio crête",
+      "slowThreshold": "Seuil lent",
+      "slowRatio": "Ratio lent",
+      "floorReflectionsActive": "Actif",
+      "floorReflectionsAttenuation": "Atténuation",
+      "lowCutActive": "Coupe-bas actif",
+      "lowCutFreq": "Fréquence coupe-bas",
+      "highShelfActive": "Shelving aigu actif",
+      "highShelfFreq": "Fréquence shelving aigu",
+      "highShelfGain": "Gain shelving aigu",
+      "highShelfSlope": "Pente shelving aigu",
+      "diffusion": "Diffusion",
+      "jitter": "Gigue",
+      "lfoActive": "Actif",
+      "period": "Période",
+      "phase": "Phase",
+      "shapeX": "Forme X",
+      "shapeY": "Forme Y",
+      "shapeZ": "Forme Z",
+      "rateX": "Taux X",
+      "rateY": "Taux Y",
+      "rateZ": "Taux Z",
+      "amplitudeX": "Amplitude X",
+      "amplitudeY": "Amplitude Y",
+      "amplitudeZ": "Amplitude Z",
+      "phaseX": "Phase X",
+      "phaseY": "Phase Y",
+      "phaseZ": "Phase Z",
+      "gyrophone": "Gyrophone"
+    },
+
+    "toggles": {
+      "acousticPrecedence": "Précédence acoustique",
+      "minimalLatency": "Latence minimale",
+      "attenuationLawLog": "Log",
+      "attenuationLaw1d2": "1/d\u00b2"
+    },
+
+    "clusters": {
+      "single": "aucun",
+      "clusterPrefix": "Groupe"
+    },
+
+    "coordinates": {
+      "cartesian": "Cartésien",
+      "cylindrical": "Cylindrique",
+      "spherical": "Sphérique"
+    },
+
+    "lfo": {
+      "shapes": {
+        "off": "OFF",
+        "sine": "sinus",
+        "square": "carré",
+        "sawtooth": "dent de scie",
+        "triangle": "triangle",
+        "keystone": "trapèze",
+        "log": "log",
+        "exp": "exp",
+        "random": "aléatoire"
+      },
+      "gyrophone": {
+        "antiClockwise": "Anti-horaire",
+        "off": "OFF",
+        "clockwise": "Horaire"
+      }
+    },
+
+    "liveSource": {
+      "linear": "linéaire",
+      "log": "log",
+      "squareD2": "carré d\u00b2",
+      "sine": "sinus"
+    }
+  }
+}

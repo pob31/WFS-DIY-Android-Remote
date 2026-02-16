@@ -41,6 +41,8 @@ import kotlin.math.min
 import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
+import com.wfsdiy.wfs_control_2.localization.loc
+import com.wfsdiy.wfs_control_2.localization.locStatic
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -1312,7 +1314,7 @@ fun InputMapTab(
             drawRect(Color.Black) // Background for the canvas
 
             // Draw secondary touch info above the grid
-            val secondaryTouchText = "2nd Finger: Input(Rotate/Pinch=Orient/Height) Cluster(Rotate/Pinch=Turn/Scale)"
+            val secondaryTouchText = locStatic("remote.map.secondaryTouchInfo")
 
             val headerPaint = Paint().apply {
                 color = android.graphics.Color.WHITE
@@ -1555,7 +1557,7 @@ fun InputMapTab(
                 ) {
                     Icon(
                         Icons.Default.Fullscreen,
-                        contentDescription = "Fit Stage",
+                        contentDescription = loc("remote.map.fitStage"),
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -1566,7 +1568,7 @@ fun InputMapTab(
                 ) {
                     Icon(
                         Icons.Default.CenterFocusStrong,
-                        contentDescription = "Fit All Inputs",
+                        contentDescription = loc("remote.map.fitAllInputs"),
                         modifier = Modifier.size(24.dp)
                     )
                 }

@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.wfsdiy.wfs_control_2.localization.loc
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.pow
@@ -165,7 +166,7 @@ fun InputParametersTab(
 
                         // Input Name
                         ParameterTextBox(
-                            label = "Input Name",
+                            label = loc("remote.inputSelector.inputName"),
                             value = inputNameValue,
                             onValueChange = { newValue ->
                                 inputNameValue = newValue
@@ -307,7 +308,7 @@ fun InputParametersTab(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 HorizontalSectionShortcutButton(
-                    text = "Scroll to the Top",
+                    text = loc("remote.shortcuts.scrollToTop"),
                     isHighlighted = recentlyClickedShortcut == "Top",
                     onClick = {
                         coroutineScope.launch {
@@ -317,7 +318,7 @@ fun InputParametersTab(
                     }
                 )
                 HorizontalSectionShortcutButton(
-                    text = "Directivity",
+                    text = loc("inputs.sections.directivity"),
                     isHighlighted = recentlyClickedShortcut == "Directivity",
                     onClick = {
                         isDirectivityExpanded = true
@@ -330,7 +331,7 @@ fun InputParametersTab(
                     }
                 )
                 HorizontalSectionShortcutButton(
-                    text = "Live Source Attenuation",
+                    text = loc("inputs.sections.liveSource"),
                     isHighlighted = recentlyClickedShortcut == "Live Source Attenuation",
                     onClick = {
                         isLiveSourceExpanded = true
@@ -343,7 +344,7 @@ fun InputParametersTab(
                     }
                 )
                 HorizontalSectionShortcutButton(
-                    text = "Floor Reflections",
+                    text = loc("inputs.sections.floorReflections"),
                     isHighlighted = recentlyClickedShortcut == "Floor Reflections",
                     onClick = {
                         isFloorReflectionsExpanded = true
@@ -356,7 +357,7 @@ fun InputParametersTab(
                     }
                 )
                 HorizontalSectionShortcutButton(
-                    text = "Jitter",
+                    text = loc("inputs.sections.jitter"),
                     isHighlighted = recentlyClickedShortcut == "Jitter",
                     onClick = {
                         isJitterExpanded = true
@@ -369,7 +370,7 @@ fun InputParametersTab(
                     }
                 )
                 HorizontalSectionShortcutButton(
-                    text = "LFO",
+                    text = loc("inputs.sections.lfo"),
                     isHighlighted = recentlyClickedShortcut == "LFO",
                     onClick = {
                         isLFOExpanded = true
@@ -482,7 +483,7 @@ private fun RenderInputSection(
         ) {
         // Attenuation
         Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Attenuation", fontSize = 12.sp, color = Color.White)
+            Text(loc("inputs.labels.attenuation"), fontSize = 12.sp, color = Color.White)
             StandardSlider(
                 value = attenuationValue,
                 onValueChange = { newValue ->
@@ -526,7 +527,7 @@ private fun RenderInputSection(
 
         // Delay/Latency
         Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Latency compensation / Delay", fontSize = 12.sp, color = Color.White)
+            Text(loc("inputs.labels.delayLatency"), fontSize = 12.sp, color = Color.White)
             BidirectionalSlider(
                 value = delayLatencyValue,
                 onValueChange = { newValue ->
@@ -628,7 +629,7 @@ private fun RenderInputSection(
         ) {
             // Attenuation
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Attenuation", fontSize = 12.sp, color = Color.White)
+                Text(loc("inputs.labels.attenuation"), fontSize = 12.sp, color = Color.White)
                 StandardSlider(
                     value = attenuationValue,
                     onValueChange = { newValue ->
@@ -672,7 +673,7 @@ private fun RenderInputSection(
 
             // Delay/Latency
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Latency compensation / Delay", fontSize = 12.sp, color = Color.White)
+                Text(loc("inputs.labels.delayLatency"), fontSize = 12.sp, color = Color.White)
                 BidirectionalSlider(
                     value = delayLatencyValue,
                     onValueChange = { newValue ->
@@ -1020,7 +1021,7 @@ private fun RenderInputSection(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Offset X",
+                        text = loc("inputs.labels.offsetX"),
                         fontSize = 11.sp,
                         color = Color.White
                     )
@@ -1051,7 +1052,7 @@ private fun RenderInputSection(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Offset Y",
+                        text = loc("inputs.labels.offsetY"),
                         fontSize = 11.sp,
                         color = Color.White
                     )
@@ -1082,7 +1083,7 @@ private fun RenderInputSection(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Offset Z",
+                        text = loc("inputs.labels.offsetZ"),
                         fontSize = 11.sp,
                         color = Color.White
                     )
@@ -1299,7 +1300,7 @@ private fun RenderInputSection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Offset X",
+                            text = loc("inputs.labels.offsetX"),
                             fontSize = 11.sp,
                             color = Color.White,
                             textAlign = TextAlign.End,
@@ -1335,7 +1336,7 @@ private fun RenderInputSection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Offset Y",
+                            text = loc("inputs.labels.offsetY"),
                             fontSize = 11.sp,
                             color = Color.White,
                             textAlign = TextAlign.End,
@@ -1371,7 +1372,7 @@ private fun RenderInputSection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Offset Z",
+                            text = loc("inputs.labels.offsetZ"),
                             fontSize = 11.sp,
                             color = Color.White,
                             textAlign = TextAlign.End,
@@ -1846,7 +1847,7 @@ private fun RenderInputSection(
             modifier = Modifier.weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Sidelines Fringe", fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
+            Text(loc("inputs.labels.sidelinesFringe"), fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
             BasicDial(
                 value = sidelinesFringeValue,
                 onValueChange = { newValue ->
@@ -1894,7 +1895,7 @@ private fun RenderInputSection(
             modifier = Modifier.weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Tracking Smooth", fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
+            Text(loc("inputs.labels.trackingSmooth"), fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
             BasicDial(
                 value = trackingSmoothValue,
                 onValueChange = { newValue ->
@@ -1995,7 +1996,7 @@ private fun RenderInputSection(
             modifier = Modifier.weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Height Factor", fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
+            Text(loc("inputs.labels.heightFactor"), fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
             BasicDial(
                 value = heightFactorValue,
                 onValueChange = { newValue ->
@@ -2045,7 +2046,7 @@ private fun RenderInputSection(
         ) {
             // Distance Attenuation (visible if attenuationLawIndex == 0)
             if (attenuationLawIndex == 0) {
-                Text("Distance Attenuation", fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
+                Text(loc("inputs.labels.distanceAttenuation"), fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
                 BasicDial(
                     value = distanceAttenuationValue,
                     onValueChange = { newValue ->
@@ -2090,7 +2091,7 @@ private fun RenderInputSection(
 
             // Distance Ratio (visible if attenuationLawIndex == 1)
             if (attenuationLawIndex == 1) {
-                Text("Distance Ratio", fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
+                Text(loc("inputs.labels.distanceRatio"), fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
                 BasicDial(
                     value = distanceRatioValue,
                     onValueChange = { newValue ->
@@ -2139,7 +2140,7 @@ private fun RenderInputSection(
             modifier = Modifier.weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Common Attenuation", fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
+            Text(loc("inputs.labels.commonAttenuation"), fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
             BasicDial(
                 value = commonAttenValue,
                 onValueChange = { newValue ->
@@ -2280,7 +2281,7 @@ private fun RenderDirectivitySection(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "Directivity",
+            text = loc("inputs.sections.directivity"),
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF00BCD4)
@@ -2312,7 +2313,7 @@ private fun RenderDirectivitySection(
                 ) {
                 // Directivity
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Directivity", fontSize = 12.sp, color = Color.White)
+                    Text(loc("inputs.labels.directivity"), fontSize = 12.sp, color = Color.White)
                     WidthExpansionSlider(
                         value = directivityValue,
                         onValueChange = { newValue ->
@@ -2357,7 +2358,7 @@ private fun RenderDirectivitySection(
 
                 // HF Shelf
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("HF Shelf", fontSize = 12.sp, color = Color.White)
+                    Text(loc("inputs.labels.hfShelf"), fontSize = 12.sp, color = Color.White)
                     StandardSlider(
                         value = HFshelfValue,
                         onValueChange = { newValue ->
@@ -2408,7 +2409,7 @@ private fun RenderDirectivitySection(
                 ) {
                 // Rotation
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Rotation", fontSize = 12.sp, color = Color.White)
+                    Text(loc("inputs.labels.rotation"), fontSize = 12.sp, color = Color.White)
                     AngleDial(
                         value = rotationValue,
                         onValueChange = { newValue ->
@@ -2435,7 +2436,7 @@ private fun RenderDirectivitySection(
 
                 // Tilt
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Tilt", fontSize = 12.sp, color = Color.White)
+                    Text(loc("inputs.labels.tilt"), fontSize = 12.sp, color = Color.White)
                     BidirectionalSliderWithSideBox(
                         value = tiltValue,
                         onValueChange = { newValue ->
@@ -2485,7 +2486,7 @@ private fun RenderDirectivitySection(
                 ) {
                     // Directivity
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Directivity", fontSize = 12.sp, color = Color.White)
+                        Text(loc("inputs.labels.directivity"), fontSize = 12.sp, color = Color.White)
                         WidthExpansionSlider(
                             value = directivityValue,
                             onValueChange = { newValue ->
@@ -2528,7 +2529,7 @@ private fun RenderDirectivitySection(
 
                     // Rotation
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Rotation", fontSize = 12.sp, color = Color.White)
+                        Text(loc("inputs.labels.rotation"), fontSize = 12.sp, color = Color.White)
                         AngleDial(
                             value = rotationValue,
                             onValueChange = { newValue ->
@@ -2554,7 +2555,7 @@ private fun RenderDirectivitySection(
 
                     // Tilt
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Tilt", fontSize = 12.sp, color = Color.White)
+                        Text(loc("inputs.labels.tilt"), fontSize = 12.sp, color = Color.White)
                         BidirectionalSliderWithSideBox(
                             value = tiltValue,
                             onValueChange = { newValue ->
@@ -2596,7 +2597,7 @@ private fun RenderDirectivitySection(
 
                     // HF Shelf
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("HF Shelf", fontSize = 12.sp, color = Color.White)
+                        Text(loc("inputs.labels.hfShelf"), fontSize = 12.sp, color = Color.White)
                         StandardSlider(
                             value = HFshelfValue,
                             onValueChange = { newValue ->
@@ -2791,7 +2792,7 @@ private fun RenderLiveSourceSection(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "Live Source Attenuation",
+            text = loc("inputs.sections.liveSource"),
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF00BCD4)
@@ -2871,7 +2872,7 @@ private fun RenderLiveSourceSection(
                 ) {
                     // Radius
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Radius", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.radius"), fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
                         WidthExpansionSlider(
                             value = radiusValue,
                             onValueChange = { newValue ->
@@ -2916,7 +2917,7 @@ private fun RenderLiveSourceSection(
 
                     // Attenuation
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Attenuation", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.attenuation"), fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
                         StandardSlider(
                             value = liveSourceAttenuationValue,
                             onValueChange = { newValue ->
@@ -2969,7 +2970,7 @@ private fun RenderLiveSourceSection(
                 ) {
                     // Peak Threshold
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Peak Threshold", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.peakThreshold"), fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
                         StandardSlider(
                             value = liveSourcePeakThresholdValue,
                             onValueChange = { newValue ->
@@ -3013,7 +3014,7 @@ private fun RenderLiveSourceSection(
 
                     // Peak Ratio
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Peak Ratio", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.peakRatio"), fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
                         BasicDial(
                             value = liveSourcePeakRatioValue,
                             onValueChange = { newValue ->
@@ -3067,7 +3068,7 @@ private fun RenderLiveSourceSection(
                 ) {
                     // Slow Threshold
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Slow Threshold", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.slowThreshold"), fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
                         StandardSlider(
                             value = liveSourceSlowThresholdValue,
                             onValueChange = { newValue ->
@@ -3111,7 +3112,7 @@ private fun RenderLiveSourceSection(
 
                     // Slow Ratio
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Slow Ratio", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.slowRatio"), fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
                         BasicDial(
                             value = liveSourceSlowRatioValue,
                             onValueChange = { newValue ->
@@ -3184,7 +3185,7 @@ private fun RenderLiveSourceSection(
 
                 // Radius
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Radius", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.radius"), fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
                     WidthExpansionSlider(
                         value = radiusValue,
                         onValueChange = { newValue ->
@@ -3249,7 +3250,7 @@ private fun RenderLiveSourceSection(
 
                 // Attenuation
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Attenuation", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.attenuation"), fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
                     StandardSlider(
                         value = liveSourceAttenuationValue,
                         onValueChange = { newValue ->
@@ -3302,7 +3303,7 @@ private fun RenderLiveSourceSection(
             ) {
                 // Peak Threshold
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Peak Threshold", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.peakThreshold"), fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
                     StandardSlider(
                         value = liveSourcePeakThresholdValue,
                         onValueChange = { newValue ->
@@ -3346,7 +3347,7 @@ private fun RenderLiveSourceSection(
 
                 // Peak Ratio
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Peak Ratio", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.peakRatio"), fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
                     BasicDial(
                         value = liveSourcePeakRatioValue,
                         onValueChange = { newValue ->
@@ -3391,7 +3392,7 @@ private fun RenderLiveSourceSection(
 
                 // Slow Threshold
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Slow Threshold", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.slowThreshold"), fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
                     StandardSlider(
                         value = liveSourceSlowThresholdValue,
                         onValueChange = { newValue ->
@@ -3435,7 +3436,7 @@ private fun RenderLiveSourceSection(
 
                 // Slow Ratio
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Slow Ratio", fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.slowRatio"), fontSize = 12.sp, color = if (isLiveSourceEnabled) Color.White else Color.Gray)
                     BasicDial(
                         value = liveSourceSlowRatioValue,
                         onValueChange = { newValue ->
@@ -3642,7 +3643,7 @@ private fun RenderFloorReflectionsSection(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "Floor Reflections",
+            text = loc("inputs.sections.floorReflections"),
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF00BCD4)
@@ -3694,7 +3695,7 @@ private fun RenderFloorReflectionsSection(
 
                     // Attenuation
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Attenuation", fontSize = 12.sp, color = if (isFREnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.attenuation"), fontSize = 12.sp, color = if (isFREnabled) Color.White else Color.Gray)
                         StandardSlider(
                             value = FRattenuationValue,
                             onValueChange = { newValue ->
@@ -3768,7 +3769,7 @@ private fun RenderFloorReflectionsSection(
 
                     // Low Cut Freq
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Low Cut Freq", fontSize = 12.sp, color = if (isFRLowCutEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.lowCutFreq"), fontSize = 12.sp, color = if (isFRLowCutEnabled) Color.White else Color.Gray)
                         StandardSlider(
                             value = FRlowCutFreqValue,
                             onValueChange = { newValue ->
@@ -3843,7 +3844,7 @@ private fun RenderFloorReflectionsSection(
 
                     // High Shelf Freq
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("High Shelf Freq", fontSize = 12.sp, color = if (isFRHighShelfEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.highShelfFreq"), fontSize = 12.sp, color = if (isFRHighShelfEnabled) Color.White else Color.Gray)
                         StandardSlider(
                             value = FRhighShelfFreqValue,
                             onValueChange = { newValue ->
@@ -3896,7 +3897,7 @@ private fun RenderFloorReflectionsSection(
                 ) {
                     // High Shelf Gain
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("High Shelf Gain", fontSize = 12.sp, color = if (isFRHighShelfEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.highShelfGain"), fontSize = 12.sp, color = if (isFRHighShelfEnabled) Color.White else Color.Gray)
                         StandardSlider(
                             value = FRhighShelfGainValue,
                             onValueChange = { newValue ->
@@ -3940,7 +3941,7 @@ private fun RenderFloorReflectionsSection(
 
                     // High Shelf Slope
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("High Shelf Slope", fontSize = 12.sp, color = if (isFRHighShelfEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.highShelfSlope"), fontSize = 12.sp, color = if (isFRHighShelfEnabled) Color.White else Color.Gray)
                         StandardSlider(
                             value = FRhighShelfSlopeValue,
                             onValueChange = { newValue ->
@@ -3991,7 +3992,7 @@ private fun RenderFloorReflectionsSection(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Diffusion", fontSize = 12.sp, color = if (isFREnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.diffusion"), fontSize = 12.sp, color = if (isFREnabled) Color.White else Color.Gray)
                         BasicDial(
                             value = FRdiffusionValue,
                             onValueChange = { newValue ->
@@ -4064,7 +4065,7 @@ private fun RenderFloorReflectionsSection(
 
                 // Attenuation
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Attenuation", fontSize = 12.sp, color = if (isFREnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.attenuation"), fontSize = 12.sp, color = if (isFREnabled) Color.White else Color.Gray)
                     StandardSlider(
                         value = FRattenuationValue,
                         onValueChange = { newValue ->
@@ -4130,7 +4131,7 @@ private fun RenderFloorReflectionsSection(
 
                 // Low Cut Freq
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Low Cut Freq", fontSize = 12.sp, color = if (isFRLowCutEnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.lowCutFreq"), fontSize = 12.sp, color = if (isFRLowCutEnabled) Color.White else Color.Gray)
                     StandardSlider(
                         value = FRlowCutFreqValue,
                         onValueChange = { newValue ->
@@ -4206,7 +4207,7 @@ private fun RenderFloorReflectionsSection(
 
                 // High Shelf Freq
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("High Shelf Freq", fontSize = 12.sp, color = if (isFRHighShelfEnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.highShelfFreq"), fontSize = 12.sp, color = if (isFRHighShelfEnabled) Color.White else Color.Gray)
                     StandardSlider(
                         value = FRhighShelfFreqValue,
                         onValueChange = { newValue ->
@@ -4251,7 +4252,7 @@ private fun RenderFloorReflectionsSection(
 
                 // High Shelf Gain
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("High Shelf Gain", fontSize = 12.sp, color = if (isFRHighShelfEnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.highShelfGain"), fontSize = 12.sp, color = if (isFRHighShelfEnabled) Color.White else Color.Gray)
                     StandardSlider(
                         value = FRhighShelfGainValue,
                         onValueChange = { newValue ->
@@ -4295,7 +4296,7 @@ private fun RenderFloorReflectionsSection(
 
                 // High Shelf Slope
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("High Shelf Slope", fontSize = 12.sp, color = if (isFRHighShelfEnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.highShelfSlope"), fontSize = 12.sp, color = if (isFRHighShelfEnabled) Color.White else Color.Gray)
                     StandardSlider(
                         value = FRhighShelfSlopeValue,
                         onValueChange = { newValue ->
@@ -4346,7 +4347,7 @@ private fun RenderFloorReflectionsSection(
                 horizontalArrangement = Arrangement.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Diffusion", fontSize = 12.sp, color = if (isFREnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.diffusion"), fontSize = 12.sp, color = if (isFREnabled) Color.White else Color.Gray)
                     BasicDial(
                         value = FRdiffusionValue,
                         onValueChange = { newValue ->
@@ -4463,7 +4464,7 @@ private fun RenderJitterSection(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "Jitter",
+            text = loc("inputs.sections.jitter"),
             fontSize = 18.sp,
             color = Color(0xFF00BCD4),
             fontWeight = FontWeight.Bold
@@ -4484,7 +4485,7 @@ private fun RenderJitterSection(
                 modifier = Modifier.width(jitterSliderWidth),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("Jitter", fontSize = 12.sp, color = Color.White)
+                Text(loc("inputs.labels.jitter"), fontSize = 12.sp, color = Color.White)
                 WidthExpansionSlider(
             value = jitterValue,
             onValueChange = { newValue ->
@@ -4784,7 +4785,7 @@ private fun RenderLFOSection(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "LFO",
+            text = loc("inputs.sections.lfo"),
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF00BCD4)
@@ -4834,7 +4835,7 @@ private fun RenderLFOSection(
 
                 // Period
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Period", fontSize = 12.sp, color = if (isLFOEnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.period"), fontSize = 12.sp, color = if (isLFOEnabled) Color.White else Color.Gray)
                     BasicDial(
                         value = LFOperiodValue,
                         onValueChange = { newValue ->
@@ -4879,7 +4880,7 @@ private fun RenderLFOSection(
 
                 // Phase
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Phase", fontSize = 12.sp, color = if (isLFOEnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.phase"), fontSize = 12.sp, color = if (isLFOEnabled) Color.White else Color.Gray)
                     PhaseDial(
                         value = LFOphaseValue,
                         onValueChange = { newValue ->
@@ -4963,7 +4964,7 @@ private fun RenderLFOSection(
                 ) {
                     // Amplitude X
                     Column {
-                        Text("Amplitude X", fontSize = 12.sp, color = if (isAmplitudeXEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.amplitudeX"), fontSize = 12.sp, color = if (isAmplitudeXEnabled) Color.White else Color.Gray)
                         BidirectionalSlider(
                         value = LFOamplitudeXValue,
                         onValueChange = { newValue ->
@@ -5006,7 +5007,7 @@ private fun RenderLFOSection(
 
                     // Rate X
                     Column {
-                        Text("Rate X", fontSize = 12.sp, color = if (isRateXEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.rateX"), fontSize = 12.sp, color = if (isRateXEnabled) Color.White else Color.Gray)
                         StandardSlider(
                         value = LFOrateXValue,
                         onValueChange = { newValue ->
@@ -5051,7 +5052,7 @@ private fun RenderLFOSection(
 
                 // Phase X
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Phase X", fontSize = 12.sp, color = if (isPhaseXEnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.phaseX"), fontSize = 12.sp, color = if (isPhaseXEnabled) Color.White else Color.Gray)
                     PhaseDial(
                         value = LFOphaseXValue,
                         onValueChange = { newValue ->
@@ -5115,7 +5116,7 @@ private fun RenderLFOSection(
                 ) {
                     // Amplitude Y
                     Column {
-                        Text("Amplitude Y", fontSize = 12.sp, color = if (isAmplitudeYEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.amplitudeY"), fontSize = 12.sp, color = if (isAmplitudeYEnabled) Color.White else Color.Gray)
                         BidirectionalSlider(
                         value = LFOamplitudeYValue,
                         onValueChange = { newValue ->
@@ -5158,7 +5159,7 @@ private fun RenderLFOSection(
 
                     // Rate Y
                     Column {
-                        Text("Rate Y", fontSize = 12.sp, color = if (isRateYEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.rateY"), fontSize = 12.sp, color = if (isRateYEnabled) Color.White else Color.Gray)
                         StandardSlider(
                         value = LFOrateYValue,
                         onValueChange = { newValue ->
@@ -5203,7 +5204,7 @@ private fun RenderLFOSection(
 
                 // Phase Y
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Phase Y", fontSize = 12.sp, color = if (isPhaseYEnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.phaseY"), fontSize = 12.sp, color = if (isPhaseYEnabled) Color.White else Color.Gray)
                     PhaseDial(
                         value = LFOphaseYValue,
                         onValueChange = { newValue ->
@@ -5267,7 +5268,7 @@ private fun RenderLFOSection(
                 ) {
                     // Amplitude Z
                     Column {
-                        Text("Amplitude Z", fontSize = 12.sp, color = if (isAmplitudeZEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.amplitudeZ"), fontSize = 12.sp, color = if (isAmplitudeZEnabled) Color.White else Color.Gray)
                         BidirectionalSlider(
                         value = LFOamplitudeZValue,
                         onValueChange = { newValue ->
@@ -5310,7 +5311,7 @@ private fun RenderLFOSection(
 
                     // Rate Z
                     Column {
-                        Text("Rate Z", fontSize = 12.sp, color = if (isRateZEnabled) Color.White else Color.Gray)
+                        Text(loc("inputs.labels.rateZ"), fontSize = 12.sp, color = if (isRateZEnabled) Color.White else Color.Gray)
                         StandardSlider(
                         value = LFOrateZValue,
                         onValueChange = { newValue ->
@@ -5355,7 +5356,7 @@ private fun RenderLFOSection(
 
                 // Phase Z
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Phase Z", fontSize = 12.sp, color = if (isPhaseZEnabled) Color.White else Color.Gray)
+                    Text(loc("inputs.labels.phaseZ"), fontSize = 12.sp, color = if (isPhaseZEnabled) Color.White else Color.Gray)
                     PhaseDial(
                         value = LFOphaseZValue,
                         onValueChange = { newValue ->

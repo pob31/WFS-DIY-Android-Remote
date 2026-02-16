@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 import CustomToggleButton
+import com.wfsdiy.wfs_control_2.localization.loc
 
 @Composable
 fun LockingTab(
@@ -54,7 +55,8 @@ fun LockingTab(
             ) {
                 rowMarkers.forEach { marker ->
                     val markerName = marker.name.takeIf { it.isNotBlank() }
-                    val buttonText = "Lock ${marker.id}" +
+                    val lockPrefix = loc("remote.lock.prefix")
+                    val buttonText = "$lockPrefix ${marker.id}" +
                             if (markerName != null) "\n\n${markerName.take(12)}" else ""
 
                     CustomToggleButton(

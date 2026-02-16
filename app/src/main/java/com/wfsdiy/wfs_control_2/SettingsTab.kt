@@ -14,7 +14,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+
+import com.wfsdiy.wfs_control_2.localization.LocalizationManager
+import com.wfsdiy.wfs_control_2.localization.loc
 
 @Composable
 fun SettingsTab(
@@ -22,14 +26,15 @@ fun SettingsTab(
     onShutdownApp: () -> Unit,
     onNetworkParametersChanged: (() -> Unit)? = null
 ) {
+    val context = LocalContext.current
     var showResetDialog by remember { mutableStateOf(false) }
     var showShutdownDialog by remember { mutableStateOf(false) }
 
     if (showResetDialog) {
         AlertDialog(
             onDismissRequest = { showResetDialog = false },
-            title = { Text("Confirm Reset") },
-            text = { Text("Are you sure you want to reset the number of inputs, lock states, and visibility states to their defaults?") },
+            title = { Text(loc("remote.settings.confirmReset")) },
+            text = { Text(loc("remote.settings.confirmResetMessage")) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -37,12 +42,12 @@ fun SettingsTab(
                         showResetDialog = false
                     }
                 ) {
-                    Text("Reset")
+                    Text(loc("common.reset"))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showResetDialog = false }) {
-                    Text("Cancel")
+                    Text(loc("common.cancel"))
                 }
             }
         )
@@ -51,8 +56,8 @@ fun SettingsTab(
     if (showShutdownDialog) {
         AlertDialog(
             onDismissRequest = { showShutdownDialog = false },
-            title = { Text("Confirm Shutdown") },
-            text = { Text("Are you sure you want to shut down the application and OSC server?") },
+            title = { Text(loc("remote.settings.confirmShutdown")) },
+            text = { Text(loc("remote.settings.confirmShutdownMessage")) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -60,12 +65,12 @@ fun SettingsTab(
                         showShutdownDialog = false
                     }
                 ) {
-                    Text("Shutdown")
+                    Text(loc("remote.settings.shutdown"))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showShutdownDialog = false }) {
-                    Text("Cancel")
+                    Text(loc("common.cancel"))
                 }
             }
         )
@@ -79,6 +84,33 @@ fun SettingsTab(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Language selector
+            val langs = LocalizationManager.availableLanguages
+            val currentLang by LocalizationManager.currentLanguage.collectAsState()
+            val currentIdx = langs.indexOfFirst { it.first == currentLang }.coerceAtLeast(0)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(0.8f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    loc("remote.settings.language"),
+                    color = Color.White,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                ParameterDropdown(
+                    label = "",
+                    selectedIndex = currentIdx,
+                    options = langs.map { it.second },
+                    onSelectionChange = { idx ->
+                        val code = langs[idx].first
+                        LocalizationManager.loadLanguage(context, code)
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // NetworkTab content
             NetworkTab(onNetworkParametersChanged = onNetworkParametersChanged)
 
@@ -105,7 +137,7 @@ fun SettingsTab(
                     ),
                     shape = RoundedCornerShape(4.dp)
                 ) {
-                    Text("Reset App Settings to Defaults")
+                    Text(loc("remote.settings.resetAppSettings"))
                 }
 
                 Button(
@@ -117,7 +149,7 @@ fun SettingsTab(
                     ),
                     shape = RoundedCornerShape(4.dp)
                 ) {
-                    Text("Shutdown Application")
+                    Text(loc("remote.settings.shutdownApplication"))
                 }
             }
         }
