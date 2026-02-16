@@ -203,7 +203,11 @@ class OscService : Service() {
         if (isServerRunning) {
             return
         }
-        
+
+        // Notify JUCE we're (re)starting so it resets connection state
+        // and sends full state dump on next ping/pong handshake
+        sendOscDisconnect(this)
+
         serverJob = serviceScope.launch {
             try {
                 isServerRunning = true

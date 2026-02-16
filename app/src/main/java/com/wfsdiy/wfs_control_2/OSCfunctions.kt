@@ -1371,6 +1371,43 @@ fun sendOscPong(context: Context, sequenceNumber: Int) {
 }
 
 /**
+ * Send disconnect notification to the JUCE server.
+ * Called on app startup to force JUCE to reset connection state
+ * and re-send the full state dump on the next ping/pong handshake.
+ */
+fun sendOscDisconnect(context: Context) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull()
+
+            if (outgoingPort == null || !isValidPort(outgoingPortStr)) {
+                return@launch
+            }
+            if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) {
+                return@launch
+            }
+
+            val addressPattern = "/remote/disconnect"
+            val addressPatternBytes = getPaddedBytes(addressPattern)
+            val typeTagBytes = getPaddedBytes(",")
+
+            val oscPacketBytes = addressPatternBytes + typeTagBytes
+
+            DatagramSocket().use { socket ->
+                val inetAddress = InetAddress.getByName(ipAddressStr)
+                val packet = DatagramPacket(oscPacketBytes, oscPacketBytes.size, inetAddress, outgoingPort)
+                socket.send(packet)
+            }
+
+            android.util.Log.d("OSC", "Sent /remote/disconnect")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
+
+/**
  * Send heartbeat acknowledgment to the JUCE server.
  * @param context Android context for accessing network parameters
  * @param sequenceNumber The sequence number from the received heartbeat
