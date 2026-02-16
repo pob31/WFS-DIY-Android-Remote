@@ -47,12 +47,14 @@ fun ParameterDropdown(
     var expanded by remember { mutableStateOf(false) }
 
     Column(modifier = modifier) {
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            color = if (enabled) Color.White else Color.Gray,
-            modifier = Modifier.padding(bottom = 4.dp)
-        )
+        if (label.isNotEmpty()) {
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                color = if (enabled) Color.White else Color.Gray,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
 
         ExposedDropdownMenuBox(
             expanded = expanded,
@@ -127,12 +129,14 @@ fun ParameterTextButton(
         modifier = modifier.then(if (dimmed) Modifier.alpha(dimAlpha) else Modifier),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            color = if (enabled) Color.White else Color.Gray,
-            modifier = Modifier.padding(bottom = 4.dp)
-        )
+        if (label.isNotEmpty()) {
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                color = if (enabled) Color.White else Color.Gray,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
 
         Button(
             onClick = {
@@ -149,13 +153,15 @@ fun ParameterTextButton(
                 disabledContentColor = Color.Gray
             ),
             shape = RoundedCornerShape(4.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
             modifier = Modifier
-                .width(210.dp)
-                .height(48.dp)
+                .widthIn(max = 210.dp)
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = 40.dp)
         ) {
             Text(
                 text = options.getOrNull(selectedIndex) ?: "",
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 textAlign = TextAlign.Center
             )
         }

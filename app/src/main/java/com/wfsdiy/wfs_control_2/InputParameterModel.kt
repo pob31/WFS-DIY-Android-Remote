@@ -281,6 +281,92 @@ object InputParameterDefinitions {
         ),
         InputParameterDefinition(
             group = "Input",
+            label = "Tracking Active",
+            variableName = "trackingActive",
+            oscPath = "/remoteInput/trackingActive",
+            isIncoming = true,
+            isOutgoing = true,
+            uiType = UIComponentType.TEXT_BUTTON,
+            dataType = ParameterType.INT,
+            minValue = 0f,
+            maxValue = 1f,
+            enumValues = listOf("OFF", "ON"),
+            note = "Enable tracking for this input"
+        ),
+        InputParameterDefinition(
+            group = "Input",
+            label = "Tracking ID",
+            variableName = "trackingID",
+            oscPath = "/remoteInput/trackingID",
+            isIncoming = true,
+            isOutgoing = true,
+            uiType = UIComponentType.DROPDOWN,
+            dataType = ParameterType.INT,
+            minValue = 1f,
+            maxValue = 64f,
+            enumValues = (1..64).map { it.toString() },
+            note = "Tracking marker ID to follow (1-64)"
+        ),
+        InputParameterDefinition(
+            group = "Input",
+            label = "Tracking Smooth",
+            variableName = "trackingSmooth",
+            oscPath = "/remoteInput/trackingSmooth",
+            isIncoming = true,
+            isOutgoing = true,
+            uiType = UIComponentType.DIAL,
+            dataType = ParameterType.INT,
+            minValue = 0f,
+            maxValue = 100f,
+            formula = "x*100",
+            unit = "%",
+            note = "Tracking smoothing factor (0-100%)"
+        ),
+        InputParameterDefinition(
+            group = "Input",
+            label = "Sidelines Active",
+            variableName = "sidelinesActive",
+            oscPath = "/remoteInput/sidelinesActive",
+            isIncoming = true,
+            isOutgoing = true,
+            uiType = UIComponentType.TEXT_BUTTON,
+            dataType = ParameterType.INT,
+            minValue = 0f,
+            maxValue = 1f,
+            enumValues = listOf("OFF", "ON"),
+            note = "Auto-mute at stage edges"
+        ),
+        InputParameterDefinition(
+            group = "Input",
+            label = "Sidelines Fringe",
+            variableName = "sidelinesFringe",
+            oscPath = "/remoteInput/sidelinesFringe",
+            isIncoming = true,
+            isOutgoing = true,
+            uiType = UIComponentType.DIAL,
+            dataType = ParameterType.FLOAT,
+            minValue = 0.1f,
+            maxValue = 10f,
+            formula = "(x*9.9)+0.1",
+            unit = "m",
+            note = "Sideline fringe size in meters"
+        ),
+        InputParameterDefinition(
+            group = "Input",
+            label = "Path Mode",
+            variableName = "pathModeActive",
+            oscPath = "/remoteInput/pathModeActive",
+            isIncoming = true,
+            isOutgoing = true,
+            uiType = UIComponentType.TEXT_BUTTON,
+            dataType = ParameterType.INT,
+            minValue = 0f,
+            maxValue = 1f,
+            enumValues = listOf("OFF", "ON"),
+            note = "Path recording/playback mode"
+        ),
+        InputParameterDefinition(
+            group = "Input",
             label = "Constraint Distance",
             variableName = "constraintDistance",
             oscPath = "/remoteInput/constraintDistance",
@@ -1031,6 +1117,7 @@ object InputParameterDefinitions {
                         "x*50.0" -> x * 50f
                         "x*19.99+0.01" -> (x * 19.99f) + 0.01f
                         "x*100" -> x * 100f
+                        "(x*9.9)+0.1" -> (x * 9.9f) + 0.1f
                         "(x*6.0)-0.6" -> (x * 6f) - 0.6f
                         "pow(10.0,(x*2.0)-1.0)" -> 10f.pow((x * 2f) - 1f)
                         "(x*9.0)+1" -> (x * 9f) + 1f
@@ -1100,6 +1187,7 @@ object InputParameterDefinitions {
                         "x*50.0" -> y / 50f
                         "x*19.99+0.01" -> (y - 0.01f) / 19.99f
                         "x*100" -> y / 100f
+                        "(x*9.9)+0.1" -> (y - 0.1f) / 9.9f
                         "(x*6.0)-0.6" -> (y + 0.6f) / 6f
                         "pow(10.0,(x*2.0)-1.0)" -> (log10(y) + 1f) / 2f
                         "(x*9.0)+1" -> (y - 1f) / 9f

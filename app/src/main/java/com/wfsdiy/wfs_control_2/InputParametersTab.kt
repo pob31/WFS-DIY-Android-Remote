@@ -1563,16 +1563,128 @@ private fun RenderInputSection(
         commonAttenDisplayValue = actualValue.toInt().toString()
     }
 
-    Spacer(modifier = Modifier.height(spacing.largeSpacing))
+    // Tracking Active
+    val trackingActive = selectedChannel.getParameter("trackingActive")
+    var trackingActiveIndex by remember {
+        mutableIntStateOf(trackingActive.normalizedValue.toInt().coerceIn(0, 1))
+    }
 
-    // Third Row with 10% padding: Buttons (Max Speed Active | empty | Attenuation Law | empty)
+    LaunchedEffect(inputId, trackingActive.normalizedValue) {
+        trackingActiveIndex = trackingActive.normalizedValue.toInt().coerceIn(0, 1)
+    }
+
+    // Tracking ID (1-64 raw value, dropdown index 0-63)
+    val trackingID = selectedChannel.getParameter("trackingID")
+    var trackingIDIndex by remember {
+        mutableIntStateOf(
+            (trackingID.normalizedValue.toInt() - 1).coerceIn(0, 63)
+        )
+    }
+
+    LaunchedEffect(inputId, trackingID.normalizedValue) {
+        trackingIDIndex = (trackingID.normalizedValue.toInt() - 1).coerceIn(0, 63)
+    }
+
+    // Tracking Smooth (0-100%)
+    val trackingSmooth = selectedChannel.getParameter("trackingSmooth")
+    var trackingSmoothValue by remember { mutableStateOf(trackingSmooth.normalizedValue) }
+    var trackingSmoothDisplayValue by remember {
+        mutableStateOf(trackingSmooth.displayValue.replace("%", "").trim().ifEmpty { "0" })
+    }
+
+    LaunchedEffect(inputId, trackingSmooth.normalizedValue) {
+        trackingSmoothValue = trackingSmooth.normalizedValue
+        val definition = InputParameterDefinitions.parametersByVariableName["trackingSmooth"]!!
+        val actualValue = InputParameterDefinitions.applyFormula(definition, trackingSmooth.normalizedValue)
+        trackingSmoothDisplayValue = actualValue.toInt().toString()
+    }
+
+    // Sidelines Active
+    val sidelinesActive = selectedChannel.getParameter("sidelinesActive")
+    var sidelinesActiveIndex by remember {
+        mutableIntStateOf(sidelinesActive.normalizedValue.toInt().coerceIn(0, 1))
+    }
+
+    LaunchedEffect(inputId, sidelinesActive.normalizedValue) {
+        sidelinesActiveIndex = sidelinesActive.normalizedValue.toInt().coerceIn(0, 1)
+    }
+
+    // Sidelines Fringe (0.1-10.0m)
+    val sidelinesFringe = selectedChannel.getParameter("sidelinesFringe")
+    var sidelinesFringeValue by remember { mutableStateOf(sidelinesFringe.normalizedValue) }
+    var sidelinesFringeDisplayValue by remember {
+        mutableStateOf(sidelinesFringe.displayValue.replace("m", "").trim().ifEmpty { "0.10" })
+    }
+
+    LaunchedEffect(inputId, sidelinesFringe.normalizedValue) {
+        sidelinesFringeValue = sidelinesFringe.normalizedValue
+        val definition = InputParameterDefinitions.parametersByVariableName["sidelinesFringe"]!!
+        val actualValue = InputParameterDefinitions.applyFormula(definition, sidelinesFringe.normalizedValue)
+        sidelinesFringeDisplayValue = String.format(Locale.US, "%.2f", actualValue)
+    }
+
+    // Path Mode Active
+    val pathModeActive = selectedChannel.getParameter("pathModeActive")
+    var pathModeActiveIndex by remember {
+        mutableIntStateOf(pathModeActive.normalizedValue.toInt().coerceIn(0, 1))
+    }
+
+    LaunchedEffect(inputId, pathModeActive.normalizedValue) {
+        pathModeActiveIndex = pathModeActive.normalizedValue.toInt().coerceIn(0, 1)
+    }
+
+    Spacer(modifier = Modifier.height(spacing.largeSpacing / 4))
+
+    // Third Row with 10% padding: Buttons (Sidelines | Tracking Active | Max Speed Active | empty | Attenuation Law | empty)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = screenWidthDp * 0.1f, end = screenWidthDp * 0.1f),
         horizontalArrangement = Arrangement.spacedBy(spacing.smallSpacing)
     ) {
-        // Cell 1: Max Speed Active button
+        // Cell 1: Sidelines Active button
+        Column(modifier = Modifier.weight(1f)) {
+            ParameterTextButton(
+                label = "",
+                selectedIndex = sidelinesActiveIndex,
+                options = listOf("Sidelines OFF", "Sidelines ON"),
+                onSelectionChange = { index ->
+                    sidelinesActiveIndex = index
+                    selectedChannel.setParameter("sidelinesActive", InputParameterValue(
+                        normalizedValue = index.toFloat(),
+                        stringValue = "",
+                        displayValue = listOf("OFF", "ON")[index]
+                    ))
+                    viewModel.sendInputParameterInt("/remoteInput/sidelinesActive", inputId, index)
+                },
+                activeIndex = 1,
+                activeColor = getRowColorActive(3),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        // Cell 2: Tracking Active button
+        Column(modifier = Modifier.weight(1f)) {
+            ParameterTextButton(
+                label = "",
+                selectedIndex = trackingActiveIndex,
+                options = listOf("Tracking OFF", "Tracking ON"),
+                onSelectionChange = { index ->
+                    trackingActiveIndex = index
+                    selectedChannel.setParameter("trackingActive", InputParameterValue(
+                        normalizedValue = index.toFloat(),
+                        stringValue = "",
+                        displayValue = listOf("OFF", "ON")[index]
+                    ))
+                    viewModel.sendInputParameterInt("/remoteInput/trackingActive", inputId, index)
+                },
+                activeIndex = 1,
+                activeColor = getRowColorActive(3),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        // Cell 3: Max Speed Active button
         Column(modifier = Modifier.weight(1f)) {
             ParameterTextButton(
                 label = "",
@@ -1593,10 +1705,10 @@ private fun RenderInputSection(
             )
         }
 
-        // Cell 2: Empty (Height Factor has no button)
+        // Cell 4: Empty (Height Factor has no button)
         Spacer(modifier = Modifier.weight(1f))
 
-        // Cell 3: Attenuation Law button
+        // Cell 5: Attenuation Law button
         Column(modifier = Modifier.weight(1f)) {
             ParameterTextButton(
                 label = "",
@@ -1617,13 +1729,111 @@ private fun RenderInputSection(
             )
         }
 
-        // Cell 4: Empty (Common Attenuation has no button)
+        // Cell 6: Empty (Common Attenuation has no button)
         Spacer(modifier = Modifier.weight(1f))
     }
 
-    Spacer(modifier = Modifier.height(spacing.smallSpacing))
+    Spacer(modifier = Modifier.height(spacing.smallSpacing / 40))
 
-    // Fourth Row with 10% padding: All dials (Max Speed | Height Factor | Distance Atten/Ratio | Common Atten)
+    // Middle Row: line | Tracking ID | Path Mode | empty | line | empty
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .padding(start = screenWidthDp * 0.1f, end = screenWidthDp * 0.1f),
+        horizontalArrangement = Arrangement.spacedBy(spacing.smallSpacing),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Cell 1: Vertical line (Sidelines column)
+        Box(
+            modifier = Modifier.weight(1f).fillMaxHeight(),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(Color.Gray.copy(alpha = 0.5f))
+            )
+        }
+
+        // Cell 2: Tracking ID - inline label + narrow dropdown
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Tracking ID",
+                fontSize = 12.sp,
+                color = Color.White,
+                modifier = Modifier.padding(end = 6.dp)
+            )
+            val trackingIDOptions = (1..64).map { it.toString() }
+            ParameterDropdown(
+                label = "",
+                selectedIndex = trackingIDIndex,
+                options = trackingIDOptions,
+                onSelectionChange = { index ->
+                    trackingIDIndex = index
+                    val idValue = index + 1  // Display 1-64, index 0-63
+                    selectedChannel.setParameter("trackingID", InputParameterValue(
+                        normalizedValue = idValue.toFloat(),
+                        stringValue = "",
+                        displayValue = idValue.toString()
+                    ))
+                    viewModel.sendInputParameterInt("/remoteInput/trackingID", inputId, idValue)
+                },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // Cell 3: Path Mode button
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            ParameterTextButton(
+                label = "",
+                selectedIndex = pathModeActiveIndex,
+                options = listOf("Path Mode OFF", "Path Mode ON"),
+                onSelectionChange = { index ->
+                    pathModeActiveIndex = index
+                    selectedChannel.setParameter("pathModeActive", InputParameterValue(
+                        normalizedValue = index.toFloat(),
+                        stringValue = "",
+                        displayValue = listOf("OFF", "ON")[index]
+                    ))
+                    viewModel.sendInputParameterInt("/remoteInput/pathModeActive", inputId, index)
+                },
+                activeIndex = 1,
+                activeColor = getRowColorActive(3),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        // Cell 4: Empty
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Cell 5: Vertical line (Attenuation Law column)
+        Box(
+            modifier = Modifier.weight(1f).fillMaxHeight(),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(Color.Gray.copy(alpha = 0.5f))
+            )
+        }
+
+        // Cell 6: Empty
+        Spacer(modifier = Modifier.weight(1f))
+    }
+
+    Spacer(modifier = Modifier.height(spacing.smallSpacing / 2))
+
+    // Fourth Row with 10% padding: All dials (Sidelines Fringe | Tracking Smooth | Max Speed | Height Factor | Distance Atten/Ratio | Common Atten)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1631,7 +1841,103 @@ private fun RenderInputSection(
         horizontalArrangement = Arrangement.spacedBy(spacing.smallSpacing),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Cell 1: Max Speed dial
+        // Cell 1: Sidelines Fringe dial
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("Sidelines Fringe", fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
+            BasicDial(
+                value = sidelinesFringeValue,
+                onValueChange = { newValue ->
+                    sidelinesFringeValue = newValue
+                    val definition = InputParameterDefinitions.parametersByVariableName["sidelinesFringe"]!!
+                    val actualValue = InputParameterDefinitions.applyFormula(definition, newValue)
+                    sidelinesFringeDisplayValue = String.format(Locale.US, "%.2f", actualValue)
+                    selectedChannel.setParameter("sidelinesFringe", InputParameterValue(
+                        normalizedValue = newValue,
+                        stringValue = "",
+                        displayValue = "${String.format(Locale.US, "%.2f", actualValue)}m"
+                    ))
+                    viewModel.sendInputParameterFloat("/remoteInput/sidelinesFringe", inputId, actualValue)
+                },
+                dialColor = Color.DarkGray,
+                indicatorColor = Color.White,
+                trackColor = getRowColor(3),
+                displayedValue = sidelinesFringeDisplayValue,
+                valueUnit = "m",
+                isValueEditable = true,
+                onDisplayedValueChange = {},
+                onValueCommit = { committedValue ->
+                    committedValue.toFloatOrNull()?.let { value ->
+                        val coercedValue = value.coerceIn(0.1f, 10f)
+                        val definition = InputParameterDefinitions.parametersByVariableName["sidelinesFringe"]!!
+                        val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
+                        sidelinesFringeValue = normalized
+                        sidelinesFringeDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
+                        selectedChannel.setParameter("sidelinesFringe", InputParameterValue(
+                            normalizedValue = normalized,
+                            stringValue = "",
+                            displayValue = "${String.format(Locale.US, "%.2f", coercedValue)}m"
+                        ))
+                        viewModel.sendInputParameterFloat("/remoteInput/sidelinesFringe", inputId, coercedValue)
+                    }
+                },
+                valueTextColor = Color.White,
+                enabled = true,
+                sizeMultiplier = 0.7f
+            )
+        }
+
+        // Cell 2: Tracking Smooth dial
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("Tracking Smooth", fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
+            BasicDial(
+                value = trackingSmoothValue,
+                onValueChange = { newValue ->
+                    trackingSmoothValue = newValue
+                    val definition = InputParameterDefinitions.parametersByVariableName["trackingSmooth"]!!
+                    val actualValue = InputParameterDefinitions.applyFormula(definition, newValue)
+                    trackingSmoothDisplayValue = actualValue.toInt().toString()
+                    selectedChannel.setParameter("trackingSmooth", InputParameterValue(
+                        normalizedValue = newValue,
+                        stringValue = "",
+                        displayValue = "${actualValue.toInt()}%"
+                    ))
+                    viewModel.sendInputParameterInt("/remoteInput/trackingSmooth", inputId, actualValue.toInt())
+                },
+                dialColor = Color.DarkGray,
+                indicatorColor = Color.White,
+                trackColor = getRowColor(3),
+                displayedValue = trackingSmoothDisplayValue,
+                valueUnit = "%",
+                isValueEditable = true,
+                onDisplayedValueChange = {},
+                onValueCommit = { committedValue ->
+                    committedValue.toFloatOrNull()?.let { value ->
+                        val roundedValue = value.roundToInt()
+                        val coercedValue = roundedValue.coerceIn(0, 100)
+                        val normalized = coercedValue / 100f
+                        trackingSmoothValue = normalized
+                        trackingSmoothDisplayValue = coercedValue.toString()
+                        selectedChannel.setParameter("trackingSmooth", InputParameterValue(
+                            normalizedValue = normalized,
+                            stringValue = "",
+                            displayValue = "${coercedValue}%"
+                        ))
+                        viewModel.sendInputParameterInt("/remoteInput/trackingSmooth", inputId, coercedValue)
+                    }
+                },
+                valueTextColor = Color.White,
+                enabled = true,
+                sizeMultiplier = 0.7f
+            )
+        }
+
+        // Cell 3: Max Speed dial
         Column(
             modifier = Modifier.weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -1639,7 +1945,8 @@ private fun RenderInputSection(
             Text(
                 "Max Speed",
                 fontSize = 12.sp,
-                color = if (isMaxSpeedEnabled) Color.White else Color.Gray
+                color = if (isMaxSpeedEnabled) Color.White else Color.Gray,
+                modifier = Modifier.padding(bottom = 4.dp)
             )
             BasicDial(
                 value = maxSpeedValue,
@@ -1683,12 +1990,12 @@ private fun RenderInputSection(
             )
         }
 
-        // Cell 2: Height Factor dial
+        // Cell 4: Height Factor dial
         Column(
             modifier = Modifier.weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Height Factor", fontSize = 12.sp, color = Color.White)
+            Text("Height Factor", fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
             BasicDial(
                 value = heightFactorValue,
                 onValueChange = { newValue ->
@@ -1731,14 +2038,14 @@ private fun RenderInputSection(
             )
         }
 
-        // Cell 3: Distance Attenuation or Distance Ratio dial (conditional)
+        // Cell 5: Distance Attenuation or Distance Ratio dial (conditional)
         Column(
             modifier = Modifier.weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Distance Attenuation (visible if attenuationLawIndex == 0)
             if (attenuationLawIndex == 0) {
-                Text("Distance Attenuation", fontSize = 12.sp, color = Color.White)
+                Text("Distance Attenuation", fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
                 BasicDial(
                     value = distanceAttenuationValue,
                     onValueChange = { newValue ->
@@ -1783,7 +2090,7 @@ private fun RenderInputSection(
 
             // Distance Ratio (visible if attenuationLawIndex == 1)
             if (attenuationLawIndex == 1) {
-                Text("Distance Ratio", fontSize = 12.sp, color = Color.White)
+                Text("Distance Ratio", fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
                 BasicDial(
                     value = distanceRatioValue,
                     onValueChange = { newValue ->
@@ -1827,12 +2134,12 @@ private fun RenderInputSection(
             }
         }
 
-        // Cell 4: Common Attenuation dial
+        // Cell 6: Common Attenuation dial
         Column(
             modifier = Modifier.weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Common Attenuation", fontSize = 12.sp, color = Color.White)
+            Text("Common Attenuation", fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
             BasicDial(
                 value = commonAttenValue,
                 onValueChange = { newValue ->
