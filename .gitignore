@@ -22,3 +22,6 @@ keystore.properties
 *.p12
 *.key
 key.properties
+
+# Kotlin compiler metadata
+.kotlin/
