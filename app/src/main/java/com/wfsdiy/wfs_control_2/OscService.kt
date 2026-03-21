@@ -16,6 +16,7 @@ import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -205,13 +206,12 @@ class OscService : Service() {
             return
         }
 
-        // Notify JUCE we're (re)starting so it resets connection state
-        // and sends full state dump on next ping/pong handshake
-        sendOscDisconnect(this)
-
         serverJob = serviceScope.launch {
             try {
                 isServerRunning = true
+                // Notify JUCE we're (re)starting so it resets connection state
+                // and sends full state dump on next ping/pong handshake
+                sendOscDisconnect(this@OscService)
                 startOscServer(
                     context = this@OscService,
                     onOscDataReceived = { id, name, position, isCluster ->
@@ -587,11 +587,17 @@ class OscService : Service() {
     }
 
     fun restartOscServer() {
-        serverJob?.cancel()
+        val oldJob = serverJob
+        serverJob = null
         isServerRunning = false
         // Clear composite deltas on restart
         _compositePositions.value = emptyMap()
-        startServer()
+
+        serviceScope.launch {
+            // Wait for old server socket to fully close before rebinding
+            oldJob?.cancelAndJoin()
+            startServer()
+        }
     }
     
     fun updateNetworkParameters() {

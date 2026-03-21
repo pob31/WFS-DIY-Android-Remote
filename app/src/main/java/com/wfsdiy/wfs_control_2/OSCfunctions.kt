@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.compose.ui.geometry.Offset
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -1226,7 +1227,7 @@ fun parseAndProcessOscPacket(
     }
 }
 
-fun startOscServer(
+suspend fun startOscServer(
     context: Context,
     onOscDataReceived: OscDataCallback,
     onStageWidthChanged: OscStageDimensionCallback? = null,
@@ -1249,76 +1250,65 @@ fun startOscServer(
     onRemoteDisconnectReceived: OscRemoteDisconnectCallback? = null,
     onCompositePositionReceived: OscCompositePositionCallback? = null
 ) {
-    CoroutineScope(Dispatchers.IO).launch {
-        var serverSocket: DatagramSocket? = null
-        try {
-            val (incomingPortStr, _, _) = loadNetworkParameters(context)
-            val incomingPort = incomingPortStr.toIntOrNull()
-            if (incomingPort == null || !isValidPort(incomingPortStr)) {
-
-                return@launch
-            }
-            serverSocket = DatagramSocket(incomingPort)
-            serverSocket.soTimeout = 1000 // Set 1 second timeout to prevent blocking
-            serverSocket.receiveBufferSize = 262144 // 256KB buffer to handle burst of messages during handshake
-
-
-
-
-            val buffer = ByteArray(1024)
-            while (isActive) {
-                val packet = DatagramPacket(buffer, buffer.size)
-                try {
-                    serverSocket.receive(packet)
-                    val receivedData = packet.data.copyOf(packet.length)
-                    val remoteAddress = packet.address.hostAddress
-
-                    val (canvasWidth, canvasHeight) = CanvasDimensions.getCurrentDimensions()
-                    parseAndProcessOscPacket(
-                        context,
-                        receivedData,
-                        canvasWidth,
-                        canvasHeight,
-                        onOscDataReceived,
-                        onStageWidthChanged,
-                        onStageDepthChanged,
-                        onStageHeightChanged,
-                        onStageOriginXChanged,
-                        onStageOriginYChanged,
-                        onStageOriginZChanged,
-                        onStageShapeChanged,
-                        onStageDiameterChanged,
-                        onDomeElevationChanged,
-                        onNumberOfInputsChanged,
-                        onInputParameterIntReceived,
-                        onInputParameterFloatReceived,
-                        onInputParameterStringReceived,
-                        onClusterReferenceModeChanged,
-                        onClusterTrackedInputChanged,
-                        onRemotePingReceived,
-                        onRemoteHeartbeatReceived,
-                        onRemoteDisconnectReceived,
-                        onCompositePositionReceived
-                    )
-                } catch (e: java.net.SocketTimeoutException) {
-
-                    continue
-                } catch (e: IOException) {
-
-                    break
-                } catch (e: Exception) {
-
-                }
-            }
-        } catch (e: java.net.SocketException) {
-
-        } catch (e: Exception) {
-
-            e.printStackTrace()
-        } finally {
-            serverSocket?.close()
-
+    var serverSocket: DatagramSocket? = null
+    try {
+        val (incomingPortStr, _, _) = loadNetworkParameters(context)
+        val incomingPort = incomingPortStr.toIntOrNull()
+        if (incomingPort == null || !isValidPort(incomingPortStr)) {
+            return
         }
+        serverSocket = DatagramSocket(incomingPort)
+        serverSocket.soTimeout = 1000 // Set 1 second timeout to prevent blocking
+        serverSocket.receiveBufferSize = 262144 // 256KB buffer to handle burst of messages during handshake
+
+        val buffer = ByteArray(1024)
+        while (currentCoroutineContext().isActive) {
+            val packet = DatagramPacket(buffer, buffer.size)
+            try {
+                serverSocket.receive(packet)
+                val receivedData = packet.data.copyOf(packet.length)
+
+                val (canvasWidth, canvasHeight) = CanvasDimensions.getCurrentDimensions()
+                parseAndProcessOscPacket(
+                    context,
+                    receivedData,
+                    canvasWidth,
+                    canvasHeight,
+                    onOscDataReceived,
+                    onStageWidthChanged,
+                    onStageDepthChanged,
+                    onStageHeightChanged,
+                    onStageOriginXChanged,
+                    onStageOriginYChanged,
+                    onStageOriginZChanged,
+                    onStageShapeChanged,
+                    onStageDiameterChanged,
+                    onDomeElevationChanged,
+                    onNumberOfInputsChanged,
+                    onInputParameterIntReceived,
+                    onInputParameterFloatReceived,
+                    onInputParameterStringReceived,
+                    onClusterReferenceModeChanged,
+                    onClusterTrackedInputChanged,
+                    onRemotePingReceived,
+                    onRemoteHeartbeatReceived,
+                    onRemoteDisconnectReceived,
+                    onCompositePositionReceived
+                )
+            } catch (e: java.net.SocketTimeoutException) {
+                continue
+            } catch (e: IOException) {
+                break
+            } catch (e: Exception) {
+                // Ignore malformed packets
+            }
+        }
+    } catch (e: java.net.SocketException) {
+        // Socket closed or bind failed
+    } catch (e: Exception) {
+        e.printStackTrace()
+    } finally {
+        serverSocket?.close()
     }
 }
 
@@ -1375,35 +1365,33 @@ fun sendOscPong(context: Context, sequenceNumber: Int) {
  * Called on app startup to force JUCE to reset connection state
  * and re-send the full state dump on the next ping/pong handshake.
  */
-fun sendOscDisconnect(context: Context) {
-    CoroutineScope(Dispatchers.IO).launch {
-        try {
-            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
-            val outgoingPort = outgoingPortStr.toIntOrNull()
+suspend fun sendOscDisconnect(context: Context) {
+    try {
+        val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+        val outgoingPort = outgoingPortStr.toIntOrNull()
 
-            if (outgoingPort == null || !isValidPort(outgoingPortStr)) {
-                return@launch
-            }
-            if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) {
-                return@launch
-            }
-
-            val addressPattern = "/remote/disconnect"
-            val addressPatternBytes = getPaddedBytes(addressPattern)
-            val typeTagBytes = getPaddedBytes(",")
-
-            val oscPacketBytes = addressPatternBytes + typeTagBytes
-
-            DatagramSocket().use { socket ->
-                val inetAddress = InetAddress.getByName(ipAddressStr)
-                val packet = DatagramPacket(oscPacketBytes, oscPacketBytes.size, inetAddress, outgoingPort)
-                socket.send(packet)
-            }
-
-            android.util.Log.d("OSC", "Sent /remote/disconnect")
-        } catch (e: Exception) {
-            e.printStackTrace()
+        if (outgoingPort == null || !isValidPort(outgoingPortStr)) {
+            return
         }
+        if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) {
+            return
+        }
+
+        val addressPattern = "/remote/disconnect"
+        val addressPatternBytes = getPaddedBytes(addressPattern)
+        val typeTagBytes = getPaddedBytes(",")
+
+        val oscPacketBytes = addressPatternBytes + typeTagBytes
+
+        DatagramSocket().use { socket ->
+            val inetAddress = InetAddress.getByName(ipAddressStr)
+            val packet = DatagramPacket(oscPacketBytes, oscPacketBytes.size, inetAddress, outgoingPort)
+            socket.send(packet)
+        }
+
+        android.util.Log.d("OSC", "Sent /remote/disconnect")
+    } catch (e: Exception) {
+        e.printStackTrace()
     }
 }
 
