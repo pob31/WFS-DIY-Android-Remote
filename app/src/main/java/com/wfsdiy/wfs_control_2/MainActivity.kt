@@ -58,6 +58,8 @@ internal const val KEY_NUMBER_OF_INPUTS = "number_of_inputs"
 internal const val KEY_LOCK_STATES = "lock_states"
 internal const val KEY_VISIBILITY_STATES = "visibility_states"
 internal const val KEY_FIND_DEVICE_PASSWORD = "find_device_password"
+internal const val KEY_PRESSURE_CAL_MIN = "pressure_cal_min"
+internal const val KEY_PRESSURE_CAL_MAX = "pressure_cal_max"
 
 // Maximum number of inputs the system can handle
 internal const val MAX_INPUTS = 64
@@ -171,6 +173,22 @@ fun saveFindDevicePassword(context: Context, password: String) {
 fun loadFindDevicePassword(context: Context): String {
     val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     return sharedPrefs.getString(KEY_FIND_DEVICE_PASSWORD, "") ?: ""
+}
+
+fun savePressureCalibration(context: Context, min: Float, max: Float) {
+    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    with(sharedPrefs.edit()) {
+        putFloat(KEY_PRESSURE_CAL_MIN, min)
+        putFloat(KEY_PRESSURE_CAL_MAX, max)
+        apply()
+    }
+}
+
+fun loadPressureCalibration(context: Context): Pair<Float, Float> {
+    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val min = sharedPrefs.getFloat(KEY_PRESSURE_CAL_MIN, 0.1f)
+    val max = sharedPrefs.getFloat(KEY_PRESSURE_CAL_MAX, 5.0f)
+    return Pair(min, max)
 }
 
 fun saveAppSettings(context: Context, numberOfInputs: Int, markers: List<Marker>) {

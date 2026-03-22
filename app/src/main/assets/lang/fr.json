@@ -45,7 +45,13 @@
       "confirmResetMessage": "Êtes-vous sûr de vouloir réinitialiser le nombre d'entrées, les états de verrouillage et de visibilité à leurs valeurs par défaut ?",
       "confirmShutdown": "Confirmer l'arrêt",
       "confirmShutdownMessage": "Êtes-vous sûr de vouloir arrêter l'application et le serveur OSC ?",
-      "shutdown": "Arrêter"
+      "shutdown": "Arrêter",
+      "pressureCalibration": "Calibration de la pression",
+      "pressureCalibrationInstruction": "Touchez la zone ci-dessous en variant la pression.\nAppuyez légèrement, puis fermement.",
+      "calibrate": "Calibrer",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "reset": "Réinitialiser"
     },
 
     "lock": {

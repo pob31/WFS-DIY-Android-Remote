@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -66,6 +67,14 @@ fun XYPadTab(
     sensitivity: Float,
     onPadTouch: (zoneId: Int, touchState: Int, dx: Float, dy: Float, pressure: Float) -> Unit
 ) {
+    // Load pressure calibration from SharedPreferences
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        val (calMin, calMax) = loadPressureCalibration(context)
+        touchMajorMin = calMin
+        touchMajorMax = calMax
+    }
+
     val cols = gridLayout.columns
     val totalPads = gridLayout.totalPads
 
@@ -122,9 +131,8 @@ fun XYPadTab(
  * @param composePressure The value from PointerInputChange.pressure
  * @param touchMajor The native MotionEvent touchMajor (contact ellipse major axis in px)
  */
-// Default calibration range for touchMajor (device-dependent).
-// Lenovo Tab P12 reports ~0.1f (light fingertip) to ~5f (palm).
-// TODO: replace with user calibration
+// Calibration range for touchMajor (device-dependent).
+// Loaded from SharedPreferences; defaults for Lenovo Tab P12.
 private var touchMajorMin = 0.1f
 private var touchMajorMax = 5f
 

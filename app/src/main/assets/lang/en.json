@@ -45,7 +45,13 @@
       "confirmResetMessage": "Are you sure you want to reset the number of inputs, lock states, and visibility states to their defaults?",
       "confirmShutdown": "Confirm Shutdown",
       "confirmShutdownMessage": "Are you sure you want to shut down the application and OSC server?",
-      "shutdown": "Shutdown"
+      "shutdown": "Shutdown",
+      "pressureCalibration": "Pressure Calibration",
+      "pressureCalibrationInstruction": "Touch the area below and vary your finger pressure.\nPress lightly, then firmly.",
+      "calibrate": "Calibrate",
+      "save": "Save",
+      "cancel": "Cancel",
+      "reset": "Reset"
     },
 
     "lock": {
