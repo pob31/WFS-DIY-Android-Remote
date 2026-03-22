@@ -14,6 +14,7 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.LinkedBlockingQueue
 import kotlin.compareTo
 import kotlin.times
 
@@ -1261,47 +1262,114 @@ suspend fun startOscServer(
         serverSocket.soTimeout = 1000 // Set 1 second timeout to prevent blocking
         serverSocket.receiveBufferSize = 262144 // 256KB buffer to handle burst of messages during handshake
 
-        val buffer = ByteArray(1024)
-        while (currentCoroutineContext().isActive) {
-            val packet = DatagramPacket(buffer, buffer.size)
-            try {
-                serverSocket.receive(packet)
-                val receivedData = packet.data.copyOf(packet.length)
+        // Decoupled receive/process architecture:
+        // The receive thread reads packets as fast as possible into a queue,
+        // keeping the OS UDP buffer drained. A separate processing loop handles
+        // parsing and callbacks without blocking the receiver.
+        val packetQueue = LinkedBlockingQueue<ByteArray>(4096)
 
-                val (canvasWidth, canvasHeight) = CanvasDimensions.getCurrentDimensions()
-                parseAndProcessOscPacket(
-                    context,
-                    receivedData,
-                    canvasWidth,
-                    canvasHeight,
-                    onOscDataReceived,
-                    onStageWidthChanged,
-                    onStageDepthChanged,
-                    onStageHeightChanged,
-                    onStageOriginXChanged,
-                    onStageOriginYChanged,
-                    onStageOriginZChanged,
-                    onStageShapeChanged,
-                    onStageDiameterChanged,
-                    onDomeElevationChanged,
-                    onNumberOfInputsChanged,
-                    onInputParameterIntReceived,
-                    onInputParameterFloatReceived,
-                    onInputParameterStringReceived,
-                    onClusterReferenceModeChanged,
-                    onClusterTrackedInputChanged,
-                    onRemotePingReceived,
-                    onRemoteHeartbeatReceived,
-                    onRemoteDisconnectReceived,
-                    onCompositePositionReceived
-                )
-            } catch (e: java.net.SocketTimeoutException) {
-                continue
-            } catch (e: IOException) {
-                break
-            } catch (e: Exception) {
-                // Ignore malformed packets
+        // Receive thread: minimal work per packet — just copy bytes and enqueue
+        val receiveThread = Thread({
+            val buffer = ByteArray(1024)
+            while (!Thread.currentThread().isInterrupted) {
+                val packet = DatagramPacket(buffer, buffer.size)
+                try {
+                    serverSocket.receive(packet)
+                    val receivedData = packet.data.copyOf(packet.length)
+                    if (!packetQueue.offer(receivedData)) {
+                        // Queue full — drop oldest packet to make room for fresh data
+                        packetQueue.poll()
+                        packetQueue.offer(receivedData)
+                    }
+                } catch (e: java.net.SocketTimeoutException) {
+                    continue
+                } catch (e: IOException) {
+                    break
+                } catch (e: Exception) {
+                    // Ignore malformed packets
+                }
             }
+        }, "OSC-Receive")
+        receiveThread.start()
+
+        try {
+            // Processing loop: drain the queue and parse each packet
+            while (currentCoroutineContext().isActive) {
+                // poll with timeout so we can check coroutine cancellation periodically
+                val receivedData = packetQueue.poll(200, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    ?: continue
+
+                try {
+                    val (canvasWidth, canvasHeight) = CanvasDimensions.getCurrentDimensions()
+                    parseAndProcessOscPacket(
+                        context,
+                        receivedData,
+                        canvasWidth,
+                        canvasHeight,
+                        onOscDataReceived,
+                        onStageWidthChanged,
+                        onStageDepthChanged,
+                        onStageHeightChanged,
+                        onStageOriginXChanged,
+                        onStageOriginYChanged,
+                        onStageOriginZChanged,
+                        onStageShapeChanged,
+                        onStageDiameterChanged,
+                        onDomeElevationChanged,
+                        onNumberOfInputsChanged,
+                        onInputParameterIntReceived,
+                        onInputParameterFloatReceived,
+                        onInputParameterStringReceived,
+                        onClusterReferenceModeChanged,
+                        onClusterTrackedInputChanged,
+                        onRemotePingReceived,
+                        onRemoteHeartbeatReceived,
+                        onRemoteDisconnectReceived,
+                        onCompositePositionReceived
+                    )
+                } catch (e: Exception) {
+                    // Ignore malformed packets
+                }
+
+                // Drain any queued packets without blocking (process burst as fast as possible)
+                while (true) {
+                    val nextData = packetQueue.poll() ?: break
+                    try {
+                        val (canvasWidth, canvasHeight) = CanvasDimensions.getCurrentDimensions()
+                        parseAndProcessOscPacket(
+                            context,
+                            nextData,
+                            canvasWidth,
+                            canvasHeight,
+                            onOscDataReceived,
+                            onStageWidthChanged,
+                            onStageDepthChanged,
+                            onStageHeightChanged,
+                            onStageOriginXChanged,
+                            onStageOriginYChanged,
+                            onStageOriginZChanged,
+                            onStageShapeChanged,
+                            onStageDiameterChanged,
+                            onDomeElevationChanged,
+                            onNumberOfInputsChanged,
+                            onInputParameterIntReceived,
+                            onInputParameterFloatReceived,
+                            onInputParameterStringReceived,
+                            onClusterReferenceModeChanged,
+                            onClusterTrackedInputChanged,
+                            onRemotePingReceived,
+                            onRemoteHeartbeatReceived,
+                            onRemoteDisconnectReceived,
+                            onCompositePositionReceived
+                        )
+                    } catch (e: Exception) {
+                        // Ignore malformed packets
+                    }
+                }
+            }
+        } finally {
+            receiveThread.interrupt()
+            receiveThread.join(2000)
         }
     } catch (e: java.net.SocketException) {
         // Socket closed or bind failed
