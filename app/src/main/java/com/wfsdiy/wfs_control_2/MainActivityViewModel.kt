@@ -174,6 +174,23 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
         return oscService.getBufferedClusterConfigUpdates()
     }
 
+    // XY Pad (virtual Lightpad)
+    val padEnabled: StateFlow<Boolean> = oscService.padEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val padZones: StateFlow<List<PadZoneConfig>> = oscService.padZones
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val padSensitivity: StateFlow<Float> = oscService.padSensitivity
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.05f)
+
+    val padGridLayout: StateFlow<PadGridLayout> = oscService.padGridLayout
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PadGridLayout.GRID_3x2)
+
+    fun sendPadTouch(zoneId: Int, touchState: Int, dx: Float, dy: Float, pressure: Float) {
+        oscService.sendPadTouch(zoneId, touchState, dx, dy, pressure)
+    }
+
     val clusterConfigs: StateFlow<List<ClusterConfig>> = oscService.clusterConfigs
 
     // Composite deltas: inputId -> (deltaX, deltaY) in stage meters

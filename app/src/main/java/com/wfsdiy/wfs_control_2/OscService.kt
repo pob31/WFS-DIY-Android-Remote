@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -158,6 +159,19 @@ class OscService : Service() {
     // Used to show grey dot offset on Android map. JUCE sends (0,0) to clear when no offset.
     private val _compositePositions = MutableStateFlow<Map<Int, Pair<Float, Float>>>(emptyMap())
     val compositePositions: StateFlow<Map<Int, Pair<Float, Float>>> = _compositePositions.asStateFlow()
+
+    // XY Pad (virtual Lightpad) state — received from JUCE
+    private val _padEnabled = MutableStateFlow(true)  // visible by default; JUCE hides if needed
+    val padEnabled: StateFlow<Boolean> = _padEnabled.asStateFlow()
+
+    private val _padZones = MutableStateFlow<List<PadZoneConfig>>(emptyList())
+    val padZones: StateFlow<List<PadZoneConfig>> = _padZones.asStateFlow()
+
+    private val _padSensitivity = MutableStateFlow(0.05f)
+    val padSensitivity: StateFlow<Float> = _padSensitivity.asStateFlow()
+
+    private val _padGridLayout = MutableStateFlow(PadGridLayout.GRID_3x2)
+    val padGridLayout: StateFlow<PadGridLayout> = _padGridLayout.asStateFlow()
 
     // Store screen dimensions once at startup
     private var screenWidth: Float = 0f
@@ -320,6 +334,36 @@ class OscService : Service() {
                             compositePositionUpdates.offer(OscCompositePositionUpdate(inputId, deltaX, deltaY))
                         }
                         _compositePositions.value = updated
+                    },
+                    onPadEnabledReceived = { enabled ->
+                        _padEnabled.value = enabled != 0
+                    },
+                    onPadZoneConfigReceived = { zoneId, inputChannel, r, g, b ->
+                        val color = Color(r / 255f, g / 255f, b / 255f)
+                        val newConfig = PadZoneConfig(zoneId, inputChannel, color)
+                        val current = _padZones.value.toMutableList()
+                        val existingIndex = current.indexOfFirst { it.zoneId == zoneId }
+                        if (existingIndex >= 0) {
+                            current[existingIndex] = newConfig
+                        } else {
+                            current.add(newConfig)
+                        }
+                        // Keep sorted by zoneId
+                        current.sortBy { it.zoneId }
+                        _padZones.value = current
+                    },
+                    onPadZoneCountReceived = { count ->
+                        // Trim zone list to requested count
+                        val current = _padZones.value
+                        if (current.size > count) {
+                            _padZones.value = current.take(count)
+                        }
+                    },
+                    onPadSensitivityReceived = { sensitivity ->
+                        _padSensitivity.value = sensitivity
+                    },
+                    onPadGridLayoutReceived = { columns, rows ->
+                        _padGridLayout.value = PadGridLayout(columns, rows)
                     }
                 )
             } catch (e: Exception) {
@@ -420,6 +464,12 @@ class OscService : Service() {
      * Send combined XY position for atomic position updates.
      * Updates local state for both axes before sending to keep state in sync.
      */
+    fun sendPadTouch(zoneId: Int, touchState: Int, dx: Float, dy: Float, pressure: Float) {
+        serviceScope.launch {
+            sendOscPadTouch(this@OscService, zoneId, touchState, dx, dy, pressure)
+        }
+    }
+
     fun sendInputPositionXY(inputId: Int, posX: Float, posY: Float) {
         // Update local state for BOTH axes atomically to prevent jump-back issues
         updateInputParameterFromOsc("/remoteInput/positionX", inputId, floatValue = posX)

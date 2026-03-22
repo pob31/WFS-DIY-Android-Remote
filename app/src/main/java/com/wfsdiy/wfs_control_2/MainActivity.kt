@@ -336,14 +336,52 @@ fun WFSControlApp() {
     var selectedTab by remember { mutableIntStateOf(0) }
     var mapTabVisitCount by remember { mutableIntStateOf(0) }  // Increments each time Map tab is selected
     var inputParamsTabVisitCount by remember { mutableIntStateOf(0) }  // Increments each time Input Parameters tab is selected
-    val tabs = listOf(
-        loc("remote.tabs.map"),
-        loc("remote.tabs.lockInputMarkers"),
-        loc("remote.tabs.viewInputMarkers"),
-        loc("remote.tabs.inputParameters"),
-        loc("remote.tabs.arrayAdjust"),
-        loc("remote.tabs.settings")
-    )
+
+    // XY Pad visibility: controlled by JUCE (sampler active + no hardware Lightpads)
+    var padEnabled by remember { mutableStateOf(true) }  // visible by default
+    LaunchedEffect(viewModel) {
+        viewModel?.padEnabled?.collect { enabled ->
+            val wasEnabled = padEnabled
+            padEnabled = enabled
+            // If pad was just hidden while user is on its tab, switch to Map
+            if (wasEnabled && !enabled) {
+                val xyPadTabIndex = 4  // fixed position when visible
+                if (selectedTab == xyPadTabIndex) selectedTab = 0
+            }
+        }
+    }
+
+    // Collect pad zone config and sensitivity from JUCE
+    var padZones by remember { mutableStateOf<List<PadZoneConfig>>(emptyList()) }
+    var padSensitivity by remember { mutableFloatStateOf(0.05f) }
+    var padGridLayout by remember { mutableStateOf(PadGridLayout.GRID_3x2) }
+    LaunchedEffect(viewModel) {
+        viewModel?.padZones?.collect { zones -> padZones = zones }
+    }
+    LaunchedEffect(viewModel) {
+        viewModel?.padSensitivity?.collect { sens -> padSensitivity = sens }
+    }
+    LaunchedEffect(viewModel) {
+        viewModel?.padGridLayout?.collect { layout -> padGridLayout = layout }
+    }
+
+    val tabs = buildList {
+        add(loc("remote.tabs.map"))
+        add(loc("remote.tabs.lockInputMarkers"))
+        add(loc("remote.tabs.viewInputMarkers"))
+        add(loc("remote.tabs.inputParameters"))
+        if (padEnabled) add(loc("remote.tabs.xyPad"))
+        add(loc("remote.tabs.arrayAdjust"))
+        add(loc("remote.tabs.settings"))
+    }
+
+    // Dynamic tab index mapping: tabs after XY Pad shift when it's hidden
+    // Fixed indices: 0=Map, 1=Lock, 2=View, 3=InputParams
+    // When padEnabled: 4=XYPad, 5=ArrayAdjust, 6=Settings
+    // When !padEnabled: 4=ArrayAdjust, 5=Settings
+    val xyPadTabIndex = if (padEnabled) 4 else -1
+    val arrayAdjustTabIndex = if (padEnabled) 5 else 4
+    val settingsTabIndex = if (padEnabled) 6 else 5
 
     val dynamicTabFontSize: TextUnit = remember(screenWidthDp) {
         val baseSize = screenWidthDp.value / 66f  // Changed from /60f to /66f for 10% smaller
@@ -764,8 +802,18 @@ fun WFSControlApp() {
                         InputParametersTab(viewModel = vm, refreshTrigger = inputParamsTabVisitCount)
                     } ?: Text(loc("common.loading"), color = Color.White)
                 }
-                4 -> ArrayAdjustTab()
-                5 -> SettingsTab(
+                xyPadTabIndex -> {
+                    XYPadTab(
+                        padZones = padZones,
+                        gridLayout = padGridLayout,
+                        sensitivity = padSensitivity,
+                        onPadTouch = { zoneId, touchState, dx, dy, pressure ->
+                            viewModel?.sendPadTouch(zoneId, touchState, dx, dy, pressure)
+                        }
+                    )
+                }
+                arrayAdjustTabIndex -> ArrayAdjustTab()
+                settingsTabIndex -> SettingsTab(
                     onResetToDefaults = resetToDefaults,
                     onShutdownApp = {
                         // Stop OSC service

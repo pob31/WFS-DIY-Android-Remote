@@ -21,6 +21,7 @@
       "lockInputMarkers": "Verrouiller les marqueurs",
       "viewInputMarkers": "Affichage des marqueurs",
       "inputParameters": "Paramètres d'entrée",
+      "xyPad": "Pads XY",
       "arrayAdjust": "Réglage des groupes",
       "settings": "Paramètres"
     },

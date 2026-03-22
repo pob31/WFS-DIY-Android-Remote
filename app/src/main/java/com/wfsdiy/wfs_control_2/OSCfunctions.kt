@@ -857,6 +857,45 @@ fun sendOscInputPositionXY(context: Context, inputId: Int, posX: Float, posY: Fl
 }
 
 
+/**
+ * Send pad touch event to JUCE: /remote/pad/touch ,iifff
+ * @param zoneId Zone ID (0-11)
+ * @param touchState 0=end, 1=start, 2=move
+ * @param dx Normalized X deflection from strike point (-1..+1)
+ * @param dy Normalized Y deflection from strike point (-1..+1), up=positive
+ * @param pressure Normalized contact pressure (0..1)
+ */
+fun sendOscPadTouch(context: Context, zoneId: Int, touchState: Int,
+                    dx: Float, dy: Float, pressure: Float) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull()
+            if (outgoingPort == null || !isValidPort(outgoingPortStr)) return@launch
+            if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) return@launch
+
+            val addressBytes = getPaddedBytes("/remote/pad/touch")
+            val typeTagBytes = getPaddedBytes(",iifff")
+            val oscPacketBytes = addressBytes + typeTagBytes +
+                    zoneId.toBytesBigEndian() +
+                    touchState.toBytesBigEndian() +
+                    dx.toBytesBigEndian() +
+                    dy.toBytesBigEndian() +
+                    pressure.toBytesBigEndian()
+
+            DatagramSocket().use { socket ->
+                val packet = DatagramPacket(
+                    oscPacketBytes, oscPacketBytes.size,
+                    InetAddress.getByName(ipAddressStr), outgoingPort
+                )
+                socket.send(packet)
+            }
+        } catch (e: Exception) {
+            // Ignore send errors
+        }
+    }
+}
+
 fun parseOscString(buffer: ByteBuffer): String {
     val bytes = mutableListOf<Byte>()
     while (buffer.hasRemaining()) {
@@ -891,6 +930,11 @@ typealias OscRemotePingCallback = (sequenceNumber: Int) -> Unit
 typealias OscRemoteHeartbeatCallback = (sequenceNumber: Int) -> Unit
 typealias OscRemoteDisconnectCallback = () -> Unit
 typealias OscCompositePositionCallback = (inputId: Int, compositeX: Float, compositeY: Float) -> Unit
+typealias OscPadEnabledCallback = (enabled: Int) -> Unit
+typealias OscPadZoneConfigCallback = (zoneId: Int, inputChannel: Int, r: Int, g: Int, b: Int) -> Unit
+typealias OscPadZoneCountCallback = (count: Int) -> Unit
+typealias OscPadSensitivityCallback = (sensitivity: Float) -> Unit
+typealias OscPadGridLayoutCallback = (columns: Int, rows: Int) -> Unit
 
 fun parseAndProcessOscPacket(
     context: Context,
@@ -916,7 +960,12 @@ fun parseAndProcessOscPacket(
     onRemotePingReceived: OscRemotePingCallback? = null,
     onRemoteHeartbeatReceived: OscRemoteHeartbeatCallback? = null,
     onRemoteDisconnectReceived: OscRemoteDisconnectCallback? = null,
-    onCompositePositionReceived: OscCompositePositionCallback? = null
+    onCompositePositionReceived: OscCompositePositionCallback? = null,
+    onPadEnabledReceived: OscPadEnabledCallback? = null,
+    onPadZoneConfigReceived: OscPadZoneConfigCallback? = null,
+    onPadZoneCountReceived: OscPadZoneCountCallback? = null,
+    onPadSensitivityReceived: OscPadSensitivityCallback? = null,
+    onPadGridLayoutReceived: OscPadGridLayoutCallback? = null
 ) {
     if (data.isEmpty()) {
         return
@@ -1218,6 +1267,42 @@ fun parseAndProcessOscPacket(
                 // Disconnect message has no arguments
                 onRemoteDisconnectReceived?.invoke()
             }
+            // XY Pad (virtual Lightpad) messages from JUCE
+            address == "/remote/pad/enabled" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",i") return
+                if (buffer.remaining() < 4) return
+                val enabled = parseOscInt(buffer)
+                onPadEnabledReceived?.invoke(enabled)
+            }
+            address == "/remote/pad/zoneConfig" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",iiiii") return
+                if (buffer.remaining() < 20) return
+                val zoneId = parseOscInt(buffer)
+                val inputChannel = parseOscInt(buffer)
+                val r = parseOscInt(buffer)
+                val g = parseOscInt(buffer)
+                val b = parseOscInt(buffer)
+                onPadZoneConfigReceived?.invoke(zoneId, inputChannel, r, g, b)
+            }
+            address == "/remote/pad/zoneCount" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",i") return
+                if (buffer.remaining() < 4) return
+                val count = parseOscInt(buffer)
+                onPadZoneCountReceived?.invoke(count)
+            }
+            address == "/remote/pad/sensitivity" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",f") return
+                if (buffer.remaining() < 4) return
+                val sensitivity = parseOscFloat(buffer)
+                onPadSensitivityReceived?.invoke(sensitivity)
+            }
+            address == "/remote/pad/gridLayout" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",ii") return
+                if (buffer.remaining() < 8) return
+                val columns = parseOscInt(buffer)
+                val rows = parseOscInt(buffer)
+                onPadGridLayoutReceived?.invoke(columns, rows)
+            }
             else -> {
 
             }
@@ -1249,7 +1334,12 @@ suspend fun startOscServer(
     onRemotePingReceived: OscRemotePingCallback? = null,
     onRemoteHeartbeatReceived: OscRemoteHeartbeatCallback? = null,
     onRemoteDisconnectReceived: OscRemoteDisconnectCallback? = null,
-    onCompositePositionReceived: OscCompositePositionCallback? = null
+    onCompositePositionReceived: OscCompositePositionCallback? = null,
+    onPadEnabledReceived: OscPadEnabledCallback? = null,
+    onPadZoneConfigReceived: OscPadZoneConfigCallback? = null,
+    onPadZoneCountReceived: OscPadZoneCountCallback? = null,
+    onPadSensitivityReceived: OscPadSensitivityCallback? = null,
+    onPadGridLayoutReceived: OscPadGridLayoutCallback? = null
 ) {
     var serverSocket: DatagramSocket? = null
     try {
@@ -1325,7 +1415,12 @@ suspend fun startOscServer(
                         onRemotePingReceived,
                         onRemoteHeartbeatReceived,
                         onRemoteDisconnectReceived,
-                        onCompositePositionReceived
+                        onCompositePositionReceived,
+                        onPadEnabledReceived,
+                        onPadZoneConfigReceived,
+                        onPadZoneCountReceived,
+                        onPadSensitivityReceived,
+                        onPadGridLayoutReceived
                     )
                 } catch (e: Exception) {
                     // Ignore malformed packets
