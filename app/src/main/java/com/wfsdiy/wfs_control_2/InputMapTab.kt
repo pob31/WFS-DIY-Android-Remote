@@ -396,8 +396,9 @@ fun InputMapTab(
     val vectorControls = remember { mutableStateMapOf<Long, VectorControl>() }
     var vectorControlsUpdateTrigger: Int by remember { mutableIntStateOf(0) }
 
-    // Throttle cluster scale/rotation sends directly in touch handler (50ms = 20Hz)
+    // Throttle cluster sends directly in touch handler to avoid overloading JUCE
     var lastClusterGestureSendTime by remember { mutableStateOf(0L) }
+    var lastClusterPositionSendTime by remember { mutableStateOf(0L) }
     
     // Calculate responsive marker radius
     val configuration = LocalConfiguration.current
@@ -967,7 +968,8 @@ fun InputMapTab(
                                                 // Check for secondary touch on dragged input markers
                                                 if (!vectorControlCreated) {
                                                     val draggedMarkers = draggingMarkers.values.toSet()
-                                                    val markersWithVectorControl = vectorControls.values.filter { it.targetType == 0 }.map { it.markerId }.toSet()
+                                                    val markersWithVectorControl = (vectorControls.values.filter { it.targetType == 0 }.map { it.markerId } +
+                                                        vectorControls.values.filter { it.targetType == 1 }.map { it.markerId }).toSet()
                                                     val availableMarkers = draggedMarkers - markersWithVectorControl
 
                                                     if (availableMarkers.isNotEmpty()) {
@@ -980,29 +982,56 @@ fun InputMapTab(
                                                         closestMarkerId?.let { markerId ->
                                                             val marker = currentMarkersState.find { it.id == markerId }
                                                             marker?.let {
-                                                                // Get initial Z and rotation from inputParametersState
-                                                                val channel = inputParametersState?.getChannel(markerId)
-                                                                val posZDef = InputParameterDefinitions.allParameters.find { it.variableName == "positionZ" }
-                                                                val rotDef = InputParameterDefinitions.allParameters.find { it.variableName == "rotation" }
-
-                                                                val initialZ = channel?.parameters?.get("positionZ")?.let { param ->
-                                                                    posZDef?.let { def -> InputParameterDefinitions.applyFormula(def, param.normalizedValue) } ?: param.normalizedValue * 10f
-                                                                } ?: 2f  // Default to 2m
-
-                                                                val initialRotation = channel?.parameters?.get("rotation")?.let { param ->
-                                                                    rotDef?.let { def -> InputParameterDefinitions.applyFormula(def, param.normalizedValue) } ?: param.normalizedValue * 360f
-                                                                } ?: 0f
-
-                                                                vectorControls[pointerValue] = VectorControl(
-                                                                    markerId = markerId,
-                                                                    clusterId = 0,
-                                                                    targetType = 0,  // Input target
-                                                                    initialMarkerPosition = it.position,
-                                                                    initialTouchPosition = touchPosition,
-                                                                    currentTouchPosition = touchPosition,
-                                                                    startZ = initialZ,
-                                                                    startRotation = initialRotation
+                                                                // Check if this marker is a cluster reference — if so, use cluster scale/rotation
+                                                                val markerClusterId = it.clusterId
+                                                                val clusterConfig = if (markerClusterId > 0) clusterConfigs.find { c -> c.id == markerClusterId } else null
+                                                                val isClusterReference = clusterConfig != null && (
+                                                                    clusterConfig.trackedInputId == markerId ||
+                                                                    (clusterConfig.referenceMode == 0 && clusterConfig.trackedInputId == 0 &&
+                                                                        currentMarkersState.filter { m -> m.clusterId == markerClusterId }.minByOrNull { m -> m.id }?.id == markerId)
                                                                 )
+
+                                                                if (isClusterReference && clusterConfig != null) {
+                                                                    // Cluster reference: create cluster vector control (scale/rotation)
+                                                                    val initDist = calculateDistance(it.position, touchPosition)
+                                                                    val initAngle = calculateAngle(it.position, touchPosition)
+                                                                    vectorControls[pointerValue] = VectorControl(
+                                                                        markerId = markerId,
+                                                                        clusterId = markerClusterId,
+                                                                        targetType = 1,  // Cluster target
+                                                                        initialMarkerPosition = it.position,
+                                                                        initialTouchPosition = touchPosition,
+                                                                        currentTouchPosition = touchPosition,
+                                                                        startZ = 0f,
+                                                                        startRotation = 0f,
+                                                                        previousDistance = initDist,
+                                                                        previousAngle = initAngle
+                                                                    )
+                                                                } else {
+                                                                    // Regular input: create input vector control (height/rotation)
+                                                                    val channel = inputParametersState?.getChannel(markerId)
+                                                                    val posZDef = InputParameterDefinitions.allParameters.find { p -> p.variableName == "positionZ" }
+                                                                    val rotDef = InputParameterDefinitions.allParameters.find { p -> p.variableName == "rotation" }
+
+                                                                    val initialZ = channel?.parameters?.get("positionZ")?.let { param ->
+                                                                        posZDef?.let { def -> InputParameterDefinitions.applyFormula(def, param.normalizedValue) } ?: param.normalizedValue * 10f
+                                                                    } ?: 2f
+
+                                                                    val initialRotation = channel?.parameters?.get("rotation")?.let { param ->
+                                                                        rotDef?.let { def -> InputParameterDefinitions.applyFormula(def, param.normalizedValue) } ?: param.normalizedValue * 360f
+                                                                    } ?: 0f
+
+                                                                    vectorControls[pointerValue] = VectorControl(
+                                                                        markerId = markerId,
+                                                                        clusterId = 0,
+                                                                        targetType = 0,  // Input target
+                                                                        initialMarkerPosition = it.position,
+                                                                        initialTouchPosition = touchPosition,
+                                                                        currentTouchPosition = touchPosition,
+                                                                        startZ = initialZ,
+                                                                        startRotation = initialRotation
+                                                                    )
+                                                                }
                                                                 vectorControlsUpdateTrigger++
                                                             }
                                                         }
@@ -1085,7 +1114,12 @@ fun InputMapTab(
 
                                                         if (isClusterReference && clusterConfig != null && clusterConfig.referenceMode == 0) {
                                                             // Moving reference in First Input mode - send absolute position
-                                                            onClusterPositionChanged?.invoke(markerClusterId, stageX, stageY)
+                                                            // Throttle to avoid overloading JUCE during two-finger gestures
+                                                            val nowRef = System.currentTimeMillis()
+                                                            if (nowRef - lastClusterPositionSendTime >= 40L) {
+                                                                lastClusterPositionSendTime = nowRef
+                                                                onClusterPositionChanged?.invoke(markerClusterId, stageX, stageY)
+                                                            }
                                                         } else {
                                                             // Individual marker move
                                                             onPositionChanged?.invoke(updatedMarker.id, stageX, stageY)
@@ -1136,7 +1170,10 @@ fun InputMapTab(
                                                 pointerIdToCurrentLogicalPosition[pointerId] = newLogicalPosition
 
                                                 // Convert logical position to absolute stage coordinates
-                                                if (initialLayoutDone) {
+                                                // Throttle to avoid overloading JUCE during two-finger gestures
+                                                val now2 = System.currentTimeMillis()
+                                                if (initialLayoutDone && now2 - lastClusterPositionSendTime >= 40L) {
+                                                    lastClusterPositionSendTime = now2
                                                     val (stageX, stageY) = canvasToStagePosition(
                                                         canvasX = newLogicalPosition.x,
                                                         canvasY = newLogicalPosition.y,
@@ -1172,7 +1209,10 @@ fun InputMapTab(
                                                     pointerIdToCurrentLogicalPosition[pointerId] = newLogicalPosition
 
                                                     // Convert logical position to absolute stage coordinates
-                                                    if (initialLayoutDone) {
+                                                    // Throttle to avoid overloading JUCE during two-finger gestures
+                                                    val now3 = System.currentTimeMillis()
+                                                    if (initialLayoutDone && now3 - lastClusterPositionSendTime >= 40L) {
+                                                        lastClusterPositionSendTime = now3
                                                         val (stageX, stageY) = canvasToStagePosition(
                                                             canvasX = newLogicalPosition.x,
                                                             canvasY = newLogicalPosition.y,
@@ -1205,6 +1245,12 @@ fun InputMapTab(
                                     // Clean up local position
                                     localMarkerPositions.remove(releasedMarkerId)
                                     
+                                    // Send gesture-end for any cluster vector controls on this marker
+                                    vectorControls.values.forEach { vc ->
+                                        if (vc.markerId == releasedMarkerId && vc.targetType == 1 && initialLayoutDone) {
+                                            onClusterScaleRotation?.invoke(vc.clusterId, 0f, 0f)
+                                        }
+                                    }
                                     // Clean up any vector controls associated with this marker
                                     vectorControls.entries.removeAll { (_, vectorControl) ->
                                         vectorControl.markerId == releasedMarkerId
