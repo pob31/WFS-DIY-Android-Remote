@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Binder
@@ -154,6 +155,22 @@ class OscService : Service() {
     private val _clusterConfigs = MutableStateFlow(List(10) { index -> ClusterConfig(id = index + 1) })
     val clusterConfigs: StateFlow<List<ClusterConfig>> = _clusterConfigs.asStateFlow()
 
+    private fun saveClusterConfigs() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+        for (c in _clusterConfigs.value) {
+            prefs.putInt("cluster_${c.id}_refMode", c.referenceMode)
+            prefs.putInt("cluster_${c.id}_tracked", c.trackedInputId)
+        }
+        prefs.apply()
+    }
+    private fun restoreClusterConfigs() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        _clusterConfigs.value = List(10) { i ->
+            val id = i + 1
+            ClusterConfig(id, prefs.getInt("cluster_${id}_refMode", 0), prefs.getInt("cluster_${id}_tracked", 0))
+        }
+    }
+
     // Composite deltas: inputId -> (deltaX in meters, deltaY in meters)
     // Delta is the difference between composite position (after transformations) and target position
     // Used to show grey dot offset on Android map. JUCE sends (0,0) to clear when no offset.
@@ -173,6 +190,14 @@ class OscService : Service() {
     private val _padGridLayout = MutableStateFlow(PadGridLayout.GRID_3x2)
     val padGridLayout: StateFlow<PadGridLayout> = _padGridLayout.asStateFlow()
 
+    // Cluster LFO state
+    private val _clusterLFOActive = MutableStateFlow(IntArray(10) { 0 })
+    val clusterLFOActive: StateFlow<IntArray> = _clusterLFOActive.asStateFlow()
+    private val _clusterPresetNames = MutableStateFlow(Array(16) { "" })
+    val clusterPresetNames: StateFlow<Array<String>> = _clusterPresetNames.asStateFlow()
+    private val _clusterPresetPopulated = MutableStateFlow(BooleanArray(16) { false })
+    val clusterPresetPopulated: StateFlow<BooleanArray> = _clusterPresetPopulated.asStateFlow()
+
     // Store screen dimensions once at startup
     private var screenWidth: Float = 0f
     private var screenHeight: Float = 0f
@@ -185,10 +210,8 @@ class OscService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        
-        // Initialize screen dimensions once at startup
         initializeScreenDimensions()
-        
+        restoreClusterConfigs()
         createNotificationChannel()
     }
     
@@ -291,6 +314,7 @@ class OscService : Service() {
                             val updatedConfigs = _clusterConfigs.value.toMutableList()
                             updatedConfigs[index] = updatedConfigs[index].copy(referenceMode = mode)
                             _clusterConfigs.value = updatedConfigs
+                            saveClusterConfigs()
                         }
                     },
                     onClusterTrackedInputChanged = { clusterId, inputId ->
@@ -300,6 +324,7 @@ class OscService : Service() {
                             val updatedConfigs = _clusterConfigs.value.toMutableList()
                             updatedConfigs[index] = updatedConfigs[index].copy(trackedInputId = inputId)
                             _clusterConfigs.value = updatedConfigs
+                            saveClusterConfigs()
                         }
                     },
                     onRemotePingReceived = { sequenceNumber ->
@@ -364,7 +389,20 @@ class OscService : Service() {
                     },
                     onPadGridLayoutReceived = { columns, rows ->
                         _padGridLayout.value = PadGridLayout(columns, rows)
-                    }
+                    },
+                    onClusterLFOActiveReceived = { clusterId, active ->
+                        val i = clusterId - 1
+                        if (i in 0..9) { val u = _clusterLFOActive.value.copyOf(); u[i] = active; _clusterLFOActive.value = u }
+                    },
+                    onClusterPresetNameReceived = { presetNumber, name ->
+                        val i = presetNumber - 1
+                        if (i in 0..15) { val u = _clusterPresetNames.value.copyOf(); u[i] = name; _clusterPresetNames.value = u }
+                    },
+                    onClusterPresetPopulatedReceived = { presetNumber, populated ->
+                        val i = presetNumber - 1
+                        if (i in 0..15) { val u = _clusterPresetPopulated.value.copyOf(); u[i] = populated != 0; _clusterPresetPopulated.value = u }
+                    },
+                    onClusterPresetCountReceived = { _ -> }
                 )
             } catch (e: Exception) {
                 e.printStackTrace()

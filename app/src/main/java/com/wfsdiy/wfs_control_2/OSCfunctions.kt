@@ -935,6 +935,10 @@ typealias OscPadZoneConfigCallback = (zoneId: Int, inputChannel: Int, r: Int, g:
 typealias OscPadZoneCountCallback = (count: Int) -> Unit
 typealias OscPadSensitivityCallback = (sensitivity: Float) -> Unit
 typealias OscPadGridLayoutCallback = (columns: Int, rows: Int) -> Unit
+typealias OscClusterLFOActiveCallback = (clusterId: Int, active: Int) -> Unit
+typealias OscClusterPresetNameCallback = (presetNumber: Int, name: String) -> Unit
+typealias OscClusterPresetPopulatedCallback = (presetNumber: Int, populated: Int) -> Unit
+typealias OscClusterPresetCountCallback = (count: Int) -> Unit
 
 fun parseAndProcessOscPacket(
     context: Context,
@@ -965,7 +969,11 @@ fun parseAndProcessOscPacket(
     onPadZoneConfigReceived: OscPadZoneConfigCallback? = null,
     onPadZoneCountReceived: OscPadZoneCountCallback? = null,
     onPadSensitivityReceived: OscPadSensitivityCallback? = null,
-    onPadGridLayoutReceived: OscPadGridLayoutCallback? = null
+    onPadGridLayoutReceived: OscPadGridLayoutCallback? = null,
+    onClusterLFOActiveReceived: OscClusterLFOActiveCallback? = null,
+    onClusterPresetNameReceived: OscClusterPresetNameCallback? = null,
+    onClusterPresetPopulatedReceived: OscClusterPresetPopulatedCallback? = null,
+    onClusterPresetCountReceived: OscClusterPresetCountCallback? = null
 ) {
     if (data.isEmpty()) {
         return
@@ -1303,6 +1311,28 @@ fun parseAndProcessOscPacket(
                 val rows = parseOscInt(buffer)
                 onPadGridLayoutReceived?.invoke(columns, rows)
             }
+            address == "/remote/cluster/lfoActive" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",ii") return
+                if (buffer.remaining() < 8) return
+                onClusterLFOActiveReceived?.invoke(parseOscInt(buffer), parseOscInt(buffer))
+            }
+            address == "/remote/cluster/presetName" -> {
+                val typeTag = if (buffer.hasRemaining()) parseOscString(buffer) else return
+                if (typeTag != ",is") return
+                if (buffer.remaining() < 4) return
+                val presetNumber = parseOscInt(buffer)
+                onClusterPresetNameReceived?.invoke(presetNumber, parseOscString(buffer))
+            }
+            address == "/remote/cluster/presetPopulated" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",ii") return
+                if (buffer.remaining() < 8) return
+                onClusterPresetPopulatedReceived?.invoke(parseOscInt(buffer), parseOscInt(buffer))
+            }
+            address == "/remote/cluster/presetCount" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",i") return
+                if (buffer.remaining() < 4) return
+                onClusterPresetCountReceived?.invoke(parseOscInt(buffer))
+            }
             else -> {
 
             }
@@ -1339,7 +1369,11 @@ suspend fun startOscServer(
     onPadZoneConfigReceived: OscPadZoneConfigCallback? = null,
     onPadZoneCountReceived: OscPadZoneCountCallback? = null,
     onPadSensitivityReceived: OscPadSensitivityCallback? = null,
-    onPadGridLayoutReceived: OscPadGridLayoutCallback? = null
+    onPadGridLayoutReceived: OscPadGridLayoutCallback? = null,
+    onClusterLFOActiveReceived: OscClusterLFOActiveCallback? = null,
+    onClusterPresetNameReceived: OscClusterPresetNameCallback? = null,
+    onClusterPresetPopulatedReceived: OscClusterPresetPopulatedCallback? = null,
+    onClusterPresetCountReceived: OscClusterPresetCountCallback? = null
 ) {
     var serverSocket: DatagramSocket? = null
     try {
@@ -1420,7 +1454,11 @@ suspend fun startOscServer(
                         onPadZoneConfigReceived,
                         onPadZoneCountReceived,
                         onPadSensitivityReceived,
-                        onPadGridLayoutReceived
+                        onPadGridLayoutReceived,
+                        onClusterLFOActiveReceived,
+                        onClusterPresetNameReceived,
+                        onClusterPresetPopulatedReceived,
+                        onClusterPresetCountReceived
                     )
                 } catch (e: Exception) {
                     // Ignore malformed packets
@@ -1455,7 +1493,16 @@ suspend fun startOscServer(
                             onRemotePingReceived,
                             onRemoteHeartbeatReceived,
                             onRemoteDisconnectReceived,
-                            onCompositePositionReceived
+                            onCompositePositionReceived,
+                            onPadEnabledReceived,
+                            onPadZoneConfigReceived,
+                            onPadZoneCountReceived,
+                            onPadSensitivityReceived,
+                            onPadGridLayoutReceived,
+                            onClusterLFOActiveReceived,
+                            onClusterPresetNameReceived,
+                            onClusterPresetPopulatedReceived,
+                            onClusterPresetCountReceived
                         )
                     } catch (e: Exception) {
                         // Ignore malformed packets
@@ -1591,5 +1638,57 @@ fun sendOscHeartbeatAck(context: Context, sequenceNumber: Int) {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+}
+
+// ── Cluster LFO ──
+
+fun sendOscClusterLFOPresetRecall(context: Context, clusterId: Int, presetNumber: Int) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull() ?: return@launch
+            if (!isValidPort(outgoingPortStr) || ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr))
+                return@launch
+            val oscPacketBytes = getPaddedBytes("/wfs/cluster/lfoPresetRecall") +
+                    getPaddedBytes(",ii") + clusterId.toBytesBigEndian() + presetNumber.toBytesBigEndian()
+            DatagramSocket().use { socket ->
+                socket.send(DatagramPacket(oscPacketBytes, oscPacketBytes.size,
+                    InetAddress.getByName(ipAddressStr), outgoingPort))
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+}
+
+fun sendOscClusterLFOActive(context: Context, clusterId: Int, active: Int) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull() ?: return@launch
+            if (!isValidPort(outgoingPortStr) || ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr))
+                return@launch
+            val oscPacketBytes = getPaddedBytes("/wfs/cluster/lfoActive") +
+                    getPaddedBytes(",ii") + clusterId.toBytesBigEndian() + active.toBytesBigEndian()
+            DatagramSocket().use { socket ->
+                socket.send(DatagramPacket(oscPacketBytes, oscPacketBytes.size,
+                    InetAddress.getByName(ipAddressStr), outgoingPort))
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+}
+
+fun sendOscClusterLFOStopAll(context: Context) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull() ?: return@launch
+            if (!isValidPort(outgoingPortStr) || ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr))
+                return@launch
+            val oscPacketBytes = getPaddedBytes("/wfs/cluster/lfoStopAll") + getPaddedBytes(",")
+            DatagramSocket().use { socket ->
+                socket.send(DatagramPacket(oscPacketBytes, oscPacketBytes.size,
+                    InetAddress.getByName(ipAddressStr), outgoingPort))
+            }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 }

@@ -191,6 +191,13 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
         oscService.sendPadTouch(zoneId, touchState, dx, dy, pressure)
     }
 
+    val clusterLFOActive: StateFlow<IntArray> = oscService.clusterLFOActive
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), IntArray(10) { 0 })
+    val clusterPresetNames: StateFlow<Array<String>> = oscService.clusterPresetNames
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Array(16) { "" })
+    val clusterPresetPopulated: StateFlow<BooleanArray> = oscService.clusterPresetPopulated
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BooleanArray(16) { false })
+
     val clusterConfigs: StateFlow<List<ClusterConfig>> = oscService.clusterConfigs
 
     // Composite deltas: inputId -> (deltaX, deltaY) in stage meters

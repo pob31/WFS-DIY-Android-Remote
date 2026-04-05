@@ -383,23 +383,31 @@ fun WFSControlApp() {
         viewModel?.padGridLayout?.collect { layout -> padGridLayout = layout }
     }
 
+    // Cluster LFO state
+    var clusterLFOActive by remember { mutableStateOf(IntArray(10) { 0 }) }
+    var clusterPresetNames by remember { mutableStateOf(Array(16) { "" }) }
+    var clusterPresetPopulated by remember { mutableStateOf(BooleanArray(16) { false }) }
+    LaunchedEffect(viewModel) { viewModel?.clusterLFOActive?.collect { clusterLFOActive = it } }
+    LaunchedEffect(viewModel) { viewModel?.clusterPresetNames?.collect { clusterPresetNames = it } }
+    LaunchedEffect(viewModel) { viewModel?.clusterPresetPopulated?.collect { clusterPresetPopulated = it } }
+    LaunchedEffect(viewModel) { viewModel?.clusterConfigs?.collect { clusterConfigs = it } }
+
     val tabs = buildList {
         add(loc("remote.tabs.map"))
         add(loc("remote.tabs.lockInputMarkers"))
         add(loc("remote.tabs.viewInputMarkers"))
         add(loc("remote.tabs.inputParameters"))
         if (padEnabled) add(loc("remote.tabs.xyPad"))
+        add(loc("remote.tabs.clusters"))
         add(loc("remote.tabs.arrayAdjust"))
         add(loc("remote.tabs.settings"))
     }
 
-    // Dynamic tab index mapping: tabs after XY Pad shift when it's hidden
-    // Fixed indices: 0=Map, 1=Lock, 2=View, 3=InputParams
-    // When padEnabled: 4=XYPad, 5=ArrayAdjust, 6=Settings
-    // When !padEnabled: 4=ArrayAdjust, 5=Settings
+    // Dynamic tab index mapping
     val xyPadTabIndex = if (padEnabled) 4 else -1
-    val arrayAdjustTabIndex = if (padEnabled) 5 else 4
-    val settingsTabIndex = if (padEnabled) 6 else 5
+    val clustersTabIndex = if (padEnabled) 5 else 4
+    val arrayAdjustTabIndex = if (padEnabled) 6 else 5
+    val settingsTabIndex = if (padEnabled) 7 else 6
 
     val dynamicTabFontSize: TextUnit = remember(screenWidthDp) {
         val baseSize = screenWidthDp.value / 66f  // Changed from /60f to /66f for 10% smaller
@@ -828,6 +836,20 @@ fun WFSControlApp() {
                         onPadTouch = { zoneId, touchState, dx, dy, pressure ->
                             viewModel?.sendPadTouch(zoneId, touchState, dx, dy, pressure)
                         }
+                    )
+                }
+                clustersTabIndex -> {
+                    ClusterLFOTab(
+                        clusterLFOActive = clusterLFOActive,
+                        presetNames = clusterPresetNames,
+                        presetPopulated = clusterPresetPopulated,
+                        onPresetRecall = { cId, pNum -> sendOscClusterLFOPresetRecall(context, cId, pNum) },
+                        onPresetRecallAndActivate = { cId, pNum ->
+                            sendOscClusterLFOPresetRecall(context, cId, pNum)
+                            sendOscClusterLFOActive(context, cId, 1)
+                        },
+                        onClusterLFOToggle = { cId, active -> sendOscClusterLFOActive(context, cId, active) },
+                        onStopAll = { sendOscClusterLFOStopAll(context) }
                     )
                 }
                 arrayAdjustTabIndex -> ArrayAdjustTab()
