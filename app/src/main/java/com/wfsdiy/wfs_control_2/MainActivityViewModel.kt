@@ -153,12 +153,20 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
         oscService.sendBarycenterMove(clusterId, deltaX, deltaY)
     }
 
+    fun sendClusterPositionXY(clusterId: Int, stageX: Float, stageY: Float) {
+        oscService.sendClusterPositionXY(clusterId, stageX, stageY)
+    }
+
     fun sendClusterScale(clusterId: Int, scaleFactor: Float) {
         oscService.sendClusterScale(clusterId, scaleFactor)
     }
 
     fun sendClusterRotation(clusterId: Int, angleDegrees: Float) {
         oscService.sendClusterRotation(clusterId, angleDegrees)
+    }
+
+    fun sendClusterScaleRotation(clusterId: Int, cumulativeScale: Float, cumulativeRotation: Float) {
+        oscService.sendClusterScaleRotation(clusterId, cumulativeScale, cumulativeRotation)
     }
 
     /**

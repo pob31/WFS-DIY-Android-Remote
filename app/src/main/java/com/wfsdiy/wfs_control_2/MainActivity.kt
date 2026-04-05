@@ -786,6 +786,9 @@ fun WFSControlApp() {
                     onBarycenterMove = { clusterId, deltaX, deltaY ->
                         viewModel?.sendBarycenterMove(clusterId, deltaX, deltaY)
                     },
+                    onClusterPositionChanged = { clusterId, stageX, stageY ->
+                        viewModel?.sendClusterPositionXY(clusterId, stageX, stageY)
+                    },
                     inputParametersState = inputParametersState,
                     onPositionChanged = { inputId, positionX, positionY ->
                         // Send combined XY position (atomic update) to prevent jagged diagonal movements
@@ -802,6 +805,9 @@ fun WFSControlApp() {
                     },
                     onClusterRotation = { clusterId, angleDegrees ->
                         viewModel?.sendClusterRotation(clusterId, angleDegrees)
+                    },
+                    onClusterScaleRotation = { clusterId, cumulativeScale, cumulativeRotation ->
+                        viewModel?.sendClusterScaleRotation(clusterId, cumulativeScale, cumulativeRotation)
                     },
                     compositePositions = compositePositions
                 )

@@ -240,6 +240,61 @@ fun sendOscMarkerDirectivity(context: Context, markerId: Int, directivity: Float
     }
 }
 
+/**
+ * Send combined cumulative scale+rotation for a cluster gesture.
+ * Values are absolute from gesture start — safe to throttle/drop intermediate messages.
+ * @param clusterId Cluster ID (1-10)
+ * @param cumulativeScale Total scale factor from gesture start (1.0 = no change)
+ * @param cumulativeRotation Total rotation in degrees from gesture start
+ */
+fun sendOscClusterScaleRotation(context: Context, clusterId: Int, cumulativeScale: Float, cumulativeRotation: Float) {
+    val throttleKey = OscThrottleManager.clusterScaleKey(clusterId)
+
+    if (!OscThrottleManager.shouldSend(throttleKey)) {
+        OscThrottleManager.storePending(throttleKey) {
+            sendOscClusterScaleRotation(context, clusterId, cumulativeScale, cumulativeRotation)
+        }
+        return
+    }
+
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull()
+
+            if (outgoingPort == null || !isValidPort(outgoingPortStr)) {
+                return@launch
+            }
+            if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) {
+                return@launch
+            }
+
+            val addressPattern = "/cluster/scaleRotation"
+            val addressPatternBytes = getPaddedBytes(addressPattern)
+            val typeTagBytes = getPaddedBytes(",iff")
+            val clusterIdBytes = clusterId.toBytesBigEndian()
+            val scaleBytes = cumulativeScale.toBytesBigEndian()
+            val rotationBytes = cumulativeRotation.toBytesBigEndian()
+
+            val oscPacketBytes = addressPatternBytes + typeTagBytes + clusterIdBytes + scaleBytes + rotationBytes
+
+            DatagramSocket().use { socket ->
+                val inetAddress = InetAddress.getByName(ipAddressStr)
+                val packet = DatagramPacket(oscPacketBytes, oscPacketBytes.size, inetAddress, outgoingPort)
+                socket.send(packet)
+            }
+
+            val pendingAction = OscThrottleManager.getPendingAndClear(throttleKey)
+            if (pendingAction != null) {
+                kotlinx.coroutines.delay(20)
+                pendingAction()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
+
 fun sendOscClusterRotation(context: Context, clusterId: Int, angle: Float) {
     val throttleKey = OscThrottleManager.clusterRotationKey(clusterId)
 
@@ -430,6 +485,61 @@ fun sendOscBarycenterMove(context: Context, clusterId: Int, deltaX: Float, delta
             val deltaYBytes = deltaY.toBytesBigEndian()
 
             val oscPacketBytes = addressPatternBytes + typeTagBytes + clusterIdBytes + deltaXBytes + deltaYBytes
+
+            DatagramSocket().use { socket ->
+                val inetAddress = InetAddress.getByName(ipAddressStr)
+                val packet = DatagramPacket(oscPacketBytes, oscPacketBytes.size, inetAddress, outgoingPort)
+                socket.send(packet)
+            }
+
+            val pendingAction = OscThrottleManager.getPendingAndClear(throttleKey)
+            if (pendingAction != null) {
+                kotlinx.coroutines.delay(20)
+                pendingAction()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
+
+/**
+ * Send absolute cluster position to server (stage coordinates in meters).
+ * The server computes delta from the cluster's reference point (mode 0) or barycenter (mode 1).
+ * @param clusterId Cluster ID (1-10)
+ * @param stageX Absolute X position in stage meters
+ * @param stageY Absolute Y position in stage meters
+ */
+fun sendOscClusterPositionXY(context: Context, clusterId: Int, stageX: Float, stageY: Float) {
+    val throttleKey = OscThrottleManager.clusterMoveKey(clusterId)
+
+    if (!OscThrottleManager.shouldSend(throttleKey)) {
+        OscThrottleManager.storePending(throttleKey) {
+            sendOscClusterPositionXY(context, clusterId, stageX, stageY)
+        }
+        return
+    }
+
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull()
+
+            if (outgoingPort == null || !isValidPort(outgoingPortStr)) {
+                return@launch
+            }
+            if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) {
+                return@launch
+            }
+
+            val addressPattern = "/cluster/positionXY"
+            val addressPatternBytes = getPaddedBytes(addressPattern)
+            val typeTagBytes = getPaddedBytes(",iff")
+            val clusterIdBytes = clusterId.toBytesBigEndian()
+            val stageXBytes = stageX.toBytesBigEndian()
+            val stageYBytes = stageY.toBytesBigEndian()
+
+            val oscPacketBytes = addressPatternBytes + typeTagBytes + clusterIdBytes + stageXBytes + stageYBytes
 
             DatagramSocket().use { socket ->
                 val inetAddress = InetAddress.getByName(ipAddressStr)

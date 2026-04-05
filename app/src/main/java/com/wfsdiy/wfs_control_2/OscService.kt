@@ -486,6 +486,12 @@ class OscService : Service() {
         }
     }
 
+    fun sendClusterPositionXY(clusterId: Int, stageX: Float, stageY: Float) {
+        serviceScope.launch {
+            sendOscClusterPositionXY(this@OscService, clusterId, stageX, stageY)
+        }
+    }
+
     fun sendClusterScale(clusterId: Int, scaleFactor: Float) {
         serviceScope.launch {
             sendOscClusterScale(this@OscService, clusterId, scaleFactor)
@@ -495,6 +501,12 @@ class OscService : Service() {
     fun sendClusterRotation(clusterId: Int, angleDegrees: Float) {
         serviceScope.launch {
             sendOscClusterRotation(this@OscService, clusterId, angleDegrees)
+        }
+    }
+
+    fun sendClusterScaleRotation(clusterId: Int, cumulativeScale: Float, cumulativeRotation: Float) {
+        serviceScope.launch {
+            sendOscClusterScaleRotation(this@OscService, clusterId, cumulativeScale, cumulativeRotation)
         }
     }
 

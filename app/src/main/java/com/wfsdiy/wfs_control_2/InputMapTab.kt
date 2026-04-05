@@ -342,12 +342,14 @@ fun InputMapTab(
     clusterConfigs: List<ClusterConfig> = emptyList(),
     onClusterMove: ((clusterId: Int, deltaX: Float, deltaY: Float) -> Unit)? = null,
     onBarycenterMove: ((clusterId: Int, deltaX: Float, deltaY: Float) -> Unit)? = null,
+    onClusterPositionChanged: ((clusterId: Int, stageX: Float, stageY: Float) -> Unit)? = null,
     inputParametersState: InputParametersState? = null,
     onPositionChanged: ((inputId: Int, positionX: Float, positionY: Float) -> Unit)? = null,
     onInputHeightChanged: ((inputId: Int, newZ: Float) -> Unit)? = null,
     onInputRotationChanged: ((inputId: Int, newRotation: Float) -> Unit)? = null,
     onClusterScale: ((clusterId: Int, scaleFactor: Float) -> Unit)? = null,
     onClusterRotation: ((clusterId: Int, angleDegrees: Float) -> Unit)? = null,
+    onClusterScaleRotation: ((clusterId: Int, cumulativeScale: Float, cumulativeRotation: Float) -> Unit)? = null,
     compositePositions: Map<Int, Pair<Float, Float>> = emptyMap()  // inputId -> (deltaX, deltaY) in stage meters
 ) {
     val context = LocalContext.current
@@ -393,6 +395,9 @@ fun InputMapTab(
     )
     val vectorControls = remember { mutableStateMapOf<Long, VectorControl>() }
     var vectorControlsUpdateTrigger: Int by remember { mutableIntStateOf(0) }
+
+    // Throttle cluster scale/rotation sends directly in touch handler (50ms = 20Hz)
+    var lastClusterGestureSendTime by remember { mutableStateOf(0L) }
     
     // Calculate responsive marker radius
     val configuration = LocalConfiguration.current
@@ -798,34 +803,39 @@ fun InputMapTab(
                                             // Calculate and send updates based on target type
                                             if (initialLayoutDone) {
                                                 if (vectorControl.targetType == 1) {
-                                                    // Cluster secondary touch: incremental scale and rotation
+                                                    // Cluster secondary touch: cumulative scale and rotation from gesture start
                                                     // Use fixed initial reference position (not live barycenter) so
                                                     // distance/angle only depend on finger movement, not echo latency.
                                                     val refPos = vectorControl.initialMarkerPosition
 
-                                                    // calculateAngle returns degrees, calculateDistance returns pixels
                                                     val currentAngle = calculateAngle(refPos, change.position)
                                                     val currentDistance = calculateDistance(refPos, change.position)
 
-                                                    // Incremental rotation: delta from previous frame (both in degrees)
-                                                    var angleDelta = currentAngle - vectorControl.previousAngle
+                                                    // Cumulative rotation from gesture start
+                                                    var cumulativeRotation = currentAngle - vectorControl.previousAngle + vectorControl.startRotation
                                                     // Normalize to -180..180
-                                                    while (angleDelta > 180f) angleDelta -= 360f
-                                                    while (angleDelta < -180f) angleDelta += 360f
-                                                    // Negate: screen Y is down, stage Y is up (matches JUCE MapTab)
-                                                    onClusterRotation?.invoke(vectorControl.clusterId, -angleDelta)
+                                                    while (cumulativeRotation > 180f) cumulativeRotation -= 360f
+                                                    while (cumulativeRotation < -180f) cumulativeRotation += 360f
 
-                                                    // Incremental scale: ratio from previous frame
-                                                    if (vectorControl.previousDistance > 10f) {
-                                                        val scaleFactor = currentDistance / vectorControl.previousDistance
-                                                        onClusterScale?.invoke(vectorControl.clusterId, scaleFactor)
+                                                    // Cumulative scale from gesture start
+                                                    val cumulativeScale = if (vectorControl.previousDistance > 10f) {
+                                                        currentDistance / vectorControl.previousDistance
+                                                    } else 1f
+
+                                                    // Throttle directly in touch handler — skip frames to avoid overloading JUCE
+                                                    val now = System.currentTimeMillis()
+                                                    if (now - lastClusterGestureSendTime >= 50L) { // 20Hz max
+                                                        lastClusterGestureSendTime = now
+                                                        // Send combined cumulative values (absolute from gesture start)
+                                                        // Negate rotation: screen Y is down, stage Y is up
+                                                        onClusterScaleRotation?.invoke(
+                                                            vectorControl.clusterId, cumulativeScale, -cumulativeRotation
+                                                        )
                                                     }
 
-                                                    // Update previous values for next frame
-                                                    vectorControls[pointerValue] = updatedVectorControl.copy(
-                                                        previousDistance = currentDistance,
-                                                        previousAngle = currentAngle
-                                                    )
+                                                    // Don't update previousAngle/previousDistance — keep initial values
+                                                    // so cumulative computation is always from gesture start
+                                                    vectorControls[pointerValue] = updatedVectorControl
                                                 } else {
                                                     // Input secondary touch: height and rotation
                                                     val currentMarkerPosition = if (localMarkerPositions.containsKey(vectorControl.markerId)) {
@@ -1074,8 +1084,8 @@ fun InputMapTab(
                                                         markerStagePositions[updatedMarker.id] = Pair(stageX, stageY)
 
                                                         if (isClusterReference && clusterConfig != null && clusterConfig.referenceMode == 0) {
-                                                            // Moving reference in First Input mode - send cluster move
-                                                            onClusterMove?.invoke(markerClusterId, deltaXMeters, deltaYMeters)
+                                                            // Moving reference in First Input mode - send absolute position
+                                                            onClusterPositionChanged?.invoke(markerClusterId, stageX, stageY)
                                                         } else {
                                                             // Individual marker move
                                                             onPositionChanged?.invoke(updatedMarker.id, stageX, stageY)
@@ -1125,15 +1135,24 @@ fun InputMapTab(
                                                 )
                                                 pointerIdToCurrentLogicalPosition[pointerId] = newLogicalPosition
 
-                                                // Convert pixel delta to stage coordinate delta
-                                                val effectiveWidth = canvasWidth - (markerRadius * 2f)
-                                                val effectiveHeight = canvasHeight - (markerRadius * 2f)
-                                                val deltaXMeters = (dragDelta.x / effectiveWidth) * stageWidth
-                                                val deltaYMeters = -(dragDelta.y / effectiveHeight) * stageDepth // Invert Y
-
-                                                // Send barycenter move OSC command
+                                                // Convert logical position to absolute stage coordinates
                                                 if (initialLayoutDone) {
-                                                    onBarycenterMove?.invoke(clusterIdBeingDragged, deltaXMeters, deltaYMeters)
+                                                    val (stageX, stageY) = canvasToStagePosition(
+                                                        canvasX = newLogicalPosition.x,
+                                                        canvasY = newLogicalPosition.y,
+                                                        stageWidth = stageWidth,
+                                                        stageDepth = stageDepth,
+                                                        stageOriginX = stageOriginX,
+                                                        stageOriginY = stageOriginY,
+                                                        canvasWidth = canvasWidth,
+                                                        canvasHeight = canvasHeight,
+                                                        markerRadius = markerRadius,
+                                                        panOffsetX = panOffsetX,
+                                                        panOffsetY = panOffsetY,
+                                                        actualViewWidth = actualViewWidth,
+                                                        actualViewHeight = actualViewHeight
+                                                    )
+                                                    onClusterPositionChanged?.invoke(clusterIdBeingDragged, stageX, stageY)
                                                 }
 
                                                 change.consume()
@@ -1152,15 +1171,24 @@ fun InputMapTab(
                                                     )
                                                     pointerIdToCurrentLogicalPosition[pointerId] = newLogicalPosition
 
-                                                    // Convert pixel delta to stage coordinate delta
-                                                    val effectiveWidth = canvasWidth - (markerRadius * 2f)
-                                                    val effectiveHeight = canvasHeight - (markerRadius * 2f)
-                                                    val deltaXMeters = (dragDelta.x / effectiveWidth) * stageWidth
-                                                    val deltaYMeters = -(dragDelta.y / effectiveHeight) * stageDepth // Invert Y
-
-                                                    // Send cluster move command (same as dragging reference in mode 0)
+                                                    // Convert logical position to absolute stage coordinates
                                                     if (initialLayoutDone) {
-                                                        onClusterMove?.invoke(hiddenRefClusterId, deltaXMeters, deltaYMeters)
+                                                        val (stageX, stageY) = canvasToStagePosition(
+                                                            canvasX = newLogicalPosition.x,
+                                                            canvasY = newLogicalPosition.y,
+                                                            stageWidth = stageWidth,
+                                                            stageDepth = stageDepth,
+                                                            stageOriginX = stageOriginX,
+                                                            stageOriginY = stageOriginY,
+                                                            canvasWidth = canvasWidth,
+                                                            canvasHeight = canvasHeight,
+                                                            markerRadius = markerRadius,
+                                                            panOffsetX = panOffsetX,
+                                                            panOffsetY = panOffsetY,
+                                                            actualViewWidth = actualViewWidth,
+                                                            actualViewHeight = actualViewHeight
+                                                        )
+                                                        onClusterPositionChanged?.invoke(hiddenRefClusterId, stageX, stageY)
                                                     }
 
                                                     change.consume()
@@ -1205,6 +1233,12 @@ fun InputMapTab(
                                         onPositionChanged?.invoke(finalMarkerState.id, stageX, stageY)
                                     }
                                 } else if (vectorControls.containsKey(pointerValue)) {
+                                    // Send gesture-end for cluster vector controls
+                                    val releasedVc = vectorControls[pointerValue]
+                                    if (releasedVc != null && releasedVc.targetType == 1 && initialLayoutDone) {
+                                        // Send scale=0 to signal gesture end (JUCE clears snapshot)
+                                        onClusterScaleRotation?.invoke(releasedVc.clusterId, 0f, 0f)
+                                    }
                                     // Remove vector control when secondary touch is released
                                     vectorControls.remove(pointerValue)
                                     vectorControlsUpdateTrigger++ // Trigger recomposition
@@ -1212,8 +1246,12 @@ fun InputMapTab(
                                     // Remove barycenter drag when released
                                     val releasedClusterId = draggingBarycenters.remove(pointerValue)
                                     pointerIdToCurrentLogicalPosition.remove(pointerId)
-                                    // Clean up any vector controls for this cluster
+                                    // Send gesture-end for any cluster vector controls and clean up
                                     if (releasedClusterId != null) {
+                                        val hasClusterVc = vectorControls.values.any { it.targetType == 1 && it.clusterId == releasedClusterId }
+                                        if (hasClusterVc && initialLayoutDone) {
+                                            onClusterScaleRotation?.invoke(releasedClusterId, 0f, 0f)
+                                        }
                                         vectorControls.entries.removeAll { (_, vc) ->
                                             vc.targetType == 1 && vc.clusterId == releasedClusterId
                                         }
@@ -1223,8 +1261,12 @@ fun InputMapTab(
                                     // Remove hidden reference drag when released
                                     val releasedClusterId = draggingHiddenRefs.remove(pointerValue)
                                     pointerIdToCurrentLogicalPosition.remove(pointerId)
-                                    // Clean up any vector controls for this cluster
+                                    // Send gesture-end for any cluster vector controls and clean up
                                     if (releasedClusterId != null) {
+                                        val hasClusterVc = vectorControls.values.any { it.targetType == 1 && it.clusterId == releasedClusterId }
+                                        if (hasClusterVc && initialLayoutDone) {
+                                            onClusterScaleRotation?.invoke(releasedClusterId, 0f, 0f)
+                                        }
                                         vectorControls.entries.removeAll { (_, vc) ->
                                             vc.targetType == 1 && vc.clusterId == releasedClusterId
                                         }
