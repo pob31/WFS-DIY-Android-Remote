@@ -1040,6 +1040,7 @@ typealias OscRemotePingCallback = (sequenceNumber: Int) -> Unit
 typealias OscRemoteHeartbeatCallback = (sequenceNumber: Int) -> Unit
 typealias OscRemoteDisconnectCallback = () -> Unit
 typealias OscCompositePositionCallback = (inputId: Int, compositeX: Float, compositeY: Float) -> Unit
+typealias OscSamplerPlayingCallback = (inputId: Int, playing: Int) -> Unit
 typealias OscPadEnabledCallback = (enabled: Int) -> Unit
 typealias OscPadZoneConfigCallback = (zoneId: Int, inputChannel: Int, r: Int, g: Int, b: Int) -> Unit
 typealias OscPadZoneCountCallback = (count: Int) -> Unit
@@ -1048,6 +1049,7 @@ typealias OscPadGridLayoutCallback = (columns: Int, rows: Int) -> Unit
 typealias OscClusterLFOActiveCallback = (clusterId: Int, active: Int) -> Unit
 typealias OscClusterPresetNameCallback = (presetNumber: Int, name: String) -> Unit
 typealias OscClusterPresetPopulatedCallback = (presetNumber: Int, populated: Int) -> Unit
+typealias OscClusterPresetAxesCallback = (presetNumber: Int, axesBitmask: Int) -> Unit
 typealias OscClusterPresetCountCallback = (count: Int) -> Unit
 
 fun parseAndProcessOscPacket(
@@ -1075,6 +1077,7 @@ fun parseAndProcessOscPacket(
     onRemoteHeartbeatReceived: OscRemoteHeartbeatCallback? = null,
     onRemoteDisconnectReceived: OscRemoteDisconnectCallback? = null,
     onCompositePositionReceived: OscCompositePositionCallback? = null,
+    onSamplerPlayingReceived: OscSamplerPlayingCallback? = null,
     onPadEnabledReceived: OscPadEnabledCallback? = null,
     onPadZoneConfigReceived: OscPadZoneConfigCallback? = null,
     onPadZoneCountReceived: OscPadZoneCountCallback? = null,
@@ -1083,7 +1086,8 @@ fun parseAndProcessOscPacket(
     onClusterLFOActiveReceived: OscClusterLFOActiveCallback? = null,
     onClusterPresetNameReceived: OscClusterPresetNameCallback? = null,
     onClusterPresetPopulatedReceived: OscClusterPresetPopulatedCallback? = null,
-    onClusterPresetCountReceived: OscClusterPresetCountCallback? = null
+    onClusterPresetCountReceived: OscClusterPresetCountCallback? = null,
+    onClusterPresetAxesReceived: OscClusterPresetAxesCallback? = null
 ) {
     if (data.isEmpty()) {
         return
@@ -1315,6 +1319,17 @@ fun parseAndProcessOscPacket(
                 val deltaY = parseOscFloat(buffer)
                 onCompositePositionReceived?.invoke(inputId, deltaX, deltaY)
             }
+            address == "/remoteInput/samplerPlaying" -> {
+                // Sampler playing transition: inputId (int), playing (int: 0 or 1)
+                // Must be checked BEFORE the generic /remoteInput/ prefix handler.
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",ii") {
+                    return
+                }
+                if (buffer.remaining() < 8) return
+                val inputId = parseOscInt(buffer)
+                val playing = parseOscInt(buffer)
+                onSamplerPlayingReceived?.invoke(inputId, playing)
+            }
             address.startsWith("/remoteInput/") -> {
                 // Handle input parameter messages
                 val parameterName = address.removePrefix("/remoteInput/")
@@ -1438,6 +1453,11 @@ fun parseAndProcessOscPacket(
                 if (buffer.remaining() < 8) return
                 onClusterPresetPopulatedReceived?.invoke(parseOscInt(buffer), parseOscInt(buffer))
             }
+            address == "/remote/cluster/presetAxes" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",ii") return
+                if (buffer.remaining() < 8) return
+                onClusterPresetAxesReceived?.invoke(parseOscInt(buffer), parseOscInt(buffer))
+            }
             address == "/remote/cluster/presetCount" -> {
                 if (!buffer.hasRemaining() || parseOscString(buffer) != ",i") return
                 if (buffer.remaining() < 4) return
@@ -1475,6 +1495,7 @@ suspend fun startOscServer(
     onRemoteHeartbeatReceived: OscRemoteHeartbeatCallback? = null,
     onRemoteDisconnectReceived: OscRemoteDisconnectCallback? = null,
     onCompositePositionReceived: OscCompositePositionCallback? = null,
+    onSamplerPlayingReceived: OscSamplerPlayingCallback? = null,
     onPadEnabledReceived: OscPadEnabledCallback? = null,
     onPadZoneConfigReceived: OscPadZoneConfigCallback? = null,
     onPadZoneCountReceived: OscPadZoneCountCallback? = null,
@@ -1483,7 +1504,8 @@ suspend fun startOscServer(
     onClusterLFOActiveReceived: OscClusterLFOActiveCallback? = null,
     onClusterPresetNameReceived: OscClusterPresetNameCallback? = null,
     onClusterPresetPopulatedReceived: OscClusterPresetPopulatedCallback? = null,
-    onClusterPresetCountReceived: OscClusterPresetCountCallback? = null
+    onClusterPresetCountReceived: OscClusterPresetCountCallback? = null,
+    onClusterPresetAxesReceived: OscClusterPresetAxesCallback? = null
 ) {
     var serverSocket: DatagramSocket? = null
     try {
@@ -1560,6 +1582,7 @@ suspend fun startOscServer(
                         onRemoteHeartbeatReceived,
                         onRemoteDisconnectReceived,
                         onCompositePositionReceived,
+                        onSamplerPlayingReceived,
                         onPadEnabledReceived,
                         onPadZoneConfigReceived,
                         onPadZoneCountReceived,
@@ -1568,7 +1591,8 @@ suspend fun startOscServer(
                         onClusterLFOActiveReceived,
                         onClusterPresetNameReceived,
                         onClusterPresetPopulatedReceived,
-                        onClusterPresetCountReceived
+                        onClusterPresetCountReceived,
+                        onClusterPresetAxesReceived
                     )
                 } catch (e: Exception) {
                     // Ignore malformed packets
@@ -1604,6 +1628,7 @@ suspend fun startOscServer(
                             onRemoteHeartbeatReceived,
                             onRemoteDisconnectReceived,
                             onCompositePositionReceived,
+                            onSamplerPlayingReceived,
                             onPadEnabledReceived,
                             onPadZoneConfigReceived,
                             onPadZoneCountReceived,
@@ -1612,7 +1637,8 @@ suspend fun startOscServer(
                             onClusterLFOActiveReceived,
                             onClusterPresetNameReceived,
                             onClusterPresetPopulatedReceived,
-                            onClusterPresetCountReceived
+                            onClusterPresetCountReceived,
+                            onClusterPresetAxesReceived
                         )
                     } catch (e: Exception) {
                         // Ignore malformed packets

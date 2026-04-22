@@ -350,7 +350,8 @@ fun InputMapTab(
     onClusterScale: ((clusterId: Int, scaleFactor: Float) -> Unit)? = null,
     onClusterRotation: ((clusterId: Int, angleDegrees: Float) -> Unit)? = null,
     onClusterScaleRotation: ((clusterId: Int, cumulativeScale: Float, cumulativeRotation: Float) -> Unit)? = null,
-    compositePositions: Map<Int, Pair<Float, Float>> = emptyMap()  // inputId -> (deltaX, deltaY) in stage meters
+    compositePositions: Map<Int, Pair<Float, Float>> = emptyMap(),  // inputId -> (deltaX, deltaY) in stage meters
+    samplerPlaying: Map<Int, Boolean> = emptyMap()  // inputId -> true while a sampler cell is playing on that input
 ) {
     val context = LocalContext.current
     val draggingMarkers = remember { mutableStateMapOf<Long, Int>() }
@@ -1569,7 +1570,13 @@ fun InputMapTab(
 
             // Draw composite position indicators (behind markers)
             // compositePositions contains delta values (composite - target) in stage meters
-            compositePositions.forEach { (inputId, delta) ->
+            // Also draw for inputs that have a sampler playing even if the delta is zero,
+            // so the orange playing ring still appears (at the target position in that case).
+            val inputsNeedingCompositeDraw = buildSet {
+                addAll(compositePositions.keys)
+                for ((id, playing) in samplerPlaying) if (playing) add(id)
+            }
+            inputsNeedingCompositeDraw.forEach { inputId ->
                 val marker = currentMarkersState.find { it.id == inputId }
                 if (marker != null && marker.isVisible && inputId <= numberOfInputs) {
                     // Get the target canvas position (use local position if dragging)
@@ -1579,11 +1586,12 @@ fun InputMapTab(
                         marker.position
                     }
 
+                    val delta = compositePositions[inputId]
                     // Convert delta from stage meters to canvas pixels using actual view dimensions
                     val effWidth = canvasWidth - (markerRadius * 2f)
                     val effHeight = canvasHeight - (markerRadius * 2f)
-                    val deltaCanvasX = if (actualViewWidth > 0f) (delta.first / actualViewWidth) * effWidth else 0f
-                    val deltaCanvasY = if (actualViewHeight > 0f) -(delta.second / actualViewHeight) * effHeight else 0f  // Negative because Y is inverted
+                    val deltaCanvasX = if (delta != null && actualViewWidth > 0f) (delta.first / actualViewWidth) * effWidth else 0f
+                    val deltaCanvasY = if (delta != null && actualViewHeight > 0f) -(delta.second / actualViewHeight) * effHeight else 0f  // Negative because Y is inverted
 
                     // Composite canvas position = target + delta
                     val compositeCanvasPos = Offset(
@@ -1591,9 +1599,25 @@ fun InputMapTab(
                         targetCanvasPos.y + deltaCanvasY
                     )
 
-                    // Only draw if the composite position differs from target by more than 5 pixels
-                    if (distance(targetCanvasPos, compositeCanvasPos) > 5f) {
+                    val isPlaying = samplerPlaying[inputId] == true
+
+                    // Draw the grey composite dot whenever the composite differs from target
+                    // by more than 5 pixels. When a sampler is playing, we also want the dot
+                    // at the target position (effective = target), so force it.
+                    val compositeDiffersVisibly = distance(targetCanvasPos, compositeCanvasPos) > 5f
+                    if (compositeDiffersVisibly || isPlaying) {
                         drawCompositePosition(targetCanvasPos, compositeCanvasPos, markerRadius)
+                    }
+
+                    // Orange ring around the compound marker when a sampler is playing
+                    if (isPlaying) {
+                        val ringRadius = markerRadius * 0.8f
+                        drawCircle(
+                            color = androidx.compose.ui.graphics.Color(0xFFFF9800), // Material Orange 500
+                            radius = ringRadius,
+                            center = compositeCanvasPos,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = markerRadius * 0.12f)
+                        )
                     }
                 }
             }

@@ -24,6 +24,7 @@ fun ClusterLFOTab(
     clusterLFOActive: IntArray,
     presetNames: Array<String>,
     presetPopulated: BooleanArray,
+    presetAxes: IntArray = IntArray(16) { 0 },  // bitmask per preset: X=1 Y=2 Z=4 R=8 S=16
     onPresetRecall: (clusterId: Int, presetNumber: Int) -> Unit,
     onPresetRecallAndActivate: (clusterId: Int, presetNumber: Int) -> Unit,
     onClusterLFOToggle: (clusterId: Int, active: Int) -> Unit,
@@ -75,6 +76,7 @@ fun ClusterLFOTab(
                         val pNum = idx + 1
                         val name = presetNames.getOrElse(idx) { "" }
                         val populated = presetPopulated.getOrElse(idx) { false }
+                        val axes = presetAxes.getOrElse(idx) { 0 }
                         val displayName = if (name.isNotEmpty()) name else if (populated) "$pNum" else ""
                         Box(modifier = Modifier.weight(1f).fillMaxHeight()
                             .clip(RoundedCornerShape(8.dp))
@@ -89,7 +91,33 @@ fun ClusterLFOTab(
                             contentAlignment = Alignment.Center
                         ) {
                             if (displayName.isNotEmpty()) Text(displayName, color = if (populated) Color(0xFFE0E0E0) else Color(0xFF555555),
-                                fontSize = 12.sp, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(4.dp))
+                                fontSize = 24.sp, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(4.dp))
+
+                            // Automated axes indicator (bottom-right), matches JUCE pattern:
+                            // X/Y/Z green, R blue, S purple.
+                            if (populated && axes != 0) {
+                                Row(
+                                    modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    val letters = listOf(
+                                        "X" to (axes and 1 != 0),
+                                        "Y" to (axes and 2 != 0),
+                                        "Z" to (axes and 4 != 0),
+                                        "R" to (axes and 8 != 0),
+                                        "S" to (axes and 16 != 0)
+                                    )
+                                    for ((ch, on) in letters) {
+                                        if (!on) continue
+                                        val color = when (ch) {
+                                            "R" -> Color(0xFF42A5F5)
+                                            "S" -> Color(0xFFAB47BC)
+                                            else -> Color(0xFF66BB6A)
+                                        }
+                                        Text(ch, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
                         }
                     }
                 }

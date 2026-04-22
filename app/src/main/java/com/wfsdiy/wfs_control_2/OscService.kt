@@ -177,6 +177,11 @@ class OscService : Service() {
     private val _compositePositions = MutableStateFlow<Map<Int, Pair<Float, Float>>>(emptyMap())
     val compositePositions: StateFlow<Map<Int, Pair<Float, Float>>> = _compositePositions.asStateFlow()
 
+    // Sampler playing: inputId -> true when a sampler cell is playing on that input
+    // JUCE sends transitions only (on start and on stop).
+    private val _samplerPlaying = MutableStateFlow<Map<Int, Boolean>>(emptyMap())
+    val samplerPlaying: StateFlow<Map<Int, Boolean>> = _samplerPlaying.asStateFlow()
+
     // XY Pad (virtual Lightpad) state — received from JUCE
     private val _padEnabled = MutableStateFlow(true)  // visible by default; JUCE hides if needed
     val padEnabled: StateFlow<Boolean> = _padEnabled.asStateFlow()
@@ -197,6 +202,10 @@ class OscService : Service() {
     val clusterPresetNames: StateFlow<Array<String>> = _clusterPresetNames.asStateFlow()
     private val _clusterPresetPopulated = MutableStateFlow(BooleanArray(16) { false })
     val clusterPresetPopulated: StateFlow<BooleanArray> = _clusterPresetPopulated.asStateFlow()
+
+    // Per-preset axis automation bitmask: X=1, Y=2, Z=4, R=8, S=16
+    private val _clusterPresetAxes = MutableStateFlow(IntArray(16) { 0 })
+    val clusterPresetAxes: StateFlow<IntArray> = _clusterPresetAxes.asStateFlow()
 
     // Store screen dimensions once at startup
     private var screenWidth: Float = 0f
@@ -360,6 +369,15 @@ class OscService : Service() {
                         }
                         _compositePositions.value = updated
                     },
+                    onSamplerPlayingReceived = { inputId, playing ->
+                        val updated = _samplerPlaying.value.toMutableMap()
+                        if (playing != 0) {
+                            updated[inputId] = true
+                        } else {
+                            updated.remove(inputId)
+                        }
+                        _samplerPlaying.value = updated
+                    },
                     onPadEnabledReceived = { enabled ->
                         _padEnabled.value = enabled != 0
                     },
@@ -402,7 +420,15 @@ class OscService : Service() {
                         val i = presetNumber - 1
                         if (i in 0..15) { val u = _clusterPresetPopulated.value.copyOf(); u[i] = populated != 0; _clusterPresetPopulated.value = u }
                     },
-                    onClusterPresetCountReceived = { _ -> }
+                    onClusterPresetCountReceived = { _ -> },
+                    onClusterPresetAxesReceived = { presetNumber, axesBitmask ->
+                        val i = presetNumber - 1
+                        if (i in 0..15) {
+                            val u = _clusterPresetAxes.value.copyOf()
+                            u[i] = axesBitmask
+                            _clusterPresetAxes.value = u
+                        }
+                    }
                 )
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -690,8 +716,9 @@ class OscService : Service() {
         val oldJob = serverJob
         serverJob = null
         isServerRunning = false
-        // Clear composite deltas on restart
+        // Clear composite deltas and sampler playing state on restart
         _compositePositions.value = emptyMap()
+        _samplerPlaying.value = emptyMap()
 
         serviceScope.launch {
             // Wait for old server socket to fully close before rebinding

@@ -205,12 +205,18 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Array(16) { "" })
     val clusterPresetPopulated: StateFlow<BooleanArray> = oscService.clusterPresetPopulated
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BooleanArray(16) { false })
+    val clusterPresetAxes: StateFlow<IntArray> = oscService.clusterPresetAxes
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), IntArray(16) { 0 })
 
     val clusterConfigs: StateFlow<List<ClusterConfig>> = oscService.clusterConfigs
 
     // Composite deltas: inputId -> (deltaX, deltaY) in stage meters
     // Delta is the difference between composite position (after transformations) and target position
     val compositePositions: StateFlow<Map<Int, Pair<Float, Float>>> = oscService.compositePositions
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    // Sampler playing: inputId -> true while a sampler cell is playing on that input
+    val samplerPlaying: StateFlow<Map<Int, Boolean>> = oscService.samplerPlaying
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     // Factory for creating the ViewModel with the OscService dependency

@@ -38,10 +38,13 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.min
 import kotlin.math.max
 import kotlin.math.sqrt
 import kotlinx.parcelize.Parcelize
+import androidx.compose.runtime.withFrameNanos
 
 import androidx.compose.runtime.CompositionLocalProvider
 import com.wfsdiy.wfs_control_2.localization.LocalLanguage
@@ -100,6 +103,68 @@ enum class SecondaryTouchFunction(val modeNumber: Int, val locKey: String) {
     LFO_PHASE_Z(31, "remote.secondaryTouch.lfoPhaseZ");
 
     val displayName: String get() = LocalizationManager.get(locKey)
+}
+
+/**
+ * Interpolates the incoming 20-50 Hz composite-delta map at ~60 Hz for smooth
+ * on-screen movement. Exponential smoothing toward the latest target per input;
+ * entries removed from the source fade toward (0,0) and drop out when small.
+ * New entries snap to their initial value so the marker doesn't animate in from
+ * the origin.
+ */
+@Composable
+private fun rememberSmoothedCompositePositions(
+    source: Map<Int, Pair<Float, Float>>,
+    smoothingTauMs: Float = 80f
+): Map<Int, Pair<Float, Float>> {
+    val displayed = remember { mutableStateMapOf<Int, Pair<Float, Float>>() }
+    val targets = remember { mutableStateMapOf<Int, Pair<Float, Float>>() }
+
+    LaunchedEffect(source) {
+        for ((id, value) in source) {
+            targets[id] = value
+            if (id !in displayed) displayed[id] = value
+        }
+        val dropped = targets.keys - source.keys
+        for (id in dropped) targets.remove(id)
+    }
+
+    LaunchedEffect(Unit) {
+        var lastNanos = 0L
+        while (true) {
+            withFrameNanos { nanos ->
+                if (lastNanos == 0L) { lastNanos = nanos; return@withFrameNanos }
+                val dt = ((nanos - lastNanos) / 1_000_000_000f).coerceIn(0f, 0.1f)
+                lastNanos = nanos
+                if (dt <= 0f) return@withFrameNanos
+
+                val tauSeconds = smoothingTauMs / 1000f
+                val alpha = 1f - exp(-dt / tauSeconds)
+
+                val toRemove = ArrayList<Int>()
+                for (id in displayed.keys.toList()) {
+                    val cur = displayed[id] ?: continue
+                    val tgt = targets[id]
+                    if (tgt == null) {
+                        val nx = cur.first * (1f - alpha)
+                        val ny = cur.second * (1f - alpha)
+                        if (abs(nx) < 0.005f && abs(ny) < 0.005f) {
+                            toRemove.add(id)
+                        } else {
+                            displayed[id] = Pair(nx, ny)
+                        }
+                    } else {
+                        val nx = cur.first + (tgt.first - cur.first) * alpha
+                        val ny = cur.second + (tgt.second - cur.second) * alpha
+                        displayed[id] = Pair(nx, ny)
+                    }
+                }
+                for (id in toRemove) displayed.remove(id)
+            }
+        }
+    }
+
+    return displayed
 }
 
 // Define the Marker data class
@@ -387,9 +452,11 @@ fun WFSControlApp() {
     var clusterLFOActive by remember { mutableStateOf(IntArray(10) { 0 }) }
     var clusterPresetNames by remember { mutableStateOf(Array(16) { "" }) }
     var clusterPresetPopulated by remember { mutableStateOf(BooleanArray(16) { false }) }
+    var clusterPresetAxes by remember { mutableStateOf(IntArray(16) { 0 }) }
     LaunchedEffect(viewModel) { viewModel?.clusterLFOActive?.collect { clusterLFOActive = it } }
     LaunchedEffect(viewModel) { viewModel?.clusterPresetNames?.collect { clusterPresetNames = it } }
     LaunchedEffect(viewModel) { viewModel?.clusterPresetPopulated?.collect { clusterPresetPopulated = it } }
+    LaunchedEffect(viewModel) { viewModel?.clusterPresetAxes?.collect { clusterPresetAxes = it } }
     LaunchedEffect(viewModel) { viewModel?.clusterConfigs?.collect { clusterConfigs = it } }
 
     val tabs = buildList {
@@ -447,6 +514,14 @@ fun WFSControlApp() {
     LaunchedEffect(viewModel) {
         viewModel?.compositePositions?.collect { positions ->
             compositePositions = positions
+        }
+    }
+
+    // Collect sampler playing state from ViewModel
+    var samplerPlaying by remember { mutableStateOf<Map<Int, Boolean>>(emptyMap()) }
+    LaunchedEffect(viewModel) {
+        viewModel?.samplerPlaying?.collect { playing ->
+            samplerPlaying = playing
         }
     }
 
@@ -809,7 +884,8 @@ fun WFSControlApp() {
                     onClusterScaleRotation = { clusterId, cumulativeScale, cumulativeRotation ->
                         viewModel?.sendClusterScaleRotation(clusterId, cumulativeScale, cumulativeRotation)
                     },
-                    compositePositions = compositePositions
+                    compositePositions = rememberSmoothedCompositePositions(compositePositions),
+                    samplerPlaying = samplerPlaying
                 )
                 1 -> LockingTab(
                     numberOfInputs = numberOfInputs,
@@ -849,6 +925,7 @@ fun WFSControlApp() {
                         clusterLFOActive = clusterLFOActive,
                         presetNames = clusterPresetNames,
                         presetPopulated = clusterPresetPopulated,
+                        presetAxes = clusterPresetAxes,
                         onPresetRecall = { cId, pNum -> sendOscClusterLFOPresetRecall(context, cId, pNum) },
                         onPresetRecallAndActivate = { cId, pNum ->
                             sendOscClusterLFOPresetRecall(context, cId, pNum)
