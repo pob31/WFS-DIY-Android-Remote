@@ -1092,6 +1092,51 @@ fun parseAndProcessOscPacket(
     if (data.isEmpty()) {
         return
     }
+
+    // Detect OSC bundle: starts with "#bundle\0" (8 bytes), then 8-byte timetag,
+    // then a sequence of <int32 size><element bytes>. Each element is either a
+    // single OSC message or a nested bundle. Walk the elements and recursively
+    // process them so cluster member position bundles from JUCE are unpacked
+    // into the per-message handlers below.
+    if (data.size >= 16 &&
+        data[0] == '#'.code.toByte() && data[1] == 'b'.code.toByte() &&
+        data[2] == 'u'.code.toByte() && data[3] == 'n'.code.toByte() &&
+        data[4] == 'd'.code.toByte() && data[5] == 'l'.code.toByte() &&
+        data[6] == 'e'.code.toByte() && data[7] == 0.toByte()) {
+        val bundleBuffer = ByteBuffer.wrap(data)
+        bundleBuffer.order(ByteOrder.BIG_ENDIAN)
+        bundleBuffer.position(16) // skip "#bundle\0" + timetag
+        try {
+            while (bundleBuffer.remaining() >= 4) {
+                val elementSize = bundleBuffer.int
+                if (elementSize <= 0 || elementSize > bundleBuffer.remaining()) break
+                val elementBytes = ByteArray(elementSize)
+                bundleBuffer.get(elementBytes)
+                parseAndProcessOscPacket(
+                    context, elementBytes, canvasWidth, canvasHeight,
+                    onOscDataReceived,
+                    onStageWidthChanged, onStageDepthChanged, onStageHeightChanged,
+                    onStageOriginXChanged, onStageOriginYChanged, onStageOriginZChanged,
+                    onStageShapeChanged, onStageDiameterChanged, onDomeElevationChanged,
+                    onNumberOfInputsChanged,
+                    onInputParameterIntReceived, onInputParameterFloatReceived,
+                    onInputParameterStringReceived,
+                    onClusterReferenceModeChanged, onClusterTrackedInputChanged,
+                    onRemotePingReceived, onRemoteHeartbeatReceived, onRemoteDisconnectReceived,
+                    onCompositePositionReceived, onSamplerPlayingReceived,
+                    onPadEnabledReceived, onPadZoneConfigReceived, onPadZoneCountReceived,
+                    onPadSensitivityReceived, onPadGridLayoutReceived,
+                    onClusterLFOActiveReceived, onClusterPresetNameReceived,
+                    onClusterPresetPopulatedReceived, onClusterPresetCountReceived,
+                    onClusterPresetAxesReceived
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return
+    }
+
     val buffer = ByteBuffer.wrap(data)
     buffer.order(ByteOrder.BIG_ENDIAN)
 
@@ -1526,7 +1571,10 @@ suspend fun startOscServer(
 
         // Receive thread: minimal work per packet — just copy bytes and enqueue
         val receiveThread = Thread({
-            val buffer = ByteArray(1024)
+            // Buffer must be large enough for the biggest bundle JUCE sends; cluster
+            // member position bundles for max-size clusters (~64 inputs) can reach
+            // ~3 KB. 8 KB gives a comfortable margin.
+            val buffer = ByteArray(8192)
             while (!Thread.currentThread().isInterrupted) {
                 val packet = DatagramPacket(buffer, buffer.size)
                 try {

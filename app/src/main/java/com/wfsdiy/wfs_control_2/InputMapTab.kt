@@ -43,8 +43,10 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import com.wfsdiy.wfs_control_2.localization.loc
 import com.wfsdiy.wfs_control_2.localization.locStatic
+import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -412,6 +414,12 @@ fun InputMapTab(
         val memberSnapshot: Map<Int, Pair<Float, Float>>  // inputId -> (stageX, stageY) at gesture start
     )
     val activeClusterTranslations = remember { mutableStateMapOf<Int, ClusterTranslationState>() }
+    val clusterReleaseScope = rememberCoroutineScope()
+    // Counter bumped after a cluster gesture's delayed release clears its snapshot,
+    // to force the inputParametersState -> markerStagePositions LaunchedEffect to
+    // re-sync cluster members against authoritative positions even if no further
+    // OSC traffic increments inputParametersState.revision.
+    var clusterSyncTrigger by remember { mutableIntStateOf(0) }
 
     fun beginClusterTranslationIfNeeded(
         clusterId: Int,
@@ -451,8 +459,22 @@ fun InputMapTab(
     }
 
     fun endClusterTranslation(clusterId: Int) {
-        if (activeClusterTranslations.remove(clusterId) != null) {
-            onClusterDragEnd?.invoke(clusterId)
+        if (!activeClusterTranslations.containsKey(clusterId)) return
+        // Clear OscService suppression immediately so the authoritative bundle from
+        // JUCE can update inputParametersState. But keep the local snapshot entry
+        // alive briefly so the LaunchedEffect that syncs markerStagePositions from
+        // inputParametersState skips this cluster until the bundle has actually
+        // landed — otherwise we'd snap back to the pre-gesture position for the
+        // brief window between release and bundle arrival.
+        onClusterDragEnd?.invoke(clusterId)
+        clusterReleaseScope.launch {
+            delay(400L)
+            activeClusterTranslations.remove(clusterId)
+            // Force the inputParametersState -> markerStagePositions sync to re-run
+            // for this cluster's members so the locally extrapolated positions
+            // are replaced by the JUCE-authoritative values that landed during the
+            // delay window above.
+            clusterSyncTrigger++
         }
     }
 
@@ -610,7 +632,7 @@ fun InputMapTab(
         // Update marker stage positions from server inputParametersState
         // refreshTrigger forces update when returning to this tab
         // This stores the TRUE positions in stage meters (independent of view)
-        LaunchedEffect(inputParametersState?.revision, refreshTrigger, stageWidth, stageDepth, stageOriginX, stageOriginY, numberOfInputs) {
+        LaunchedEffect(inputParametersState?.revision, refreshTrigger, stageWidth, stageDepth, stageOriginX, stageOriginY, numberOfInputs, clusterSyncTrigger) {
             if (inputParametersState != null && stageWidth > 0f && stageDepth > 0f && numberOfInputs > 0) {
                 (1..numberOfInputs).forEach { inputId ->
                     // Skip cluster members during a local cluster gesture: the gesture
