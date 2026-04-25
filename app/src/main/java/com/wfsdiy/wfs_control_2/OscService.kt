@@ -616,19 +616,12 @@ class OscService : Service() {
         // Find parameter definition by OSC path
         val definition = InputParameterDefinitions.allParameters.find { it.oscPath == oscPath } ?: return
 
-        // Suppress inbound position updates for cluster members during a local
-        // cluster gesture on this tablet. The gesture handler in InputMapTab is
-        // computing positions locally at touch rate; echoes from JUCE would
-        // clobber that extrapolation until the gesture ends.
-        if (suppressedClusters.isNotEmpty() &&
-            (oscPath == "/remoteInput/positionX" || oscPath == "/remoteInput/positionY")) {
-            val channel = _inputParametersState.value.channels[inputId]
-            val clusterIdRaw = channel?.parameters?.get("cluster")?.normalizedValue
-            val clusterId = clusterIdRaw?.toInt() ?: 0
-            if (clusterId in 1..10 && suppressedClusters.containsKey(clusterId)) {
-                return
-            }
-        }
+        // Note: cluster gesture suppression is intentionally NOT applied here.
+        // Letting inputParametersState reflect JUCE's most-recent state during a
+        // local gesture means the post-release sync has fresh authoritative values
+        // to write, instead of pre-gesture stale values. The visual override during
+        // the gesture is handled by the activeClusterTranslations skip in
+        // InputMapTab's LaunchedEffect, not by dropping updates here.
 
         val paramValue = when {
             stringValue != null -> {
