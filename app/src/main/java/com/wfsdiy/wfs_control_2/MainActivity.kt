@@ -420,16 +420,30 @@ fun WFSControlApp() {
     var mapTabVisitCount by remember { mutableIntStateOf(0) }  // Increments each time Map tab is selected
     var inputParamsTabVisitCount by remember { mutableIntStateOf(0) }  // Increments each time Input Parameters tab is selected
 
-    // XY Pad visibility: controlled by JUCE (sampler active + no hardware Lightpads)
+    // XY Pad visibility: controlled by JUCE (sampler active + no hardware Lightpads).
+    // The tab list grows/shrinks at position 4 (xyPadTabIndex) when this toggles, so
+    // selectedTab must be remapped to (a) avoid pointing at a now-missing index — the
+    // TabRow indicator crashes with IndexOutOfBoundsException if it does — and (b)
+    // preserve the user's logical destination (Settings stays on Settings, etc.).
     var padEnabled by remember { mutableStateOf(true) }  // visible by default
     LaunchedEffect(viewModel) {
         viewModel?.padEnabled?.collect { enabled ->
             val wasEnabled = padEnabled
             padEnabled = enabled
-            // If pad was just hidden while user is on its tab, switch to Map
-            if (wasEnabled && !enabled) {
-                val xyPadTabIndex = 4  // fixed position when visible
-                if (selectedTab == xyPadTabIndex) selectedTab = 0
+            if (wasEnabled != enabled) {
+                val xyPadPosition = 4
+                if (wasEnabled && !enabled) {
+                    // XY Pad disappeared. The tab that was at this position is gone;
+                    // tabs after it shift left by one.
+                    if (selectedTab == xyPadPosition) selectedTab = 0
+                    else if (selectedTab > xyPadPosition) selectedTab -= 1
+                } else {
+                    // XY Pad appeared. Tabs at/after this position shift right by one.
+                    if (selectedTab >= xyPadPosition) selectedTab += 1
+                }
+                // Defensive clamp in case anything else gets out of sync.
+                val maxIndex = if (enabled) 7 else 6
+                selectedTab = selectedTab.coerceIn(0, maxIndex)
             }
         }
     }
