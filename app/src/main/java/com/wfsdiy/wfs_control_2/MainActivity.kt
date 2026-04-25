@@ -528,6 +528,12 @@ fun WFSControlApp() {
     // Connection state tracking for reconnection logic
     var connectionState by remember { mutableStateOf(OscService.RemoteConnectionState.DISCONNECTED) }
     var previousConnectionState by remember { mutableStateOf(OscService.RemoteConnectionState.DISCONNECTED) }
+    // Tracks whether the tablet has connected at least once in this session so the
+    // initial connect doesn't trigger a duplicate parameter refresh while the UI is
+    // still composing for the first time. JUCE auto-sends a full state dump after
+    // the disconnect handshake in OscService.startServer(), so the first connect
+    // doesn't need an explicit request.
+    var hasConnectedOnce by remember { mutableStateOf(false) }
 
     // Collect connection state and handle reconnection
     LaunchedEffect(viewModel) {
@@ -535,11 +541,18 @@ fun WFSControlApp() {
             previousConnectionState = connectionState
             connectionState = newState
 
-            // On reconnection (was disconnected, now connected), request param refresh
+            // On any transition into CONNECTED:
+            //  - First connect: skip requestInputParameters (JUCE already dumps state).
+            //  - Subsequent reconnects: request a refresh after a brief delay to let
+            //    Compose finish any pending recompositions before the dump arrives.
             if (previousConnectionState == OscService.RemoteConnectionState.DISCONNECTED &&
                 newState == OscService.RemoteConnectionState.CONNECTED) {
-                val selectedInputId = inputParametersState?.selectedInputId ?: 1
-                viewModel.requestInputParameters(selectedInputId)
+                if (hasConnectedOnce) {
+                    kotlinx.coroutines.delay(250)
+                    val selectedInputId = inputParametersState?.selectedInputId ?: 1
+                    viewModel.requestInputParameters(selectedInputId)
+                }
+                hasConnectedOnce = true
             }
         }
     }
@@ -883,6 +896,12 @@ fun WFSControlApp() {
                     },
                     onClusterScaleRotation = { clusterId, cumulativeScale, cumulativeRotation ->
                         viewModel?.sendClusterScaleRotation(clusterId, cumulativeScale, cumulativeRotation)
+                    },
+                    onClusterDragStart = { clusterId ->
+                        viewModel?.setClusterSuppression(clusterId, true)
+                    },
+                    onClusterDragEnd = { clusterId ->
+                        viewModel?.setClusterSuppression(clusterId, false)
                     },
                     compositePositions = rememberSmoothedCompositePositions(compositePositions),
                     samplerPlaying = samplerPlaying

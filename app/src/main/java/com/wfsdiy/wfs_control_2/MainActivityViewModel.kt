@@ -178,6 +178,15 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
         oscService.sendInputPositionXY(inputId, posX, posY)
     }
 
+    /**
+     * Mark a cluster as actively gestured locally on the tablet. Inbound
+     * /remoteInput/positionXY for cluster members is dropped while suppressed
+     * so the locally extrapolated positions are not clobbered by JUCE echoes.
+     */
+    fun setClusterSuppression(clusterId: Int, suppressed: Boolean) {
+        oscService.setClusterSuppression(clusterId, suppressed)
+    }
+
     fun getBufferedClusterConfigUpdates(): List<OscService.OscClusterConfigUpdate> {
         return oscService.getBufferedClusterConfigUpdates()
     }

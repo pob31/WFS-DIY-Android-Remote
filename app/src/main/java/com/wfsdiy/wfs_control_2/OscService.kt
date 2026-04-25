@@ -113,6 +113,15 @@ class OscService : Service() {
     private val inputParameterUpdates = ConcurrentLinkedQueue<OscInputParameterUpdate>()
     private val clusterConfigUpdates = ConcurrentLinkedQueue<OscClusterConfigUpdate>()
     private val compositePositionUpdates = ConcurrentLinkedQueue<OscCompositePositionUpdate>()
+
+    // Per-cluster suppression of inbound /remoteInput/positionXY updates while a
+    // local cluster gesture is active on this tablet. Prevents echoes from JUCE
+    // (or any other source) from clobbering the locally-extrapolated positions
+    // the InputMapTab gesture handler is writing at touch rate.
+    // Each entry maps clusterId -> last-set timestamp (ms) for the watchdog.
+    private val suppressedClusters = java.util.concurrent.ConcurrentHashMap<Int, Long>()
+    private var suppressionWatchdogJob: kotlinx.coroutines.Job? = null
+    private val suppressionWatchdogTimeoutMs = 2_000L
     
     // StateFlows for real-time data (when MainActivity is active)
     private val _markers = MutableStateFlow<List<Marker>>(emptyList())
@@ -546,6 +555,45 @@ class OscService : Service() {
         }
     }
 
+    /**
+     * Set or clear per-cluster suppression of inbound /remoteInput/positionXY
+     * updates. While a clusterId is suppressed, position updates for any input
+     * whose current cluster equals that id are dropped before they reach
+     * inputParametersState. Called by InputMapTab on local cluster gesture
+     * start/end. A 2-second watchdog auto-clears stuck flags after a network
+     * drop.
+     */
+    fun setClusterSuppression(clusterId: Int, suppressed: Boolean) {
+        if (clusterId !in 1..10) return
+        if (suppressed) {
+            suppressedClusters[clusterId] = System.currentTimeMillis()
+            startSuppressionWatchdog()
+        } else {
+            suppressedClusters.remove(clusterId)
+        }
+    }
+
+    fun isClusterSuppressed(clusterId: Int): Boolean =
+        clusterId in 1..10 && suppressedClusters.containsKey(clusterId)
+
+    private fun startSuppressionWatchdog() {
+        if (suppressionWatchdogJob?.isActive == true) return
+        suppressionWatchdogJob = serviceScope.launch {
+            while (isActive && suppressedClusters.isNotEmpty()) {
+                delay(500L)
+                val now = System.currentTimeMillis()
+                val expired = suppressedClusters.entries
+                    .filter { now - it.value > suppressionWatchdogTimeoutMs }
+                    .map { it.key }
+                if (expired.isNotEmpty()) {
+                    expired.forEach { suppressedClusters.remove(it) }
+                    android.util.Log.w("OscService",
+                        "Cluster suppression watchdog cleared stuck clusters: $expired")
+                }
+            }
+        }
+    }
+
     fun sendInputPositionXY(inputId: Int, posX: Float, posY: Float) {
         // Update local state for BOTH axes atomically to prevent jump-back issues
         updateInputParameterFromOsc("/remoteInput/positionX", inputId, floatValue = posX)
@@ -567,6 +615,20 @@ class OscService : Service() {
     private fun updateInputParameterFromOsc(oscPath: String, inputId: Int, intValue: Int? = null, floatValue: Float? = null, stringValue: String? = null) {
         // Find parameter definition by OSC path
         val definition = InputParameterDefinitions.allParameters.find { it.oscPath == oscPath } ?: return
+
+        // Suppress inbound position updates for cluster members during a local
+        // cluster gesture on this tablet. The gesture handler in InputMapTab is
+        // computing positions locally at touch rate; echoes from JUCE would
+        // clobber that extrapolation until the gesture ends.
+        if (suppressedClusters.isNotEmpty() &&
+            (oscPath == "/remoteInput/positionX" || oscPath == "/remoteInput/positionY")) {
+            val channel = _inputParametersState.value.channels[inputId]
+            val clusterIdRaw = channel?.parameters?.get("cluster")?.normalizedValue
+            val clusterId = clusterIdRaw?.toInt() ?: 0
+            if (clusterId in 1..10 && suppressedClusters.containsKey(clusterId)) {
+                return
+            }
+        }
 
         val paramValue = when {
             stringValue != null -> {

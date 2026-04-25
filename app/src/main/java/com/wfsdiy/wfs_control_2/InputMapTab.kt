@@ -350,6 +350,8 @@ fun InputMapTab(
     onClusterScale: ((clusterId: Int, scaleFactor: Float) -> Unit)? = null,
     onClusterRotation: ((clusterId: Int, angleDegrees: Float) -> Unit)? = null,
     onClusterScaleRotation: ((clusterId: Int, cumulativeScale: Float, cumulativeRotation: Float) -> Unit)? = null,
+    onClusterDragStart: ((clusterId: Int) -> Unit)? = null,
+    onClusterDragEnd: ((clusterId: Int) -> Unit)? = null,
     compositePositions: Map<Int, Pair<Float, Float>> = emptyMap(),  // inputId -> (deltaX, deltaY) in stage meters
     samplerPlaying: Map<Int, Boolean> = emptyMap()  // inputId -> true while a sampler cell is playing on that input
 ) {
@@ -396,6 +398,63 @@ fun InputMapTab(
     )
     val vectorControls = remember { mutableStateMapOf<Long, VectorControl>() }
     var vectorControlsUpdateTrigger: Int by remember { mutableIntStateOf(0) }
+
+    // Local cluster gesture state. While a cluster is in this map, the InputMapTab
+    // computes non-reference member positions locally each touch frame using a
+    // snapshot of (memberId, dx, dy) offsets from the gesture-start pivot, plus
+    // the live drag delta. The tablet sends OSC to JUCE as today, but does not
+    // wait for JUCE echoes to update its display — this is the rigid-body
+    // translation optimization (Plan B).
+    data class ClusterTranslationState(
+        val pivotMode: Int,                 // 0 = ref input, 1 = barycenter
+        val refStartStageX: Float,           // pivot stage X at gesture start
+        val refStartStageY: Float,           // pivot stage Y at gesture start
+        val memberSnapshot: Map<Int, Pair<Float, Float>>  // inputId -> (stageX, stageY) at gesture start
+    )
+    val activeClusterTranslations = remember { mutableStateMapOf<Int, ClusterTranslationState>() }
+
+    fun beginClusterTranslationIfNeeded(
+        clusterId: Int,
+        pivotMode: Int,
+        pivotStageX: Float,
+        pivotStageY: Float
+    ) {
+        if (clusterId !in 1..10) return
+        if (activeClusterTranslations.containsKey(clusterId)) return
+        val members = currentMarkersState.take(numberOfInputs).filter { it.clusterId == clusterId }
+        val snapshot = members.mapNotNull { m ->
+            val pos = markerStagePositions[m.id] ?: return@mapNotNull null
+            m.id to pos
+        }.toMap()
+        if (snapshot.isEmpty()) return
+        activeClusterTranslations[clusterId] = ClusterTranslationState(
+            pivotMode = pivotMode,
+            refStartStageX = pivotStageX,
+            refStartStageY = pivotStageY,
+            memberSnapshot = snapshot
+        )
+        onClusterDragStart?.invoke(clusterId)
+    }
+
+    fun applyClusterTranslation(
+        clusterId: Int,
+        currentPivotStageX: Float,
+        currentPivotStageY: Float
+    ) {
+        val state = activeClusterTranslations[clusterId] ?: return
+        val deltaX = currentPivotStageX - state.refStartStageX
+        val deltaY = currentPivotStageY - state.refStartStageY
+        state.memberSnapshot.forEach { (memberId, pos) ->
+            markerStagePositions[memberId] = Pair(pos.first + deltaX, pos.second + deltaY)
+        }
+        markerStagePositionsVersion++
+    }
+
+    fun endClusterTranslation(clusterId: Int) {
+        if (activeClusterTranslations.remove(clusterId) != null) {
+            onClusterDragEnd?.invoke(clusterId)
+        }
+    }
 
     // Throttle cluster sends directly in touch handler to avoid overloading JUCE
     var lastClusterGestureSendTime by remember { mutableStateOf(0L) }
@@ -554,6 +613,16 @@ fun InputMapTab(
         LaunchedEffect(inputParametersState?.revision, refreshTrigger, stageWidth, stageDepth, stageOriginX, stageOriginY, numberOfInputs) {
             if (inputParametersState != null && stageWidth > 0f && stageDepth > 0f && numberOfInputs > 0) {
                 (1..numberOfInputs).forEach { inputId ->
+                    // Skip cluster members during a local cluster gesture: the gesture
+                    // handler is writing extrapolated positions to markerStagePositions
+                    // at touch rate; reading stale positionX/Y from inputParametersState
+                    // would clobber that extrapolation.
+                    val markerForInput = currentMarkersState.find { it.id == inputId }
+                    val markerCluster = markerForInput?.clusterId ?: 0
+                    if (markerCluster in 1..10 && activeClusterTranslations.containsKey(markerCluster)) {
+                        return@forEach
+                    }
+
                     val channel = inputParametersState.getChannel(inputId)
                     val posXParam = channel.parameters["positionX"]
                     val posYParam = channel.parameters["positionY"]
@@ -1110,10 +1179,30 @@ fun InputMapTab(
                                                             actualViewHeight = actualViewHeight
                                                         )
 
+                                                        // For cluster reference drags (mode 0), snapshot the gesture-start
+                                                        // pivot from the OLD markerStagePositions value (before we overwrite
+                                                        // it below) so non-reference members can be locally extrapolated
+                                                        // by the same delta at touch rate.
+                                                        if (isClusterReference && clusterConfig != null && clusterConfig.referenceMode == 0) {
+                                                            val pivotPos = markerStagePositions[updatedMarker.id]
+                                                            if (pivotPos != null) {
+                                                                beginClusterTranslationIfNeeded(
+                                                                    clusterId = markerClusterId,
+                                                                    pivotMode = 0,
+                                                                    pivotStageX = pivotPos.first,
+                                                                    pivotStageY = pivotPos.second
+                                                                )
+                                                            }
+                                                        }
+
                                                         // Store the stage position for view change recalculations
                                                         markerStagePositions[updatedMarker.id] = Pair(stageX, stageY)
 
                                                         if (isClusterReference && clusterConfig != null && clusterConfig.referenceMode == 0) {
+                                                            // Local rigid-body translation: move all non-reference cluster
+                                                            // members by the same delta as the reference, at touch rate.
+                                                            applyClusterTranslation(markerClusterId, stageX, stageY)
+
                                                             // Moving reference in First Input mode - send absolute position
                                                             // Throttle to avoid overloading JUCE during two-finger gestures
                                                             val nowRef = System.currentTimeMillis()
@@ -1170,11 +1259,8 @@ fun InputMapTab(
                                                 )
                                                 pointerIdToCurrentLogicalPosition[pointerId] = newLogicalPosition
 
-                                                // Convert logical position to absolute stage coordinates
-                                                // Throttle to avoid overloading JUCE during two-finger gestures
-                                                val now2 = System.currentTimeMillis()
-                                                if (initialLayoutDone && now2 - lastClusterPositionSendTime >= 40L) {
-                                                    lastClusterPositionSendTime = now2
+                                                if (initialLayoutDone) {
+                                                    // Compute live stage position from the new pointer position
                                                     val (stageX, stageY) = canvasToStagePosition(
                                                         canvasX = newLogicalPosition.x,
                                                         canvasY = newLogicalPosition.y,
@@ -1190,7 +1276,41 @@ fun InputMapTab(
                                                         actualViewWidth = actualViewWidth,
                                                         actualViewHeight = actualViewHeight
                                                     )
-                                                    onClusterPositionChanged?.invoke(clusterIdBeingDragged, stageX, stageY)
+
+                                                    // Lazy-init the cluster translation snapshot using the pre-move
+                                                    // (oldLogicalPosition) as gesture-start pivot.
+                                                    if (!activeClusterTranslations.containsKey(clusterIdBeingDragged)) {
+                                                        val (oldStageX, oldStageY) = canvasToStagePosition(
+                                                            canvasX = oldLogicalPosition.x,
+                                                            canvasY = oldLogicalPosition.y,
+                                                            stageWidth = stageWidth,
+                                                            stageDepth = stageDepth,
+                                                            stageOriginX = stageOriginX,
+                                                            stageOriginY = stageOriginY,
+                                                            canvasWidth = canvasWidth,
+                                                            canvasHeight = canvasHeight,
+                                                            markerRadius = markerRadius,
+                                                            panOffsetX = panOffsetX,
+                                                            panOffsetY = panOffsetY,
+                                                            actualViewWidth = actualViewWidth,
+                                                            actualViewHeight = actualViewHeight
+                                                        )
+                                                        beginClusterTranslationIfNeeded(
+                                                            clusterId = clusterIdBeingDragged,
+                                                            pivotMode = 1,
+                                                            pivotStageX = oldStageX,
+                                                            pivotStageY = oldStageY
+                                                        )
+                                                    }
+                                                    // Local rigid-body translation at touch rate
+                                                    applyClusterTranslation(clusterIdBeingDragged, stageX, stageY)
+
+                                                    // Throttle OSC send to avoid overloading JUCE during gestures
+                                                    val now2 = System.currentTimeMillis()
+                                                    if (now2 - lastClusterPositionSendTime >= 40L) {
+                                                        lastClusterPositionSendTime = now2
+                                                        onClusterPositionChanged?.invoke(clusterIdBeingDragged, stageX, stageY)
+                                                    }
                                                 }
 
                                                 change.consume()
@@ -1209,11 +1329,8 @@ fun InputMapTab(
                                                     )
                                                     pointerIdToCurrentLogicalPosition[pointerId] = newLogicalPosition
 
-                                                    // Convert logical position to absolute stage coordinates
-                                                    // Throttle to avoid overloading JUCE during two-finger gestures
-                                                    val now3 = System.currentTimeMillis()
-                                                    if (initialLayoutDone && now3 - lastClusterPositionSendTime >= 40L) {
-                                                        lastClusterPositionSendTime = now3
+                                                    if (initialLayoutDone) {
+                                                        // Compute live stage position from the new pointer position
                                                         val (stageX, stageY) = canvasToStagePosition(
                                                             canvasX = newLogicalPosition.x,
                                                             canvasY = newLogicalPosition.y,
@@ -1229,7 +1346,40 @@ fun InputMapTab(
                                                             actualViewWidth = actualViewWidth,
                                                             actualViewHeight = actualViewHeight
                                                         )
-                                                        onClusterPositionChanged?.invoke(hiddenRefClusterId, stageX, stageY)
+
+                                                        // Lazy-init snapshot from oldLogicalPosition (pre-move)
+                                                        if (!activeClusterTranslations.containsKey(hiddenRefClusterId)) {
+                                                            val (oldStageX, oldStageY) = canvasToStagePosition(
+                                                                canvasX = oldLogicalPosition.x,
+                                                                canvasY = oldLogicalPosition.y,
+                                                                stageWidth = stageWidth,
+                                                                stageDepth = stageDepth,
+                                                                stageOriginX = stageOriginX,
+                                                                stageOriginY = stageOriginY,
+                                                                canvasWidth = canvasWidth,
+                                                                canvasHeight = canvasHeight,
+                                                                markerRadius = markerRadius,
+                                                                panOffsetX = panOffsetX,
+                                                                panOffsetY = panOffsetY,
+                                                                actualViewWidth = actualViewWidth,
+                                                                actualViewHeight = actualViewHeight
+                                                            )
+                                                            beginClusterTranslationIfNeeded(
+                                                                clusterId = hiddenRefClusterId,
+                                                                pivotMode = 0,
+                                                                pivotStageX = oldStageX,
+                                                                pivotStageY = oldStageY
+                                                            )
+                                                        }
+                                                        // Local rigid-body translation at touch rate
+                                                        applyClusterTranslation(hiddenRefClusterId, stageX, stageY)
+
+                                                        // Throttle OSC send to avoid overloading JUCE during gestures
+                                                        val now3 = System.currentTimeMillis()
+                                                        if (now3 - lastClusterPositionSendTime >= 40L) {
+                                                            lastClusterPositionSendTime = now3
+                                                            onClusterPositionChanged?.invoke(hiddenRefClusterId, stageX, stageY)
+                                                        }
                                                     }
 
                                                     change.consume()
@@ -1242,10 +1392,19 @@ fun InputMapTab(
                                 if (draggingMarkers.containsKey(pointerValue)) {
                                     val releasedMarkerId = draggingMarkers.remove(pointerValue)!!
                                     pointerIdToCurrentLogicalPosition.remove(pointerId)
-                                    
+
                                     // Clean up local position
                                     localMarkerPositions.remove(releasedMarkerId)
-                                    
+
+                                    // End any local cluster translation that was driven by this marker
+                                    // (it was being dragged as the cluster reference in mode 0).
+                                    val releasedMarker = currentMarkersState.find { it.id == releasedMarkerId }
+                                    val releasedClusterIdForMarker = releasedMarker?.clusterId ?: 0
+                                    if (releasedClusterIdForMarker in 1..10 &&
+                                        activeClusterTranslations.containsKey(releasedClusterIdForMarker)) {
+                                        endClusterTranslation(releasedClusterIdForMarker)
+                                    }
+
                                     // Send gesture-end for any cluster vector controls on this marker
                                     vectorControls.values.forEach { vc ->
                                         if (vc.markerId == releasedMarkerId && vc.targetType == 1 && initialLayoutDone) {
@@ -1293,8 +1452,12 @@ fun InputMapTab(
                                     // Remove barycenter drag when released
                                     val releasedClusterId = draggingBarycenters.remove(pointerValue)
                                     pointerIdToCurrentLogicalPosition.remove(pointerId)
-                                    // Send gesture-end for any cluster vector controls and clean up
+                                    // End local cluster translation
                                     if (releasedClusterId != null) {
+                                        if (activeClusterTranslations.containsKey(releasedClusterId)) {
+                                            endClusterTranslation(releasedClusterId)
+                                        }
+                                        // Send gesture-end for any cluster vector controls and clean up
                                         val hasClusterVc = vectorControls.values.any { it.targetType == 1 && it.clusterId == releasedClusterId }
                                         if (hasClusterVc && initialLayoutDone) {
                                             onClusterScaleRotation?.invoke(releasedClusterId, 0f, 0f)
@@ -1308,8 +1471,12 @@ fun InputMapTab(
                                     // Remove hidden reference drag when released
                                     val releasedClusterId = draggingHiddenRefs.remove(pointerValue)
                                     pointerIdToCurrentLogicalPosition.remove(pointerId)
-                                    // Send gesture-end for any cluster vector controls and clean up
+                                    // End local cluster translation
                                     if (releasedClusterId != null) {
+                                        if (activeClusterTranslations.containsKey(releasedClusterId)) {
+                                            endClusterTranslation(releasedClusterId)
+                                        }
+                                        // Send gesture-end for any cluster vector controls and clean up
                                         val hasClusterVc = vectorControls.values.any { it.targetType == 1 && it.clusterId == releasedClusterId }
                                         if (hasClusterVc && initialLayoutDone) {
                                             onClusterScaleRotation?.invoke(releasedClusterId, 0f, 0f)
