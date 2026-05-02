@@ -414,6 +414,19 @@ fun InputMapTab(
         val memberSnapshot: Map<Int, Pair<Float, Float>>  // inputId -> (stageX, stageY) at gesture start
     )
     val activeClusterTranslations = remember { mutableStateMapOf<Int, ClusterTranslationState>() }
+
+    // Live transform applied on top of the snapshotted ClusterTranslationState each
+    // frame: currentPivot is updated by the primary finger's drag, scale/rotation
+    // are updated by the secondary finger's pinch/twist. Generalizes the
+    // translation-only case (scale=1, rotation=0).
+    data class ClusterGestureTransform(
+        val currentPivotStageX: Float,
+        val currentPivotStageY: Float,
+        val scale: Float = 1f,
+        val rotationStageDeg: Float = 0f
+    )
+    val clusterGestureTransforms = remember { mutableStateMapOf<Int, ClusterGestureTransform>() }
+
     val clusterReleaseScope = rememberCoroutineScope()
     // Counter bumped after a cluster gesture's delayed release clears its snapshot,
     // to force the inputParametersState -> markerStagePositions LaunchedEffect to
@@ -441,7 +454,31 @@ fun InputMapTab(
             refStartStageY = pivotStageY,
             memberSnapshot = snapshot
         )
+        clusterGestureTransforms[clusterId] = ClusterGestureTransform(
+            currentPivotStageX = pivotStageX,
+            currentPivotStageY = pivotStageY
+        )
         onClusterDragStart?.invoke(clusterId)
+    }
+
+    fun applyClusterRigidTransform(clusterId: Int) {
+        val state = activeClusterTranslations[clusterId] ?: return
+        val transform = clusterGestureTransforms[clusterId] ?: return
+        val rad = (transform.rotationStageDeg * (Math.PI / 180.0)).toFloat()
+        val cosA = cos(rad)
+        val sinA = sin(rad)
+        val s = transform.scale
+        state.memberSnapshot.forEach { (memberId, pos) ->
+            val dx = pos.first - state.refStartStageX
+            val dy = pos.second - state.refStartStageY
+            val newDx = (dx * cosA - dy * sinA) * s
+            val newDy = (dx * sinA + dy * cosA) * s
+            markerStagePositions[memberId] = Pair(
+                transform.currentPivotStageX + newDx,
+                transform.currentPivotStageY + newDy
+            )
+        }
+        markerStagePositionsVersion++
     }
 
     fun applyClusterTranslation(
@@ -449,13 +486,58 @@ fun InputMapTab(
         currentPivotStageX: Float,
         currentPivotStageY: Float
     ) {
+        if (!activeClusterTranslations.containsKey(clusterId)) return
+        val existing = clusterGestureTransforms[clusterId]
+        clusterGestureTransforms[clusterId] = ClusterGestureTransform(
+            currentPivotStageX = currentPivotStageX,
+            currentPivotStageY = currentPivotStageY,
+            scale = existing?.scale ?: 1f,
+            rotationStageDeg = existing?.rotationStageDeg ?: 0f
+        )
+        applyClusterRigidTransform(clusterId)
+    }
+
+    // Apply cumulative scale/rotation from the secondary-finger gesture. The
+    // primary finger continues to drive currentPivot via applyClusterTranslation;
+    // we only update scale/rotation here.
+    fun applyClusterScaleRotation(
+        clusterId: Int,
+        scale: Float,
+        rotationStageDeg: Float
+    ) {
         val state = activeClusterTranslations[clusterId] ?: return
-        val deltaX = currentPivotStageX - state.refStartStageX
-        val deltaY = currentPivotStageY - state.refStartStageY
-        state.memberSnapshot.forEach { (memberId, pos) ->
-            markerStagePositions[memberId] = Pair(pos.first + deltaX, pos.second + deltaY)
+        val existing = clusterGestureTransforms[clusterId]
+        clusterGestureTransforms[clusterId] = ClusterGestureTransform(
+            currentPivotStageX = existing?.currentPivotStageX ?: state.refStartStageX,
+            currentPivotStageY = existing?.currentPivotStageY ?: state.refStartStageY,
+            scale = scale,
+            rotationStageDeg = rotationStageDeg
+        )
+        applyClusterRigidTransform(clusterId)
+    }
+
+    // Bake the current rotated/scaled member positions into a fresh snapshot and
+    // reset the transform to identity. Called when the secondary finger releases
+    // while the primary is still down — the cluster keeps translating from the
+    // current configuration without snapping back to the pre-rotation snapshot.
+    fun bakeClusterScaleRotation(clusterId: Int) {
+        val state = activeClusterTranslations[clusterId] ?: return
+        val transform = clusterGestureTransforms[clusterId] ?: return
+        if (transform.scale == 1f && transform.rotationStageDeg == 0f) return
+        val newSnapshot = state.memberSnapshot.mapValues { (memberId, oldPos) ->
+            markerStagePositions[memberId] ?: oldPos
         }
-        markerStagePositionsVersion++
+        activeClusterTranslations[clusterId] = state.copy(
+            refStartStageX = transform.currentPivotStageX,
+            refStartStageY = transform.currentPivotStageY,
+            memberSnapshot = newSnapshot
+        )
+        clusterGestureTransforms[clusterId] = ClusterGestureTransform(
+            currentPivotStageX = transform.currentPivotStageX,
+            currentPivotStageY = transform.currentPivotStageY,
+            scale = 1f,
+            rotationStageDeg = 0f
+        )
     }
 
     fun endClusterTranslation(clusterId: Int) {
@@ -470,6 +552,7 @@ fun InputMapTab(
         clusterReleaseScope.launch {
             delay(400L)
             activeClusterTranslations.remove(clusterId)
+            clusterGestureTransforms.remove(clusterId)
             // Force the inputParametersState -> markerStagePositions sync to re-run
             // for this cluster's members so the locally extrapolated positions
             // are replaced by the JUCE-authoritative values that landed during the
@@ -915,6 +998,16 @@ fun InputMapTab(
                                                         currentDistance / vectorControl.previousDistance
                                                     } else 1f
 
+                                                    // Apply rotation/scale locally on every frame so the cluster
+                                                    // members visibly track the gesture without waiting for the
+                                                    // JUCE echo. Stage rotation is the negation of canvas-space
+                                                    // rotation (Y axes are flipped).
+                                                    applyClusterScaleRotation(
+                                                        vectorControl.clusterId,
+                                                        cumulativeScale,
+                                                        -cumulativeRotation
+                                                    )
+
                                                     // Throttle directly in touch handler — skip frames to avoid overloading JUCE
                                                     val now = System.currentTimeMillis()
                                                     if (now - lastClusterGestureSendTime >= 50L) { // 20Hz max
@@ -1033,8 +1126,12 @@ fun InputMapTab(
                                                     val closestClusterId = availableClusters.firstOrNull()
                                                     closestClusterId?.let { clusterId ->
                                                         // Find the reference position (barycenter or hidden ref)
-                                                        val referencePos = findClusterBarycenter(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
-                                                            ?: findHiddenClusterReference(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
+                                                        val barycenterPos = findClusterBarycenter(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
+                                                        val hiddenRefPos = if (barycenterPos == null)
+                                                            findHiddenClusterReference(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
+                                                        else null
+                                                        val referencePos = barycenterPos ?: hiddenRefPos
+                                                        val pivotMode = if (barycenterPos != null) 1 else 0
 
                                                         referencePos?.let { refPos ->
                                                             val initDist = calculateDistance(refPos, touchPosition)
@@ -1051,6 +1148,33 @@ fun InputMapTab(
                                                                 previousDistance = initDist,
                                                                 previousAngle = initAngle
                                                             )
+                                                            // Lazy-init the cluster translation snapshot so that local
+                                                            // rotation/scale has positions to apply against, even if the
+                                                            // primary finger has not moved yet.
+                                                            if (initialLayoutDone &&
+                                                                !activeClusterTranslations.containsKey(clusterId)) {
+                                                                val (pivotStageX, pivotStageY) = canvasToStagePosition(
+                                                                    canvasX = refPos.x,
+                                                                    canvasY = refPos.y,
+                                                                    stageWidth = stageWidth,
+                                                                    stageDepth = stageDepth,
+                                                                    stageOriginX = stageOriginX,
+                                                                    stageOriginY = stageOriginY,
+                                                                    canvasWidth = canvasWidth,
+                                                                    canvasHeight = canvasHeight,
+                                                                    markerRadius = markerRadius,
+                                                                    panOffsetX = panOffsetX,
+                                                                    panOffsetY = panOffsetY,
+                                                                    actualViewWidth = actualViewWidth,
+                                                                    actualViewHeight = actualViewHeight
+                                                                )
+                                                                beginClusterTranslationIfNeeded(
+                                                                    clusterId = clusterId,
+                                                                    pivotMode = pivotMode,
+                                                                    pivotStageX = pivotStageX,
+                                                                    pivotStageY = pivotStageY
+                                                                )
+                                                            }
                                                             vectorControlsUpdateTrigger++
                                                             vectorControlCreated = true
                                                         }
@@ -1083,7 +1207,7 @@ fun InputMapTab(
                                                                         currentMarkersState.filter { m -> m.clusterId == markerClusterId }.minByOrNull { m -> m.id }?.id == markerId)
                                                                 )
 
-                                                                if (isClusterReference && clusterConfig != null) {
+                                                                if (isClusterReference) {
                                                                     // Cluster reference: create cluster vector control (scale/rotation)
                                                                     val initDist = calculateDistance(it.position, touchPosition)
                                                                     val initAngle = calculateAngle(it.position, touchPosition)
@@ -1099,6 +1223,32 @@ fun InputMapTab(
                                                                         previousDistance = initDist,
                                                                         previousAngle = initAngle
                                                                     )
+                                                                    // Lazy-init cluster translation so local rotation/scale
+                                                                    // can apply even if the reference marker has not moved.
+                                                                    if (initialLayoutDone &&
+                                                                        !activeClusterTranslations.containsKey(markerClusterId)) {
+                                                                        val (pivotStageX, pivotStageY) = canvasToStagePosition(
+                                                                            canvasX = it.position.x,
+                                                                            canvasY = it.position.y,
+                                                                            stageWidth = stageWidth,
+                                                                            stageDepth = stageDepth,
+                                                                            stageOriginX = stageOriginX,
+                                                                            stageOriginY = stageOriginY,
+                                                                            canvasWidth = canvasWidth,
+                                                                            canvasHeight = canvasHeight,
+                                                                            markerRadius = markerRadius,
+                                                                            panOffsetX = panOffsetX,
+                                                                            panOffsetY = panOffsetY,
+                                                                            actualViewWidth = actualViewWidth,
+                                                                            actualViewHeight = actualViewHeight
+                                                                        )
+                                                                        beginClusterTranslationIfNeeded(
+                                                                            clusterId = markerClusterId,
+                                                                            pivotMode = 0,
+                                                                            pivotStageX = pivotStageX,
+                                                                            pivotStageY = pivotStageY
+                                                                        )
+                                                                    }
                                                                 } else {
                                                                     // Regular input: create input vector control (height/rotation)
                                                                     val channel = inputParametersState?.getChannel(markerId)
@@ -1205,7 +1355,7 @@ fun InputMapTab(
                                                         // pivot from the OLD markerStagePositions value (before we overwrite
                                                         // it below) so non-reference members can be locally extrapolated
                                                         // by the same delta at touch rate.
-                                                        if (isClusterReference && clusterConfig != null && clusterConfig.referenceMode == 0) {
+                                                        if (isClusterReference && clusterConfig.referenceMode == 0) {
                                                             val pivotPos = markerStagePositions[updatedMarker.id]
                                                             if (pivotPos != null) {
                                                                 beginClusterTranslationIfNeeded(
@@ -1220,7 +1370,7 @@ fun InputMapTab(
                                                         // Store the stage position for view change recalculations
                                                         markerStagePositions[updatedMarker.id] = Pair(stageX, stageY)
 
-                                                        if (isClusterReference && clusterConfig != null && clusterConfig.referenceMode == 0) {
+                                                        if (isClusterReference && clusterConfig.referenceMode == 0) {
                                                             // Local rigid-body translation: move all non-reference cluster
                                                             // members by the same delta as the reference, at touch rate.
                                                             applyClusterTranslation(markerClusterId, stageX, stageY)
@@ -1464,6 +1614,10 @@ fun InputMapTab(
                                     // Send gesture-end for cluster vector controls
                                     val releasedVc = vectorControls[pointerValue]
                                     if (releasedVc != null && releasedVc.targetType == 1 && initialLayoutDone) {
+                                        // Bake the current rotation/scale into the snapshot so the
+                                        // cluster keeps its rotated configuration as the primary
+                                        // finger continues to drag it.
+                                        bakeClusterScaleRotation(releasedVc.clusterId)
                                         // Send scale=0 to signal gesture end (JUCE clears snapshot)
                                         onClusterScaleRotation?.invoke(releasedVc.clusterId, 0f, 0f)
                                     }
