@@ -1,13 +1,8 @@
-# WFS Control 2
+# WFS Control for WFS-DIY (JUCE C++ version)
 
-Android remote control application for WFS-DIY version 3.
+Android remote control application for WFS-DIY (JUCE C++ version.
 
 ## Download & Installation
-
-### Latest Release
-Download the latest APK from the [Releases page](https://github.com/pob31/WFS_control_2/releases)
-
-**Direct download**: [Latest APK](https://github.com/pob31/WFS_control_2/releases/latest/download/wfs-control-1.0-release.apk)
 
 ### Installation Instructions
 1. Download the APK from the releases page
@@ -21,25 +16,27 @@ Download the latest APK from the [Releases page](https://github.com/pob31/WFS_co
 
 ## Documentation
 
-📚 **[Full User Guide](docs/user-guide.md)** - Complete documentation with detailed explanations of all features
+📚 **[Full User Guide](docs/user-guide.md)** - 
 
-🚀 **[Quick Start Guide](docs/quick-start.md)** - Get up and running in 5 minutes
+🚀 **[Quick Start Guide](docs/quick-start.md)** - 
 
-🔌 **[OSC Reference](docs/osc-reference.md)** - Complete OSC message reference for developers
+🔌 **[OSC Reference](docs/osc-reference.md)**
 
 ### What's Included
 
 - **64 Input Channels** - Control up to 64 independent audio sources
-- **10 Speaker Clusters** - Configure and position speaker arrays
+- **10 Speaker Arrays** - adjust timing, level and parallax parameters for each Array
 - **Real-time OSC Communication** - Bi-directional communication with 50Hz update rate
 - **Interactive Maps** - Visual positioning of inputs and clusters on a stage grid
-- **Comprehensive Parameter Control** - Adjust attenuation, delay, directivity, LFO, and more
+- **Comprehensive Input Parameter Control** - Adjust attenuation, delay, directivity, LFO, and more
+- **Pad XY** to trigger and interact with the built in sampler. Finger pressure sensitivity calibration available on the settings screen.
+- **Cluster LFO** Quick triggering of Cluster LFO presets.
 - **Find Device Feature** - Locate your tablet in dark venues with screen flash and alarm
 - **Responsive Design** - Optimized layouts for both tablets and phones
 
 ## License
 
-Copyright (c) 2025, Pierre-Olivier Boulant
+Copyright (c) 2026, Pierre-Olivier Boulant
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -56,9 +53,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 https://wfs-diy.net
 
-This is a remote control for WFS-DIY version 3 only. It will not work with version 2 for which there is a Lemur template for you to adapt.
+This is a remote control for WFS-DIY JUCE C++ version. It will not work with the Max versions for which there is a Lemur template for you to adapt.
 It should run on most versions of Android. If you find any bugs please report them: contact@pixetbel.org
 The layout for phones will come eventually. Most of it should be okay for now except the Input Parameters tab which needs to be adapted to smaller screens.
 
-Before you ask, I have no plans for an iOS version. It would cost 200€ a year to cover the costs of releasing an app for iOS (100€/y for the Apple Developer program and 100€/y for each app on the App Store with the certainty they will break stuff with each OS release...) Unless you want to start a crowdfunding for it and are okay to sponsor the development tools and the time, don't hold your breath. You iPad will work very well with the console remote app or the QLab remote. There are large inexpensive Android tablets, new and used. ;)
+Before you ask, I have no plans for an iOS version. Unless you want to start a crowdfunding for it and are okay to sponsor the development tools and the time, don't hold your breath. You iPad will work very well with the console remote app or the QLab remote. There are large inexpensive Android tablets, new and used. ;)
 Thank you for your understanding.
