@@ -57,5 +57,5 @@ This is a remote control for WFS-DIY JUCE C++ version. It will not work with the
 It should run on most versions of Android. If you find any bugs please report them: contact@pixetbel.org
 The layout for phones will come eventually. Most of it should be okay for now except the Input Parameters tab which needs to be adapted to smaller screens.
 
-Before you ask, I have no plans for an iOS version. Unless you want to start a crowdfunding for it and are okay to sponsor the development tools and the time, don't hold your breath. You iPad will work very well with the console remote app or the QLab remote. There are large inexpensive Android tablets, new and used. ;)
+Before you ask, I have no plans for an iOS version. Unless you want to start a crowdfunding for it and are okay to sponsor the development tools and the time, don't hold your breath. Your iPad will work very well with the console remote app or the QLab remote. There are large inexpensive Android tablets, new and used. ;)
 Thank you for your understanding.
