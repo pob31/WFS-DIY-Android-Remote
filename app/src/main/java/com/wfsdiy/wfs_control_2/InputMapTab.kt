@@ -438,13 +438,23 @@ fun InputMapTab(
         clusterId: Int,
         pivotMode: Int,
         pivotStageX: Float,
-        pivotStageY: Float
+        pivotStageY: Float,
+        toStage: ((Offset) -> Pair<Float, Float>)? = null
     ) {
         if (clusterId !in 1..10) return
         if (activeClusterTranslations.containsKey(clusterId)) return
         val members = currentMarkersState.take(numberOfInputs).filter { it.clusterId == clusterId }
+        // Include EVERY member in the rigid-body snapshot. If a member has no
+        // cached stage position (e.g. a hidden / locked / not-yet-synced input
+        // that never received an individual position update), derive it from the
+        // marker's current canvas position via the supplied `toStage` converter.
+        // Dropping such members would freeze them for the whole gesture (inbound
+        // echoes are suppressed per-cluster during a drag), leaving them desynced
+        // from the rest of the cluster.
         val snapshot = members.mapNotNull { m ->
-            val pos = markerStagePositions[m.id] ?: return@mapNotNull null
+            val pos = markerStagePositions[m.id]
+                ?: toStage?.invoke(m.position)?.also { markerStagePositions[m.id] = it }
+                ?: return@mapNotNull null
             m.id to pos
         }.toMap()
         if (snapshot.isEmpty()) return
@@ -635,6 +645,28 @@ fun InputMapTab(
         // Actual visible meters (may be larger than requested on one axis due to uniform scale)
         val actualViewWidth = if (pixelsPerMeter > 0f) effectiveCanvasWidth / pixelsPerMeter else viewWidthMeters
         val actualViewHeight = if (pixelsPerMeter > 0f) effectiveCanvasHeight / pixelsPerMeter else viewHeightMeters
+
+        // Converts a marker's canvas position to a stage position using the
+        // current view. Passed into beginClusterTranslationIfNeeded so it can
+        // derive a fallback stage position for cluster members that have no
+        // cached entry yet (keeps hidden/locked members in the rigid-body move).
+        val markerCanvasToStage: (Offset) -> Pair<Float, Float> = { off ->
+            canvasToStagePosition(
+                canvasX = off.x,
+                canvasY = off.y,
+                stageWidth = stageWidth,
+                stageDepth = stageDepth,
+                stageOriginX = stageOriginX,
+                stageOriginY = stageOriginY,
+                canvasWidth = canvasWidth,
+                canvasHeight = canvasHeight,
+                markerRadius = markerRadius,
+                panOffsetX = panOffsetX,
+                panOffsetY = panOffsetY,
+                actualViewWidth = actualViewWidth,
+                actualViewHeight = actualViewHeight
+            )
+        }
 
         // Track if any marker is being dragged (for gesture priority)
         val isDraggingAnyMarker by remember {
@@ -1172,7 +1204,8 @@ fun InputMapTab(
                                                                     clusterId = clusterId,
                                                                     pivotMode = pivotMode,
                                                                     pivotStageX = pivotStageX,
-                                                                    pivotStageY = pivotStageY
+                                                                    pivotStageY = pivotStageY,
+                                                                    toStage = markerCanvasToStage
                                                                 )
                                                             }
                                                             vectorControlsUpdateTrigger++
@@ -1247,7 +1280,8 @@ fun InputMapTab(
                                                                             clusterId = markerClusterId,
                                                                             pivotMode = 0,
                                                                             pivotStageX = pivotStageX,
-                                                                            pivotStageY = pivotStageY
+                                                                            pivotStageY = pivotStageY,
+                                                                            toStage = markerCanvasToStage
                                                                         )
                                                                     }
                                                                 } else {
@@ -1364,7 +1398,8 @@ fun InputMapTab(
                                                                     clusterId = markerClusterId,
                                                                     pivotMode = 0,
                                                                     pivotStageX = pivotPos.first,
-                                                                    pivotStageY = pivotPos.second
+                                                                    pivotStageY = pivotPos.second,
+                                                                    toStage = markerCanvasToStage
                                                                 )
                                                             }
                                                         }
@@ -1473,7 +1508,8 @@ fun InputMapTab(
                                                             clusterId = clusterIdBeingDragged,
                                                             pivotMode = 1,
                                                             pivotStageX = oldStageX,
-                                                            pivotStageY = oldStageY
+                                                            pivotStageY = oldStageY,
+                                                            toStage = markerCanvasToStage
                                                         )
                                                     }
                                                     // Local rigid-body translation at touch rate
@@ -1542,7 +1578,8 @@ fun InputMapTab(
                                                                 clusterId = hiddenRefClusterId,
                                                                 pivotMode = 0,
                                                                 pivotStageX = oldStageX,
-                                                                pivotStageY = oldStageY
+                                                                pivotStageY = oldStageY,
+                                                                toStage = markerCanvasToStage
                                                             )
                                                         }
                                                         // Local rigid-body translation at touch rate
