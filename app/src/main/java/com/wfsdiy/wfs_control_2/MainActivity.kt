@@ -192,7 +192,7 @@ data class Marker(
 @Parcelize
 data class ClusterConfig(
     val id: Int,                      // 1-10
-    var referenceMode: Int = 0,       // 0 = First Input, 1 = Barycenter
+    var referenceMode: Int = 0,       // 0 = First Input, 1 = Barycenter, 2 = Shared Position
     var trackedInputId: Int = 0       // Input ID if tracking active, 0 = no tracking
 ) : Parcelable
 

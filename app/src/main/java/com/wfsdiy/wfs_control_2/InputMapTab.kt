@@ -88,8 +88,8 @@ fun findClusterBarycenter(
 }
 
 /**
- * Find the hidden reference marker position for a cluster if it's in First Input mode
- * and the reference input is hidden.
+ * Find the hidden reference marker position for a cluster if it's in First Input
+ * or Shared Position mode and the reference input is hidden.
  * Returns the cluster ID and position if found, null otherwise.
  */
 fun findHiddenClusterReference(
@@ -99,8 +99,8 @@ fun findHiddenClusterReference(
 ): Offset? {
     val config = clusterConfigs.find { it.id == clusterId } ?: return null
 
-    // Only for First Input mode (referenceMode == 0) with no tracked input
-    if (config.referenceMode != 0 || config.trackedInputId != 0) return null
+    // Only for First Input (0) or Shared Position (2) modes with no tracked input
+    if ((config.referenceMode != 0 && config.referenceMode != 2) || config.trackedInputId != 0) return null
 
     val clusterMembers = markers.filter { it.clusterId == clusterId }
     if (clusterMembers.size < 2) return null
@@ -1204,7 +1204,8 @@ fun InputMapTab(
                                                                 val isClusterReference = clusterConfig != null && (
                                                                     clusterConfig.trackedInputId == markerId ||
                                                                     (clusterConfig.referenceMode == 0 && clusterConfig.trackedInputId == 0 &&
-                                                                        currentMarkersState.filter { m -> m.clusterId == markerClusterId }.minByOrNull { m -> m.id }?.id == markerId)
+                                                                        currentMarkersState.filter { m -> m.clusterId == markerClusterId }.minByOrNull { m -> m.id }?.id == markerId) ||
+                                                                    clusterConfig.referenceMode == 2  // Shared Position: any member acts as the cluster handle
                                                                 )
 
                                                                 if (isClusterReference) {
@@ -1325,7 +1326,8 @@ fun InputMapTab(
                                                         val isClusterReference = clusterConfig != null && (
                                                             clusterConfig.trackedInputId == updatedMarker.id ||
                                                             (clusterConfig.referenceMode == 0 && clusterConfig.trackedInputId == 0 &&
-                                                                currentMarkersState.filter { it.clusterId == markerClusterId }.minByOrNull { it.id }?.id == updatedMarker.id)
+                                                                currentMarkersState.filter { it.clusterId == markerClusterId }.minByOrNull { it.id }?.id == updatedMarker.id) ||
+                                                            clusterConfig.referenceMode == 2  // Shared Position: any member acts as the cluster handle
                                                         )
 
                                                         // Convert pixel delta to stage coordinate delta
@@ -1355,7 +1357,7 @@ fun InputMapTab(
                                                         // pivot from the OLD markerStagePositions value (before we overwrite
                                                         // it below) so non-reference members can be locally extrapolated
                                                         // by the same delta at touch rate.
-                                                        if (isClusterReference && clusterConfig.referenceMode == 0) {
+                                                        if (isClusterReference && (clusterConfig.referenceMode == 0 || clusterConfig.referenceMode == 2)) {
                                                             val pivotPos = markerStagePositions[updatedMarker.id]
                                                             if (pivotPos != null) {
                                                                 beginClusterTranslationIfNeeded(
@@ -1370,7 +1372,7 @@ fun InputMapTab(
                                                         // Store the stage position for view change recalculations
                                                         markerStagePositions[updatedMarker.id] = Pair(stageX, stageY)
 
-                                                        if (isClusterReference && clusterConfig.referenceMode == 0) {
+                                                        if (isClusterReference && (clusterConfig.referenceMode == 0 || clusterConfig.referenceMode == 2)) {
                                                             // Local rigid-body translation: move all non-reference cluster
                                                             // members by the same delta as the reference, at touch rate.
                                                             applyClusterTranslation(markerClusterId, stageX, stageY)

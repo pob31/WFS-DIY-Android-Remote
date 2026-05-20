@@ -1039,6 +1039,7 @@ typealias OscClusterTrackedInputCallback = (clusterId: Int, inputId: Int) -> Uni
 typealias OscRemotePingCallback = (sequenceNumber: Int) -> Unit
 typealias OscRemoteHeartbeatCallback = (sequenceNumber: Int) -> Unit
 typealias OscRemoteDisconnectCallback = () -> Unit
+typealias OscRemoteStateCompleteCallback = (expectedCount: Int) -> Unit
 typealias OscCompositePositionCallback = (inputId: Int, compositeX: Float, compositeY: Float) -> Unit
 typealias OscSamplerPlayingCallback = (inputId: Int, playing: Int) -> Unit
 typealias OscPadEnabledCallback = (enabled: Int) -> Unit
@@ -1087,7 +1088,8 @@ fun parseAndProcessOscPacket(
     onClusterPresetNameReceived: OscClusterPresetNameCallback? = null,
     onClusterPresetPopulatedReceived: OscClusterPresetPopulatedCallback? = null,
     onClusterPresetCountReceived: OscClusterPresetCountCallback? = null,
-    onClusterPresetAxesReceived: OscClusterPresetAxesCallback? = null
+    onClusterPresetAxesReceived: OscClusterPresetAxesCallback? = null,
+    onRemoteStateCompleteReceived: OscRemoteStateCompleteCallback? = null
 ) {
     if (data.isEmpty()) {
         return
@@ -1128,7 +1130,8 @@ fun parseAndProcessOscPacket(
                     onPadSensitivityReceived, onPadGridLayoutReceived,
                     onClusterLFOActiveReceived, onClusterPresetNameReceived,
                     onClusterPresetPopulatedReceived, onClusterPresetCountReceived,
-                    onClusterPresetAxesReceived
+                    onClusterPresetAxesReceived,
+                    onRemoteStateCompleteReceived
                 )
             }
         } catch (e: Exception) {
@@ -1445,6 +1448,15 @@ fun parseAndProcessOscPacket(
                 // Disconnect message has no arguments
                 onRemoteDisconnectReceived?.invoke()
             }
+            address == "/remote/stateComplete" -> {
+                // End-of-dump marker: the server finished sending the full state and
+                // tells us how many channels to expect, so we can verify completeness
+                // and re-request any channels lost in transit.
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",i") return
+                if (buffer.remaining() < 4) return
+                val expectedCount = parseOscInt(buffer)
+                onRemoteStateCompleteReceived?.invoke(expectedCount)
+            }
             // XY Pad (virtual Lightpad) messages from JUCE
             address == "/remote/pad/enabled" -> {
                 if (!buffer.hasRemaining() || parseOscString(buffer) != ",i") return
@@ -1550,7 +1562,8 @@ suspend fun startOscServer(
     onClusterPresetNameReceived: OscClusterPresetNameCallback? = null,
     onClusterPresetPopulatedReceived: OscClusterPresetPopulatedCallback? = null,
     onClusterPresetCountReceived: OscClusterPresetCountCallback? = null,
-    onClusterPresetAxesReceived: OscClusterPresetAxesCallback? = null
+    onClusterPresetAxesReceived: OscClusterPresetAxesCallback? = null,
+    onRemoteStateCompleteReceived: OscRemoteStateCompleteCallback? = null
 ) {
     var serverSocket: DatagramSocket? = null
     try {
@@ -1640,7 +1653,8 @@ suspend fun startOscServer(
                         onClusterPresetNameReceived,
                         onClusterPresetPopulatedReceived,
                         onClusterPresetCountReceived,
-                        onClusterPresetAxesReceived
+                        onClusterPresetAxesReceived,
+                        onRemoteStateCompleteReceived
                     )
                 } catch (e: Exception) {
                     // Ignore malformed packets
@@ -1786,6 +1800,49 @@ suspend fun sendOscDisconnect(context: Context) {
         android.util.Log.d("OSC", "Sent /remote/disconnect")
     } catch (e: Exception) {
         e.printStackTrace()
+    }
+}
+
+/**
+ * Ask the JUCE server to resend state. The channelIds (1-based) are the channels we
+ * detected as missing after the initial dump; an empty list requests the full state.
+ * Used to recover from UDP packets dropped during the connection-time burst.
+ */
+fun sendOscRequestResync(context: Context, channelIds: List<Int>) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull()
+
+            if (outgoingPort == null || !isValidPort(outgoingPortStr)) {
+                return@launch
+            }
+            if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) {
+                return@launch
+            }
+
+            val addressPattern = "/remote/requestResync"
+            val addressPatternBytes = getPaddedBytes(addressPattern)
+            // One 'i' type tag per requested channel (",", then N 'i's, null-padded).
+            val typeTag = "," + "i".repeat(channelIds.size)
+            val typeTagBytes = getPaddedBytes(typeTag)
+            var argBytes = ByteArray(0)
+            for (id in channelIds) {
+                argBytes += id.toBytesBigEndian()
+            }
+
+            val oscPacketBytes = addressPatternBytes + typeTagBytes + argBytes
+
+            DatagramSocket().use { socket ->
+                val inetAddress = InetAddress.getByName(ipAddressStr)
+                val packet = DatagramPacket(oscPacketBytes, oscPacketBytes.size, inetAddress, outgoingPort)
+                socket.send(packet)
+            }
+
+            android.util.Log.d("OSC", "Sent /remote/requestResync for ${channelIds.size} channels")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }
 

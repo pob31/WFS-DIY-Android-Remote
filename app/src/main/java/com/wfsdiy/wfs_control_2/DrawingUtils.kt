@@ -279,6 +279,8 @@ fun DrawScope.drawOriginMarker(
  * For clusters with referenceMode=0 (First Input), lines connect to the first input.
  * For clusters with referenceMode=1 (Barycenter), lines connect to the calculated center
  * and a draggable barycenter marker is drawn.
+ * For clusters with referenceMode=2 (Shared Position), all members coincide so lines
+ * collapse to zero length; the first-by-ID reference is used for the hidden-ref fallback.
  */
 fun DrawScope.drawClusterLines(
     markers: List<Marker>,
@@ -306,8 +308,8 @@ fun DrawScope.drawClusterLines(
                 allClusterMembers.find { it.id == config.trackedInputId }?.position
                     ?: calculateBarycenter(allClusterMembers)
             }
-            // First Input mode: use first member by ID
-            config.referenceMode == 0 -> {
+            // First Input or Shared Position mode: use first member by ID
+            config.referenceMode == 0 || config.referenceMode == 2 -> {
                 referenceMarker?.position ?: return@forEach
             }
             // Barycenter mode: calculate center from ALL members
@@ -319,24 +321,29 @@ fun DrawScope.drawClusterLines(
         // Get cluster color with alpha for lines (matching JUCE)
         val clusterColor = getMarkerColor(config.id, isClusterMarker = true).copy(alpha = 0.5f)
 
-        // Draw lines from reference to each VISIBLE member only
-        visibleClusterMembers.forEach { member ->
-            val memberPosition = member.position
-            // In First Input mode, don't draw line from reference to itself
-            // In Barycenter mode, draw lines to all members
-            val isReferenceInput = when {
-                config.trackedInputId > 0 -> member.id == config.trackedInputId
-                config.referenceMode == 0 -> member.id == referenceMarker?.id
-                else -> false
-            }
+        // Shared Position: members coincide, no useful lines to draw — skip
+        // the line pass entirely.
+        if (config.referenceMode != 2)
+        {
+            // Draw lines from reference to each VISIBLE member only
+            visibleClusterMembers.forEach { member ->
+                val memberPosition = member.position
+                // In First Input mode, don't draw line from reference to itself
+                // In Barycenter mode, draw lines to all members
+                val isReferenceInput = when {
+                    config.trackedInputId > 0 -> member.id == config.trackedInputId
+                    config.referenceMode == 0 -> member.id == referenceMarker?.id
+                    else -> false
+                }
 
-            if (!isReferenceInput || config.referenceMode == 1) {
-                drawLine(
-                    color = clusterColor,
-                    start = referencePoint,
-                    end = memberPosition,
-                    strokeWidth = 3f
-                )
+                if (!isReferenceInput || config.referenceMode == 1) {
+                    drawLine(
+                        color = clusterColor,
+                        start = referencePoint,
+                        end = memberPosition,
+                        strokeWidth = 3f
+                    )
+                }
             }
         }
 
@@ -364,8 +371,8 @@ fun DrawScope.drawClusterLines(
             }
         }
 
-        // Draw hidden reference marker if in First Input mode and reference is hidden
-        if (config.referenceMode == 0 && config.trackedInputId == 0 && referenceMarker != null && !referenceMarker.isVisible) {
+        // Draw hidden reference marker if in First Input or Shared Position mode and reference is hidden
+        if ((config.referenceMode == 0 || config.referenceMode == 2) && config.trackedInputId == 0 && referenceMarker != null && !referenceMarker.isVisible) {
             // Draw a cluster marker at the hidden reference's position
             drawCircle(
                 color = clusterColor.copy(alpha = 0.8f),

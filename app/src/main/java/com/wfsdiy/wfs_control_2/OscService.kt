@@ -27,6 +27,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import com.wfsdiy.wfs_control_2.localization.locStatic
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 
 class OscService : Service() {
@@ -44,10 +45,26 @@ class OscService : Service() {
     private var lastHeartbeatReceivedTime: Long = 0
     private var connectionTimeoutJob: kotlinx.coroutines.Job? = null
 
+    // --- Connection-time state-dump completeness tracking ---
+    // The server sends ~2000 messages (~70 UDP bundles) right after connect. UDP can
+    // drop some, leaving channels with missing positions/names. We track which channels
+    // arrived complete (name + position) and re-request any that are missing.
+    private val receivedNames = ConcurrentHashMap.newKeySet<Int>()
+    private val receivedPositions = ConcurrentHashMap.newKeySet<Int>()
+    @Volatile private var expectedChannelCount = 0
+    @Volatile private var stateCompleteSeen = false
+    private var resyncJob: kotlinx.coroutines.Job? = null
+    private var resyncFallbackJob: kotlinx.coroutines.Job? = null
+
     companion object {
         private const val NOTIFICATION_ID = 1
         private const val NOTIFICATION_CHANNEL_ID = "OscServiceChannel"
         private const val CONNECTION_TIMEOUT_MS = 6000L
+        // Re-request tuning for a dropped state dump.
+        private const val MAX_RESYNC_ATTEMPTS = 3
+        private const val RESYNC_SETTLE_MS = 400L   // let trailing bundles land before first check
+        private const val RESYNC_BACKOFF_MS = 1200L // wait for a resend to arrive before re-checking
+        private const val RESYNC_FALLBACK_MS = 1500L // if stateComplete is itself lost, verify anyway
     }
 
     // Service state tracking
@@ -312,6 +329,9 @@ class OscService : Service() {
                     onNumberOfInputsChanged = { newCount ->
                         inputsUpdates.offer(OscInputsUpdate(newCount))
                         _numberOfInputs.value = newCount
+                        // The /inputs message is part of the dump; remember the count so we
+                        // can verify completeness even if the stateComplete marker is lost.
+                        if (newCount > 0) expectedChannelCount = newCount
                     },
                     onInputParameterIntReceived = { oscPath, inputId, value ->
                         inputParameterUpdates.offer(OscInputParameterUpdate(oscPath, inputId, intValue = value))
@@ -320,10 +340,14 @@ class OscService : Service() {
                     onInputParameterFloatReceived = { oscPath, inputId, value ->
                         inputParameterUpdates.offer(OscInputParameterUpdate(oscPath, inputId, floatValue = value))
                         updateInputParameterFromOsc(oscPath, inputId, floatValue = value)
+                        if (oscPath == "/remoteInput/positionX" || oscPath == "/remoteInput/positionY")
+                            receivedPositions.add(inputId)
                     },
                     onInputParameterStringReceived = { oscPath, inputId, value ->
                         inputParameterUpdates.offer(OscInputParameterUpdate(oscPath, inputId, stringValue = value))
                         updateInputParameterFromOsc(oscPath, inputId, stringValue = value)
+                        if (oscPath == "/remoteInput/inputName")
+                            receivedNames.add(inputId)
                     },
                     onClusterReferenceModeChanged = { clusterId, mode ->
                         clusterConfigUpdates.offer(OscClusterConfigUpdate(clusterId, referenceMode = mode))
@@ -349,8 +373,16 @@ class OscService : Service() {
                         // Respond with pong and update connection state
                         sendOscPong(this@OscService, sequenceNumber)
                         lastHeartbeatReceivedTime = System.currentTimeMillis()
+                        val wasConnected = _connectionState.value == RemoteConnectionState.CONNECTED
                         _connectionState.value = RemoteConnectionState.CONNECTED
                         startConnectionTimeoutMonitor()
+                        // A fresh connect triggers the server to (re)send the full dump, so
+                        // reset completeness tracking and arm a fallback verifier in case the
+                        // stateComplete marker itself is dropped.
+                        if (!wasConnected) {
+                            resetSyncTracking()
+                            scheduleResyncFallback()
+                        }
                     },
                     onRemoteHeartbeatReceived = { sequenceNumber ->
                         // Respond with heartbeat ack and update timestamp
@@ -361,6 +393,14 @@ class OscService : Service() {
                         // Server requested disconnect
                         _connectionState.value = RemoteConnectionState.DISCONNECTED
                         connectionTimeoutJob?.cancel()
+                        resyncJob?.cancel()
+                    },
+                    onRemoteStateCompleteReceived = { expectedCount ->
+                        // Server finished the full dump. Verify we got every channel and
+                        // re-request any lost in transit.
+                        if (expectedCount > 0) expectedChannelCount = expectedCount
+                        stateCompleteSeen = true
+                        launchResyncVerifier()
                     },
                     onCompositePositionReceived = { inputId, deltaX, deltaY ->
                         // Delta values: JUCE sends (0,0) when there's no offset to display
@@ -763,6 +803,63 @@ class OscService : Service() {
                     android.util.Log.d("OscService", "Connection timeout - no heartbeat for ${timeSinceLastHeartbeat}ms")
                     break
                 }
+            }
+        }
+    }
+
+    // Clear completeness tracking at the start of a fresh connection (the server resends
+    // the full dump on connect).
+    private fun resetSyncTracking() {
+        resyncJob?.cancel()
+        resyncFallbackJob?.cancel()
+        receivedNames.clear()
+        receivedPositions.clear()
+        expectedChannelCount = 0
+        stateCompleteSeen = false
+    }
+
+    // If the stateComplete marker is itself dropped, still verify after a fixed delay
+    // (using the channel count learned from the /inputs message in the dump).
+    private fun scheduleResyncFallback() {
+        resyncFallbackJob?.cancel()
+        resyncFallbackJob = serviceScope.launch {
+            delay(RESYNC_FALLBACK_MS)
+            if (isActive && !stateCompleteSeen &&
+                _connectionState.value == RemoteConnectionState.CONNECTED) {
+                launchResyncVerifier()
+            }
+        }
+    }
+
+    // Channels (1-based) that are missing a name and/or a position after the dump.
+    private fun computeMissingChannels(): List<Int> {
+        val n = expectedChannelCount
+        if (n <= 0) return emptyList()
+        return (1..n).filter { it !in receivedNames || it !in receivedPositions }
+    }
+
+    // Verify the dump arrived complete; re-request missing channels with bounded retries.
+    private fun launchResyncVerifier() {
+        resyncJob?.cancel()
+        resyncJob = serviceScope.launch {
+            delay(RESYNC_SETTLE_MS) // let any trailing bundles land before the first check
+            var attempt = 0
+            while (attempt < MAX_RESYNC_ATTEMPTS && isActive) {
+                val missing = computeMissingChannels()
+                if (missing.isEmpty()) {
+                    android.util.Log.d("OscService", "State dump complete ($expectedChannelCount channels)")
+                    return@launch
+                }
+                attempt++
+                android.util.Log.w("OscService",
+                    "State dump incomplete: ${missing.size} channels missing, resync attempt $attempt/$MAX_RESYNC_ATTEMPTS")
+                sendOscRequestResync(this@OscService, missing)
+                delay(RESYNC_BACKOFF_MS) // wait for the resend to arrive before re-checking
+            }
+            val stillMissing = computeMissingChannels()
+            if (stillMissing.isNotEmpty()) {
+                android.util.Log.e("OscService",
+                    "State dump still incomplete after $MAX_RESYNC_ATTEMPTS attempts: missing $stillMissing")
             }
         }
     }
