@@ -523,6 +523,14 @@ fun WFSControlApp() {
         }
     }
 
+    // Protocol version the WFS-DIY server reported (0 = unknown yet)
+    var serverProtocolVersion by remember { mutableIntStateOf(0) }
+    LaunchedEffect(viewModel) {
+        viewModel?.serverProtocolVersion?.collect { version ->
+            serverProtocolVersion = version
+        }
+    }
+
     // Collect composite positions from ViewModel
     var compositePositions by remember { mutableStateOf<Map<Int, Pair<Float, Float>>>(emptyMap()) }
     LaunchedEffect(viewModel) {
@@ -556,15 +564,17 @@ fun WFSControlApp() {
             connectionState = newState
 
             // On any transition into CONNECTED:
-            //  - First connect: skip requestInputParameters (JUCE already dumps state).
-            //  - Subsequent reconnects: request a refresh after a brief delay to let
-            //    Compose finish any pending recompositions before the dump arrives.
+            //  - First connect: skip the explicit request (JUCE already dumps state).
+            //  - Subsequent reconnects: the tablet may have missed any number of changes
+            //    while disconnected (including a project load), so ask for a complete
+            //    re-dump — not just the selected channel. The dump carries dumpBegin/
+            //    stateComplete markers, so completeness tracking and the resync verifier
+            //    arm themselves for this cycle in OscService.
             if (previousConnectionState == OscService.RemoteConnectionState.DISCONNECTED &&
                 newState == OscService.RemoteConnectionState.CONNECTED) {
                 if (hasConnectedOnce) {
                     kotlinx.coroutines.delay(250)
-                    val selectedInputId = inputParametersState?.selectedInputId ?: 1
-                    viewModel.requestInputParameters(selectedInputId)
+                    viewModel.requestFullResync()
                 }
                 hasConnectedOnce = true
             }
@@ -842,19 +852,42 @@ fun WFSControlApp() {
                     }
                 }
 
-                // Connection status indicator (small dot in top-right corner)
+                // Connection status indicator (small dot in top-right corner).
+                // Amber = connected but the server speaks a different protocol version.
+                val protocolMismatch = serverProtocolVersion != 0 &&
+                        serverProtocolVersion != REMOTE_PROTOCOL_VERSION
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(4.dp)
                         .size(8.dp)
                         .background(
-                            color = if (connectionState == OscService.RemoteConnectionState.CONNECTED)
-                                Color(0xFF00FF00) // Bright green
-                            else
-                                Color(0xFFFF0000), // Red
+                            color = when {
+                                connectionState != OscService.RemoteConnectionState.CONNECTED ->
+                                    Color(0xFFFF0000) // Red
+                                protocolMismatch -> Color(0xFFFFA000) // Amber
+                                else -> Color(0xFF00FF00) // Bright green
+                            },
                             shape = androidx.compose.foundation.shape.CircleShape
                         )
+                )
+            }
+
+            // Persistent protocol-mismatch warning under the tab row
+            if (connectionState == OscService.RemoteConnectionState.CONNECTED &&
+                serverProtocolVersion != 0 &&
+                serverProtocolVersion != REMOTE_PROTOCOL_VERSION) {
+                Text(
+                    text = if (serverProtocolVersion > REMOTE_PROTOCOL_VERSION)
+                        loc("remote.version.updateThisApp")
+                    else
+                        loc("remote.version.updateServer"),
+                    color = Color.Black,
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFFFA000))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
                 )
             }
 

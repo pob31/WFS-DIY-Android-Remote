@@ -18,6 +18,13 @@ import java.util.concurrent.LinkedBlockingQueue
 import kotlin.compareTo
 import kotlin.times
 
+// Remote-control protocol version shared with the WFS-DIY desktop app. Bumped whenever
+// the OSC contract changes incompatibly. Exchanged in /remote/ping (server → tablet,
+// ",ii" seq+version) and /remote/pong (tablet → server) so both sides can flag a
+// mismatch instead of silently dropping unknown messages.
+// v2: versioned ping/pong, /remote/dumpBegin marker, dumpSeq on /remote/stateComplete.
+const val REMOTE_PROTOCOL_VERSION = 2
+
 fun getPaddedBytes(input: String, charsets: java.nio.charset.Charset = Charsets.UTF_8): ByteArray {
     val stringBytes = input.toByteArray(charsets)
     val lenWithNull = stringBytes.size + 1
@@ -1036,10 +1043,11 @@ typealias OscInputParameterFloatCallback = (oscPath: String, inputId: Int, value
 typealias OscInputParameterStringCallback = (oscPath: String, inputId: Int, value: String) -> Unit
 typealias OscClusterReferenceModeCallback = (clusterId: Int, mode: Int) -> Unit
 typealias OscClusterTrackedInputCallback = (clusterId: Int, inputId: Int) -> Unit
-typealias OscRemotePingCallback = (sequenceNumber: Int) -> Unit
+typealias OscRemotePingCallback = (sequenceNumber: Int, serverVersion: Int) -> Unit
 typealias OscRemoteHeartbeatCallback = (sequenceNumber: Int) -> Unit
 typealias OscRemoteDisconnectCallback = () -> Unit
-typealias OscRemoteStateCompleteCallback = (expectedCount: Int) -> Unit
+typealias OscRemoteStateCompleteCallback = (expectedCount: Int, dumpSeq: Int) -> Unit
+typealias OscRemoteDumpBeginCallback = (dumpSeq: Int, expectedCount: Int) -> Unit
 typealias OscCompositePositionCallback = (inputId: Int, compositeX: Float, compositeY: Float) -> Unit
 typealias OscSamplerPlayingCallback = (inputId: Int, playing: Int) -> Unit
 typealias OscPadEnabledCallback = (enabled: Int) -> Unit
@@ -1089,7 +1097,8 @@ fun parseAndProcessOscPacket(
     onClusterPresetPopulatedReceived: OscClusterPresetPopulatedCallback? = null,
     onClusterPresetCountReceived: OscClusterPresetCountCallback? = null,
     onClusterPresetAxesReceived: OscClusterPresetAxesCallback? = null,
-    onRemoteStateCompleteReceived: OscRemoteStateCompleteCallback? = null
+    onRemoteStateCompleteReceived: OscRemoteStateCompleteCallback? = null,
+    onRemoteDumpBeginReceived: OscRemoteDumpBeginCallback? = null
 ) {
     if (data.isEmpty()) {
         return
@@ -1131,7 +1140,8 @@ fun parseAndProcessOscPacket(
                     onClusterLFOActiveReceived, onClusterPresetNameReceived,
                     onClusterPresetPopulatedReceived, onClusterPresetCountReceived,
                     onClusterPresetAxesReceived,
-                    onRemoteStateCompleteReceived
+                    onRemoteStateCompleteReceived,
+                    onRemoteDumpBeginReceived
                 )
             }
         } catch (e: Exception) {
@@ -1429,12 +1439,15 @@ fun parseAndProcessOscPacket(
             }
             // Remote handshake/heartbeat protocol
             address == "/remote/ping" -> {
-                if (!buffer.hasRemaining() || parseOscString(buffer) != ",i") {
-                    return
-                }
+                // v1 servers send ",i" (seq only); v2 sends ",ii" (seq + protocol version).
+                if (!buffer.hasRemaining()) return
+                val typeTags = parseOscString(buffer)
+                if (typeTags != ",i" && typeTags != ",ii") return
                 if (buffer.remaining() < 4) return
                 val sequenceNumber = parseOscInt(buffer)
-                onRemotePingReceived?.invoke(sequenceNumber)
+                val serverVersion =
+                    if (typeTags == ",ii" && buffer.remaining() >= 4) parseOscInt(buffer) else 1
+                onRemotePingReceived?.invoke(sequenceNumber, serverVersion)
             }
             address == "/remote/heartbeat" -> {
                 if (!buffer.hasRemaining() || parseOscString(buffer) != ",i") {
@@ -1448,14 +1461,29 @@ fun parseAndProcessOscPacket(
                 // Disconnect message has no arguments
                 onRemoteDisconnectReceived?.invoke()
             }
+            address == "/remote/dumpBegin" -> {
+                // Start-of-dump marker (v2): a fresh full dump follows. Carries the dump
+                // sequence number and the channel count so completeness tracking can be
+                // reset for every dump cycle (connect, project load, full resync).
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",ii") return
+                if (buffer.remaining() < 8) return
+                val dumpSeq = parseOscInt(buffer)
+                val expectedCount = parseOscInt(buffer)
+                onRemoteDumpBeginReceived?.invoke(dumpSeq, expectedCount)
+            }
             address == "/remote/stateComplete" -> {
                 // End-of-dump marker: the server finished sending the full state and
                 // tells us how many channels to expect, so we can verify completeness
-                // and re-request any channels lost in transit.
-                if (!buffer.hasRemaining() || parseOscString(buffer) != ",i") return
+                // and re-request any channels lost in transit. v2 appends the dump
+                // sequence number matching the preceding /remote/dumpBegin.
+                if (!buffer.hasRemaining()) return
+                val typeTags = parseOscString(buffer)
+                if (typeTags != ",i" && typeTags != ",ii") return
                 if (buffer.remaining() < 4) return
                 val expectedCount = parseOscInt(buffer)
-                onRemoteStateCompleteReceived?.invoke(expectedCount)
+                val dumpSeq =
+                    if (typeTags == ",ii" && buffer.remaining() >= 4) parseOscInt(buffer) else -1
+                onRemoteStateCompleteReceived?.invoke(expectedCount, dumpSeq)
             }
             // XY Pad (virtual Lightpad) messages from JUCE
             address == "/remote/pad/enabled" -> {
@@ -1563,7 +1591,8 @@ suspend fun startOscServer(
     onClusterPresetPopulatedReceived: OscClusterPresetPopulatedCallback? = null,
     onClusterPresetCountReceived: OscClusterPresetCountCallback? = null,
     onClusterPresetAxesReceived: OscClusterPresetAxesCallback? = null,
-    onRemoteStateCompleteReceived: OscRemoteStateCompleteCallback? = null
+    onRemoteStateCompleteReceived: OscRemoteStateCompleteCallback? = null,
+    onRemoteDumpBeginReceived: OscRemoteDumpBeginCallback? = null
 ) {
     var serverSocket: DatagramSocket? = null
     try {
@@ -1610,12 +1639,12 @@ suspend fun startOscServer(
         receiveThread.start()
 
         try {
-            // Processing loop: drain the queue and parse each packet
-            while (currentCoroutineContext().isActive) {
-                // poll with timeout so we can check coroutine cancellation periodically
-                val receivedData = packetQueue.poll(200, java.util.concurrent.TimeUnit.MILLISECONDS)
-                    ?: continue
-
+            // Single parse helper shared by the blocking poll and the burst drain below,
+            // so both paths always forward the complete callback set. (The drain path
+            // previously omitted onRemoteStateCompleteReceived, silently dropping the
+            // end-of-dump marker whenever it arrived inside a burst — which it almost
+            // always did.)
+            val processPacket: (ByteArray) -> Unit = { receivedData ->
                 try {
                     val (canvasWidth, canvasHeight) = CanvasDimensions.getCurrentDimensions()
                     parseAndProcessOscPacket(
@@ -1654,57 +1683,25 @@ suspend fun startOscServer(
                         onClusterPresetPopulatedReceived,
                         onClusterPresetCountReceived,
                         onClusterPresetAxesReceived,
-                        onRemoteStateCompleteReceived
+                        onRemoteStateCompleteReceived,
+                        onRemoteDumpBeginReceived
                     )
                 } catch (e: Exception) {
                     // Ignore malformed packets
                 }
+            }
+
+            // Processing loop: drain the queue and parse each packet
+            while (currentCoroutineContext().isActive) {
+                // poll with timeout so we can check coroutine cancellation periodically
+                val receivedData = packetQueue.poll(200, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    ?: continue
+                processPacket(receivedData)
 
                 // Drain any queued packets without blocking (process burst as fast as possible)
                 while (true) {
                     val nextData = packetQueue.poll() ?: break
-                    try {
-                        val (canvasWidth, canvasHeight) = CanvasDimensions.getCurrentDimensions()
-                        parseAndProcessOscPacket(
-                            context,
-                            nextData,
-                            canvasWidth,
-                            canvasHeight,
-                            onOscDataReceived,
-                            onStageWidthChanged,
-                            onStageDepthChanged,
-                            onStageHeightChanged,
-                            onStageOriginXChanged,
-                            onStageOriginYChanged,
-                            onStageOriginZChanged,
-                            onStageShapeChanged,
-                            onStageDiameterChanged,
-                            onDomeElevationChanged,
-                            onNumberOfInputsChanged,
-                            onInputParameterIntReceived,
-                            onInputParameterFloatReceived,
-                            onInputParameterStringReceived,
-                            onClusterReferenceModeChanged,
-                            onClusterTrackedInputChanged,
-                            onRemotePingReceived,
-                            onRemoteHeartbeatReceived,
-                            onRemoteDisconnectReceived,
-                            onCompositePositionReceived,
-                            onSamplerPlayingReceived,
-                            onPadEnabledReceived,
-                            onPadZoneConfigReceived,
-                            onPadZoneCountReceived,
-                            onPadSensitivityReceived,
-                            onPadGridLayoutReceived,
-                            onClusterLFOActiveReceived,
-                            onClusterPresetNameReceived,
-                            onClusterPresetPopulatedReceived,
-                            onClusterPresetCountReceived,
-                            onClusterPresetAxesReceived
-                        )
-                    } catch (e: Exception) {
-                        // Ignore malformed packets
-                    }
+                    processPacket(nextData)
                 }
             }
         } finally {
@@ -1748,12 +1745,15 @@ fun sendOscPong(context: Context, sequenceNumber: Int) {
                 return@launch
             }
 
+            // v2 pong: seq + our protocol version so the server can flag a mismatch.
+            // (v1 servers tolerate the extra int — they only read the first argument.)
             val addressPattern = "/remote/pong"
             val addressPatternBytes = getPaddedBytes(addressPattern)
-            val typeTagBytes = getPaddedBytes(",i")
+            val typeTagBytes = getPaddedBytes(",ii")
             val seqNumBytes = sequenceNumber.toBytesBigEndian()
+            val versionBytes = REMOTE_PROTOCOL_VERSION.toBytesBigEndian()
 
-            val oscPacketBytes = addressPatternBytes + typeTagBytes + seqNumBytes
+            val oscPacketBytes = addressPatternBytes + typeTagBytes + seqNumBytes + versionBytes
 
             DatagramSocket().use { socket ->
                 val inetAddress = InetAddress.getByName(ipAddressStr)

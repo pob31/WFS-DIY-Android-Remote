@@ -50,6 +50,10 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
     val connectionState: StateFlow<OscService.RemoteConnectionState> = oscService.connectionState
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), OscService.RemoteConnectionState.DISCONNECTED)
 
+    // 0 = unknown (no ping yet), 1 = legacy version-less server, >=2 = v2+ server.
+    val serverProtocolVersion: StateFlow<Int> = oscService.serverProtocolVersion
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
     fun sendMarkerPosition(markerId: Int, x: Float, y: Float, isCluster: Boolean) {
         oscService.sendMarkerPosition(markerId, x, y, isCluster)
     }
@@ -131,6 +135,10 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
 
     fun requestInputParameters(inputId: Int) {
         oscService.requestInputParameters(inputId)
+    }
+
+    fun requestFullResync() {
+        oscService.requestFullResync()
     }
     
     fun setSelectedInput(inputId: Int) {

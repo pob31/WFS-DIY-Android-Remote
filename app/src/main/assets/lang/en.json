@@ -16,6 +16,11 @@
   },
 
   "remote": {
+    "version": {
+      "updateThisApp": "Protocol mismatch — update this app to match WFS-DIY",
+      "updateServer": "Protocol mismatch — update WFS-DIY on the computer"
+    },
+
     "tabs": {
       "map": "Map",
       "lockInputMarkers": "Lock Input Markers",

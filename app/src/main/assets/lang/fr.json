@@ -16,6 +16,11 @@
   },
 
   "remote": {
+    "version": {
+      "updateThisApp": "Version de protocole différente — mettez à jour cette application",
+      "updateServer": "Version de protocole différente — mettez à jour WFS-DIY sur l'ordinateur"
+    },
+
     "tabs": {
       "map": "Carte",
       "lockInputMarkers": "Verrouiller les marqueurs",

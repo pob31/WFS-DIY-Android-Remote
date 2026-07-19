@@ -42,6 +42,11 @@ class OscService : Service() {
     private val _connectionState = MutableStateFlow(RemoteConnectionState.DISCONNECTED)
     val connectionState: StateFlow<RemoteConnectionState> = _connectionState.asStateFlow()
 
+    // Protocol version the server reported in its v2 ping (0 = not yet known, 1 = legacy
+    // server that sent a version-less ping). Used by the UI to flag a mismatch.
+    private val _serverProtocolVersion = MutableStateFlow(0)
+    val serverProtocolVersion: StateFlow<Int> = _serverProtocolVersion.asStateFlow()
+
     private var lastHeartbeatReceivedTime: Long = 0
     private var connectionTimeoutJob: kotlinx.coroutines.Job? = null
 
@@ -53,6 +58,11 @@ class OscService : Service() {
     private val receivedPositions = ConcurrentHashMap.newKeySet<Int>()
     @Volatile private var expectedChannelCount = 0
     @Volatile private var stateCompleteSeen = false
+    // Dump-cycle sequence from /remote/dumpBegin (v2). -1 = no dump seen yet. If a
+    // stateComplete arrives with an unknown seq, its dumpBegin was lost in transit and
+    // we request a full re-dump (once per seq, guarded by lastFullResyncRequestedSeq).
+    @Volatile private var currentDumpSeq = -1
+    @Volatile private var lastFullResyncRequestedSeq = -1
     private var resyncJob: kotlinx.coroutines.Job? = null
     private var resyncFallbackJob: kotlinx.coroutines.Job? = null
 
@@ -369,25 +379,35 @@ class OscService : Service() {
                             saveClusterConfigs()
                         }
                     },
-                    onRemotePingReceived = { sequenceNumber ->
+                    onRemotePingReceived = { sequenceNumber, serverVersion ->
                         // Respond with pong and update connection state
                         sendOscPong(this@OscService, sequenceNumber)
+                        _serverProtocolVersion.value = serverVersion
                         lastHeartbeatReceivedTime = System.currentTimeMillis()
                         val wasConnected = _connectionState.value == RemoteConnectionState.CONNECTED
                         _connectionState.value = RemoteConnectionState.CONNECTED
                         startConnectionTimeoutMonitor()
                         // A fresh connect triggers the server to (re)send the full dump, so
                         // reset completeness tracking and arm a fallback verifier in case the
-                        // stateComplete marker itself is dropped.
+                        // stateComplete marker itself is dropped. (Belt-and-braces: a v2
+                        // server also announces every dump with /remote/dumpBegin.)
                         if (!wasConnected) {
                             resetSyncTracking()
                             scheduleResyncFallback()
                         }
                     },
                     onRemoteHeartbeatReceived = { sequenceNumber ->
-                        // Respond with heartbeat ack and update timestamp
+                        // Respond with heartbeat ack and update timestamp. Also treat the
+                        // heartbeat as proof of connection: if the tablet timed out but the
+                        // server still believes we're connected, it keeps sending heartbeats
+                        // and never re-pings — without this, the tablet would stay
+                        // DISCONNECTED forever (asymmetric-loss deadlock).
                         sendOscHeartbeatAck(this@OscService, sequenceNumber)
                         lastHeartbeatReceivedTime = System.currentTimeMillis()
+                        if (_connectionState.value != RemoteConnectionState.CONNECTED) {
+                            _connectionState.value = RemoteConnectionState.CONNECTED
+                            startConnectionTimeoutMonitor()
+                        }
                     },
                     onRemoteDisconnectReceived = {
                         // Server requested disconnect
@@ -395,12 +415,39 @@ class OscService : Service() {
                         connectionTimeoutJob?.cancel()
                         resyncJob?.cancel()
                     },
-                    onRemoteStateCompleteReceived = { expectedCount ->
+                    onRemoteDumpBeginReceived = { dumpSeq, expectedCount ->
+                        // A fresh full dump is starting (connect, project load, or full
+                        // resync). Reset completeness tracking so channels received in a
+                        // PREVIOUS dump don't mask losses in this one, and arm the
+                        // fallback verifier in case both end markers get lost.
+                        android.util.Log.d("OscService", "dumpBegin seq=$dumpSeq channels=$expectedCount")
+                        resetSyncTracking()
+                        if (expectedCount > 0) expectedChannelCount = expectedCount
+                        currentDumpSeq = dumpSeq
+                        scheduleResyncFallback()
+                    },
+                    onRemoteStateCompleteReceived = { expectedCount, dumpSeq ->
                         // Server finished the full dump. Verify we got every channel and
                         // re-request any lost in transit.
-                        if (expectedCount > 0) expectedChannelCount = expectedCount
-                        stateCompleteSeen = true
-                        launchResyncVerifier()
+                        if (dumpSeq >= 0 && dumpSeq != currentDumpSeq) {
+                            // The dumpBegin for this cycle was lost: our tracking sets
+                            // still reflect the previous dump, so completeness can't be
+                            // judged. Request a full re-dump (it will carry a fresh
+                            // dumpBegin), at most once per seq to avoid a loop.
+                            android.util.Log.w("OscService",
+                                "stateComplete seq=$dumpSeq without dumpBegin (have $currentDumpSeq)")
+                            receivedNames.clear()
+                            receivedPositions.clear()
+                            currentDumpSeq = dumpSeq
+                            if (lastFullResyncRequestedSeq != dumpSeq) {
+                                lastFullResyncRequestedSeq = dumpSeq
+                                sendOscRequestResync(this@OscService, emptyList())
+                            }
+                        } else {
+                            if (expectedCount > 0) expectedChannelCount = expectedCount
+                            stateCompleteSeen = true
+                            launchResyncVerifier()
+                        }
                     },
                     onCompositePositionReceived = { inputId, deltaX, deltaY ->
                         // Delta values: JUCE sends (0,0) when there's no offset to display
@@ -844,11 +891,13 @@ class OscService : Service() {
         resyncJob = serviceScope.launch {
             delay(RESYNC_SETTLE_MS) // let any trailing bundles land before the first check
             var attempt = 0
+            var complete = false
             while (attempt < MAX_RESYNC_ATTEMPTS && isActive) {
                 val missing = computeMissingChannels()
                 if (missing.isEmpty()) {
                     android.util.Log.d("OscService", "State dump complete ($expectedChannelCount channels)")
-                    return@launch
+                    complete = true
+                    break
                 }
                 attempt++
                 android.util.Log.w("OscService",
@@ -856,11 +905,27 @@ class OscService : Service() {
                 sendOscRequestResync(this@OscService, missing)
                 delay(RESYNC_BACKOFF_MS) // wait for the resend to arrive before re-checking
             }
-            val stillMissing = computeMissingChannels()
-            if (stillMissing.isNotEmpty()) {
-                android.util.Log.e("OscService",
-                    "State dump still incomplete after $MAX_RESYNC_ATTEMPTS attempts: missing $stillMissing")
+            if (!complete) {
+                val stillMissing = computeMissingChannels()
+                if (stillMissing.isNotEmpty()) {
+                    android.util.Log.e("OscService",
+                        "State dump still incomplete after $MAX_RESYNC_ATTEMPTS attempts: missing $stillMissing")
+                }
             }
+            // Completeness tracking only covers name + position; the ~95 detailed params
+            // of the channel currently shown on the Input Parameters tab could still have
+            // gaps. Re-pull them once per dump cycle — cheap (2-3 bundles) and it keeps
+            // the default-selected channel (1) from being the one channel that never
+            // recovers, since the operator never re-selects it.
+            sendOscRequestInputParameters(this@OscService, _inputParametersState.value.selectedInputId)
+        }
+    }
+
+    // Ask the server for a complete re-dump (empty channel list = full state). Used on
+    // reconnect: the tablet may have missed any number of changes while disconnected.
+    fun requestFullResync() {
+        serviceScope.launch {
+            sendOscRequestResync(this@OscService, emptyList())
         }
     }
 
