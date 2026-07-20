@@ -683,12 +683,22 @@ class OscService : Service() {
 
     fun sendInputPositionXY(inputId: Int, posX: Float, posY: Float) {
         // Update local state for BOTH axes atomically to prevent jump-back issues
-        updateInputParameterFromOsc("/remoteInput/positionX", inputId, floatValue = posX)
-        updateInputParameterFromOsc("/remoteInput/positionY", inputId, floatValue = posY)
+        commitLocalInputPositionXY(inputId, posX, posY)
 
         serviceScope.launch {
             sendOscInputPositionXY(this@OscService, inputId, posX, posY)
         }
+    }
+
+    /**
+     * Record a position in local state WITHOUT sending it. Used at cluster
+     * gesture end for every member: the post-release sync copies
+     * inputParametersState into the map markers, so pre-gesture values must not
+     * survive there even if JUCE's authoritative echo is lost in transit.
+     */
+    fun commitLocalInputPositionXY(inputId: Int, posX: Float, posY: Float) {
+        updateInputParameterFromOsc("/remoteInput/positionX", inputId, floatValue = posX)
+        updateInputParameterFromOsc("/remoteInput/positionY", inputId, floatValue = posY)
     }
 
     fun getBufferedClusterConfigUpdates(): List<OscClusterConfigUpdate> {

@@ -950,6 +950,11 @@ fun WFSControlApp() {
                     onClusterDragEnd = { clusterId ->
                         viewModel?.setClusterSuppression(clusterId, false)
                     },
+                    onClusterMembersSettled = { _, members ->
+                        members.forEach { (inputId, posX, posY) ->
+                            viewModel?.commitLocalInputPositionXY(inputId, posX, posY)
+                        }
+                    },
                     compositePositions = rememberSmoothedCompositePositions(compositePositions),
                     samplerPlaying = samplerPlaying
                 )

@@ -354,6 +354,7 @@ fun InputMapTab(
     onClusterScaleRotation: ((clusterId: Int, cumulativeScale: Float, cumulativeRotation: Float) -> Unit)? = null,
     onClusterDragStart: ((clusterId: Int) -> Unit)? = null,
     onClusterDragEnd: ((clusterId: Int) -> Unit)? = null,
+    onClusterMembersSettled: ((clusterId: Int, members: List<Triple<Int, Float, Float>>) -> Unit)? = null,
     compositePositions: Map<Int, Pair<Float, Float>> = emptyMap(),  // inputId -> (deltaX, deltaY) in stage meters
     samplerPlaying: Map<Int, Boolean> = emptyMap()  // inputId -> true while a sampler cell is playing on that input
 ) {
@@ -551,7 +552,18 @@ fun InputMapTab(
     }
 
     fun endClusterTranslation(clusterId: Int) {
-        if (!activeClusterTranslations.containsKey(clusterId)) return
+        val translation = activeClusterTranslations[clusterId] ?: return
+        // Self-commit every member's gesture-end position into inputParametersState
+        // before the deferred sync below can run. Without this, a member whose
+        // authoritative echo was lost in transit would be snapped back to its
+        // pre-gesture value by the blind t+400ms sync; JUCE's release echo then
+        // confirms (or corrects) these values asynchronously.
+        val settled = translation.memberSnapshot.keys.mapNotNull { memberId ->
+            markerStagePositions[memberId]?.let { Triple(memberId, it.first, it.second) }
+        }
+        if (settled.isNotEmpty()) {
+            onClusterMembersSettled?.invoke(clusterId, settled)
+        }
         // Clear OscService suppression immediately so the authoritative bundle from
         // JUCE can update inputParametersState. But keep the local snapshot entry
         // alive briefly so the LaunchedEffect that syncs markerStagePositions from
@@ -1628,13 +1640,16 @@ fun InputMapTab(
                                     }
                                     vectorControlsUpdateTrigger++ // Trigger recomposition
                                     
-                                    // OSC for released marker (use its final position from currentMarkersState)
-                                    val finalMarkerState = currentMarkersState.find { it.id == releasedMarkerId }
-                                    if (finalMarkerState != null && !finalMarkerState.isLocked && initialLayoutDone) {
-                                        // Convert canvas position to stage meters
-                                        val (stageX, stageY) = canvasToStagePosition(
-                                            canvasX = finalMarkerState.position.x,
-                                            canvasY = finalMarkerState.position.y,
+                                    // OSC for released marker. Prefer the gesture-written stage
+                                    // position (updated at touch rate by the drag handler /
+                                    // applyClusterRigidTransform) over currentMarkersState: the
+                                    // markers list is updated asynchronously and can lag the
+                                    // final frames of the drag.
+                                    if (releasedMarker != null && !releasedMarker.isLocked && initialLayoutDone) {
+                                        val stagePos = markerStagePositions[releasedMarkerId]
+                                        val (stageX, stageY) = stagePos ?: canvasToStagePosition(
+                                            canvasX = releasedMarker.position.x,
+                                            canvasY = releasedMarker.position.y,
                                             stageWidth = stageWidth,
                                             stageDepth = stageDepth,
                                             stageOriginX = stageOriginX,
@@ -1647,7 +1662,7 @@ fun InputMapTab(
                                             actualViewWidth = actualViewWidth,
                                             actualViewHeight = actualViewHeight
                                         )
-                                        onPositionChanged?.invoke(finalMarkerState.id, stageX, stageY)
+                                        onPositionChanged?.invoke(releasedMarkerId, stageX, stageY)
                                     }
                                 } else if (vectorControls.containsKey(pointerValue)) {
                                     // Send gesture-end for cluster vector controls

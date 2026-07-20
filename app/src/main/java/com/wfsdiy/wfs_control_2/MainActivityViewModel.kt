@@ -186,6 +186,10 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
         oscService.sendInputPositionXY(inputId, posX, posY)
     }
 
+    fun commitLocalInputPositionXY(inputId: Int, posX: Float, posY: Float) {
+        oscService.commitLocalInputPositionXY(inputId, posX, posY)
+    }
+
     /**
      * Mark a cluster as actively gestured locally on the tablet. Inbound
      * /remoteInput/positionXY for cluster members is dropped while suppressed
