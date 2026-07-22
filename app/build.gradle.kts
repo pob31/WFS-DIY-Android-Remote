@@ -5,7 +5,7 @@ plugins {
 }
 
 base {
-    archivesName.set("wfs-control-1.0-beta_8")
+    archivesName.set("wfs-control-1.0-beta_9")
 }
 
 android {
@@ -16,8 +16,8 @@ android {
         applicationId = "com.wfsdiy.wfs_control_2"
         minSdk = 24
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.0-beta_8"
+        versionCode = 9
+        versionName = "1.0-beta_9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

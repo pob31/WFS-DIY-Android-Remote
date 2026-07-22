@@ -23,7 +23,9 @@ import kotlin.times
 // ",ii" seq+version) and /remote/pong (tablet → server) so both sides can flag a
 // mismatch instead of silently dropping unknown messages.
 // v2: versioned ping/pong, /remote/dumpBegin marker, dumpSeq on /remote/stateComplete.
-const val REMOTE_PROTOCOL_VERSION = 2
+// v3: /remote/vis/* visualisation mirroring (config, outputArrays, selection,
+//     delays/levels rows) and tablet-side /remote/vis/pin.
+const val REMOTE_PROTOCOL_VERSION = 3
 
 fun getPaddedBytes(input: String, charsets: java.nio.charset.Charset = Charsets.UTF_8): ByteArray {
     val stringBytes = input.toByteArray(charsets)
@@ -716,6 +718,38 @@ fun sendOscInputParameterInt(context: Context, oscPath: String, inputId: Int, va
     }
 }
 
+/**
+ * Pin (channel >= 1) or unpin (channel == 0) the visualisation channel on the server
+ * (/remote/vis/pin, protocol v3). View-only: the server replies with that channel's
+ * delay/level rows without changing its selected channel. User-paced, so no throttle.
+ */
+fun sendOscVisPin(context: Context, channel: Int) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull()
+            if (outgoingPort == null || !isValidPort(outgoingPortStr)) {
+                return@launch
+            }
+            if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) {
+                return@launch
+            }
+
+            val oscPacketBytes = getPaddedBytes("/remote/vis/pin") +
+                    getPaddedBytes(",i") +
+                    channel.toBytesBigEndian()
+
+            DatagramSocket().use { socket ->
+                val inetAddress = InetAddress.getByName(ipAddressStr)
+                val packet = DatagramPacket(oscPacketBytes, oscPacketBytes.size, inetAddress, outgoingPort)
+                socket.send(packet)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
+
 fun sendOscInputParameterFloat(context: Context, oscPath: String, inputId: Int, value: Float) {
     val throttleKey = OscThrottleManager.inputParameterKey(oscPath, inputId)
 
@@ -1060,6 +1094,10 @@ typealias OscClusterPresetNameCallback = (presetNumber: Int, name: String) -> Un
 typealias OscClusterPresetPopulatedCallback = (presetNumber: Int, populated: Int) -> Unit
 typealias OscClusterPresetAxesCallback = (presetNumber: Int, axesBitmask: Int) -> Unit
 typealias OscClusterPresetCountCallback = (count: Int) -> Unit
+typealias OscVisConfigCallback = (numOutputs: Int, numReverbs: Int) -> Unit
+typealias OscVisOutputArraysCallback = (arrays: IntArray) -> Unit
+typealias OscVisSelectionCallback = (primary: Int, clusterId: Int, selection: List<Int>) -> Unit
+typealias OscVisRowCallback = (channel: Int, numOutputs: Int, numReverbs: Int, values: FloatArray) -> Unit
 
 fun parseAndProcessOscPacket(
     context: Context,
@@ -1098,7 +1136,12 @@ fun parseAndProcessOscPacket(
     onClusterPresetCountReceived: OscClusterPresetCountCallback? = null,
     onClusterPresetAxesReceived: OscClusterPresetAxesCallback? = null,
     onRemoteStateCompleteReceived: OscRemoteStateCompleteCallback? = null,
-    onRemoteDumpBeginReceived: OscRemoteDumpBeginCallback? = null
+    onRemoteDumpBeginReceived: OscRemoteDumpBeginCallback? = null,
+    onVisConfigReceived: OscVisConfigCallback? = null,
+    onVisOutputArraysReceived: OscVisOutputArraysCallback? = null,
+    onVisSelectionReceived: OscVisSelectionCallback? = null,
+    onVisDelaysReceived: OscVisRowCallback? = null,
+    onVisLevelsReceived: OscVisRowCallback? = null
 ) {
     if (data.isEmpty()) {
         return
@@ -1141,7 +1184,9 @@ fun parseAndProcessOscPacket(
                     onClusterPresetPopulatedReceived, onClusterPresetCountReceived,
                     onClusterPresetAxesReceived,
                     onRemoteStateCompleteReceived,
-                    onRemoteDumpBeginReceived
+                    onRemoteDumpBeginReceived,
+                    onVisConfigReceived, onVisOutputArraysReceived,
+                    onVisSelectionReceived, onVisDelaysReceived, onVisLevelsReceived
                 )
             }
         } catch (e: Exception) {
@@ -1485,6 +1530,70 @@ fun parseAndProcessOscPacket(
                     if (typeTags == ",ii" && buffer.remaining() >= 4) parseOscInt(buffer) else -1
                 onRemoteStateCompleteReceived?.invoke(expectedCount, dumpSeq)
             }
+            // Visualisation mirroring (protocol v3): channel counts, per-output array
+            // assignments, desktop selection, and per-channel delay/level rows.
+            address == "/remote/vis/config" -> {
+                if (!buffer.hasRemaining() || parseOscString(buffer) != ",ii") return
+                if (buffer.remaining() < 8) return
+                val numOutputs = parseOscInt(buffer)
+                val numReverbs = parseOscInt(buffer)
+                if (numOutputs in 0..64 && numReverbs in 0..16) {
+                    onVisConfigReceived?.invoke(numOutputs, numReverbs)
+                }
+            }
+            address == "/remote/vis/outputArrays" -> {
+                // ",i" + numOutputs ints: count, then per-output array id (0 = Single)
+                if (!buffer.hasRemaining()) return
+                val typeTags = parseOscString(buffer)
+                if (typeTags.length < 2 || typeTags[0] != ',' ||
+                    typeTags.drop(1).any { it != 'i' }) return
+                if (buffer.remaining() < 4) return
+                val numOutputs = parseOscInt(buffer)
+                if (numOutputs !in 0..64) return
+                if (typeTags.length != 2 + numOutputs) return
+                if (buffer.remaining() < numOutputs * 4) return
+                val arrays = IntArray(numOutputs) { parseOscInt(buffer) }
+                onVisOutputArraysReceived?.invoke(arrays)
+            }
+            address == "/remote/vis/selection" -> {
+                // ",iii" + N ints: primary channel, cluster id (0 = none), N, then N channel ids
+                if (!buffer.hasRemaining()) return
+                val typeTags = parseOscString(buffer)
+                if (typeTags.length < 4 || typeTags[0] != ',' ||
+                    typeTags.drop(1).any { it != 'i' }) return
+                if (buffer.remaining() < 12) return
+                val primary = parseOscInt(buffer)
+                val clusterId = parseOscInt(buffer)
+                val count = parseOscInt(buffer)
+                if (primary !in 1..MAX_INPUTS || clusterId !in 0..10) return
+                if (count !in 0..MAX_INPUTS || typeTags.length != 4 + count) return
+                if (buffer.remaining() < count * 4) return
+                val selection = List(count) { parseOscInt(buffer) }
+                onVisSelectionReceived?.invoke(primary, clusterId, selection)
+            }
+            address == "/remote/vis/delays" || address == "/remote/vis/levels" -> {
+                // ",iii" + (numOutputs + numReverbs) floats: channel, counts, then values
+                // (delays in ms; levels display-ready dB clamped [-60, 0])
+                if (!buffer.hasRemaining()) return
+                val typeTags = parseOscString(buffer)
+                if (typeTags.length < 4 || typeTags[0] != ',' ||
+                    typeTags.substring(1, minOf(4, typeTags.length)) != "iii" ||
+                    typeTags.drop(4).any { it != 'f' }) return
+                if (buffer.remaining() < 12) return
+                val channel = parseOscInt(buffer)
+                val numOutputs = parseOscInt(buffer)
+                val numReverbs = parseOscInt(buffer)
+                if (channel !in 1..MAX_INPUTS || numOutputs !in 0..64 || numReverbs !in 0..16) return
+                val valueCount = numOutputs + numReverbs
+                if (typeTags.length != 4 + valueCount) return
+                if (buffer.remaining() < valueCount * 4) return
+                val values = FloatArray(valueCount) { parseOscFloat(buffer) }
+                if (address == "/remote/vis/delays") {
+                    onVisDelaysReceived?.invoke(channel, numOutputs, numReverbs, values)
+                } else {
+                    onVisLevelsReceived?.invoke(channel, numOutputs, numReverbs, values)
+                }
+            }
             // XY Pad (virtual Lightpad) messages from JUCE
             address == "/remote/pad/enabled" -> {
                 if (!buffer.hasRemaining() || parseOscString(buffer) != ",i") return
@@ -1592,7 +1701,12 @@ suspend fun startOscServer(
     onClusterPresetCountReceived: OscClusterPresetCountCallback? = null,
     onClusterPresetAxesReceived: OscClusterPresetAxesCallback? = null,
     onRemoteStateCompleteReceived: OscRemoteStateCompleteCallback? = null,
-    onRemoteDumpBeginReceived: OscRemoteDumpBeginCallback? = null
+    onRemoteDumpBeginReceived: OscRemoteDumpBeginCallback? = null,
+    onVisConfigReceived: OscVisConfigCallback? = null,
+    onVisOutputArraysReceived: OscVisOutputArraysCallback? = null,
+    onVisSelectionReceived: OscVisSelectionCallback? = null,
+    onVisDelaysReceived: OscVisRowCallback? = null,
+    onVisLevelsReceived: OscVisRowCallback? = null
 ) {
     var serverSocket: DatagramSocket? = null
     try {
@@ -1684,7 +1798,12 @@ suspend fun startOscServer(
                         onClusterPresetCountReceived,
                         onClusterPresetAxesReceived,
                         onRemoteStateCompleteReceived,
-                        onRemoteDumpBeginReceived
+                        onRemoteDumpBeginReceived,
+                        onVisConfigReceived,
+                        onVisOutputArraysReceived,
+                        onVisSelectionReceived,
+                        onVisDelaysReceived,
+                        onVisLevelsReceived
                     )
                 } catch (e: Exception) {
                     // Ignore malformed packets

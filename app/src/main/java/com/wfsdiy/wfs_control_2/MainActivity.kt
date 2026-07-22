@@ -442,7 +442,7 @@ fun WFSControlApp() {
                     if (selectedTab >= xyPadPosition) selectedTab += 1
                 }
                 // Defensive clamp in case anything else gets out of sync.
-                val maxIndex = if (enabled) 7 else 6
+                val maxIndex = if (enabled) 8 else 7
                 selectedTab = selectedTab.coerceIn(0, maxIndex)
             }
         }
@@ -481,6 +481,7 @@ fun WFSControlApp() {
         if (padEnabled) add(loc("remote.tabs.xyPad"))
         add(loc("remote.tabs.clusters"))
         add(loc("remote.tabs.arrayAdjust"))
+        add(loc("remote.tabs.visualisation"))
         add(loc("remote.tabs.settings"))
     }
 
@@ -488,7 +489,8 @@ fun WFSControlApp() {
     val xyPadTabIndex = if (padEnabled) 4 else -1
     val clustersTabIndex = if (padEnabled) 5 else 4
     val arrayAdjustTabIndex = if (padEnabled) 6 else 5
-    val settingsTabIndex = if (padEnabled) 7 else 6
+    val visTabIndex = if (padEnabled) 7 else 6
+    val settingsTabIndex = if (padEnabled) 8 else 7
 
     val dynamicTabFontSize: TextUnit = remember(screenWidthDp) {
         val baseSize = screenWidthDp.value / 66f  // Changed from /60f to /66f for 10% smaller
@@ -1007,6 +1009,17 @@ fun WFSControlApp() {
                     )
                 }
                 arrayAdjustTabIndex -> ArrayAdjustTab()
+                visTabIndex -> {
+                    viewModel?.let { vm ->
+                        VisualisationTab(
+                            viewModel = vm,
+                            numberOfInputs = numberOfInputs,
+                            inputParametersState = inputParametersState ?: InputParametersState(),
+                            serverProtocolVersion = serverProtocolVersion,
+                            connected = connectionState == OscService.RemoteConnectionState.CONNECTED
+                        )
+                    } ?: Text(loc("common.loading"), color = Color.White)
+                }
                 settingsTabIndex -> SettingsTab(
                     onResetToDefaults = resetToDefaults,
                     onShutdownApp = {

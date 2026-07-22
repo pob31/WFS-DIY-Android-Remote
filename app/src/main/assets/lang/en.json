@@ -29,7 +29,20 @@
       "xyPad": "XY Pad",
       "clusters": "Clusters",
       "arrayAdjust": "Array Adjust",
+      "visualisation": "Visualisation",
       "settings": "Settings"
+    },
+
+    "vis": {
+      "follow": "Following: Input",
+      "pinned": "Pinned: Input",
+      "unpin": "Unpin",
+      "delays": "Delays (ms)",
+      "levels": "Levels (dB)",
+      "metricDelays": "Delays",
+      "metricLevels": "Levels",
+      "noData": "Waiting for data…",
+      "requiresServerUpdate": "This tab needs a newer WFS-DIY on the computer (protocol v3)"
     },
 
     "settings": {

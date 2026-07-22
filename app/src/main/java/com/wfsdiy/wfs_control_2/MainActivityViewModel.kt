@@ -240,6 +240,17 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
     val samplerPlaying: StateFlow<Map<Int, Boolean>> = oscService.samplerPlaying
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
+    // Visualisation mirroring (protocol v3)
+    val visState: StateFlow<VisualisationState> = oscService.visState
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), VisualisationState())
+
+    val visPinnedChannel: StateFlow<Int> = oscService.visPinnedChannel
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    fun setVisPin(channel: Int) {
+        oscService.setVisPin(channel)
+    }
+
     // Factory for creating the ViewModel with the OscService dependency
     class Factory(private val oscService: OscService) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {

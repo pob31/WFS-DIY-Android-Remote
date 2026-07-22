@@ -30,6 +30,34 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 
+/**
+ * One channel's visualisation rows (protocol v3, /remote/vis/delays + /remote/vis/levels).
+ * Values are output channels first, then reverb feeds. Delays in ms; levels in
+ * display-ready dB (clamped [-60, 0] server-side). The revision counter makes every
+ * update distinct so Compose recomposes even when values are numerically identical.
+ */
+data class VisRow(
+    val delaysMs: FloatArray,
+    val levelsDb: FloatArray,
+    val numOutputs: Int,
+    val numReverbs: Int,
+    val revision: Long
+)
+
+/**
+ * Mirrored desktop visualisation state: channel counts, per-output array assignments,
+ * the desktop's current selection, and the delay/level rows received so far.
+ */
+data class VisualisationState(
+    val primaryChannel: Int = 1,
+    val clusterId: Int = 0,
+    val selectionSet: List<Int> = emptyList(),
+    val numOutputs: Int = 0,
+    val numReverbs: Int = 0,
+    val outputArrays: IntArray = IntArray(0),
+    val rows: Map<Int, VisRow> = emptyMap()
+)
+
 class OscService : Service() {
 
     private val binder = OscBinder()
@@ -243,6 +271,20 @@ class OscService : Service() {
     private val _clusterPresetAxes = MutableStateFlow(IntArray(16) { 0 })
     val clusterPresetAxes: StateFlow<IntArray> = _clusterPresetAxes.asStateFlow()
 
+    // Visualisation mirroring (protocol v3). Rows arrive throttled to <=10 Hz
+    // server-side, so direct StateFlow copy-replace is fine — no queue buffering
+    // needed (unlike the high-rate position streams above).
+    private val _visState = MutableStateFlow(VisualisationState())
+    val visState: StateFlow<VisualisationState> = _visState.asStateFlow()
+
+    // Channel pinned on the visualisation tab (0 = follow the desktop selection).
+    // Service-scoped so the pin survives tab switches; re-sent to the server on
+    // reconnect (the server clears per-target pins on connect).
+    private val _visPinnedChannel = MutableStateFlow(0)
+    val visPinnedChannel: StateFlow<Int> = _visPinnedChannel.asStateFlow()
+
+    private var visRowRevision = 0L
+
     // Store screen dimensions once at startup
     private var screenWidth: Float = 0f
     private var screenHeight: Float = 0f
@@ -342,6 +384,10 @@ class OscService : Service() {
                         // The /inputs message is part of the dump; remember the count so we
                         // can verify completeness even if the stateComplete marker is lost.
                         if (newCount > 0) expectedChannelCount = newCount
+                        // A pin beyond the new channel count can never receive rows again
+                        if (newCount in 1 until _visPinnedChannel.value) {
+                            setVisPin(0)
+                        }
                     },
                     onInputParameterIntReceived = { oscPath, inputId, value ->
                         inputParameterUpdates.offer(OscInputParameterUpdate(oscPath, inputId, intValue = value))
@@ -394,6 +440,10 @@ class OscService : Service() {
                         if (!wasConnected) {
                             resetSyncTracking()
                             scheduleResyncFallback()
+                            // The server clears per-target vis pins on connect; restore ours
+                            if (_visPinnedChannel.value > 0) {
+                                sendOscVisPin(this@OscService, _visPinnedChannel.value)
+                            }
                         }
                     },
                     onRemoteHeartbeatReceived = { sequenceNumber ->
@@ -524,6 +574,35 @@ class OscService : Service() {
                             u[i] = axesBitmask
                             _clusterPresetAxes.value = u
                         }
+                    },
+                    onVisConfigReceived = { numOutputs, numReverbs ->
+                        val current = _visState.value
+                        // Channel-count change invalidates all cached rows
+                        val rows = if (numOutputs != current.numOutputs || numReverbs != current.numReverbs)
+                            emptyMap() else current.rows
+                        _visState.value = current.copy(
+                            numOutputs = numOutputs, numReverbs = numReverbs, rows = rows)
+                    },
+                    onVisOutputArraysReceived = { arrays ->
+                        _visState.value = _visState.value.copy(outputArrays = arrays)
+                    },
+                    onVisSelectionReceived = { primary, clusterId, selection ->
+                        val current = _visState.value
+                        // Evict rows no longer displayed (selection ∪ primary ∪ pin)
+                        val keep = selection.toMutableSet()
+                        keep.add(primary)
+                        if (_visPinnedChannel.value > 0) keep.add(_visPinnedChannel.value)
+                        _visState.value = current.copy(
+                            primaryChannel = primary,
+                            clusterId = clusterId,
+                            selectionSet = selection,
+                            rows = current.rows.filterKeys { it in keep })
+                    },
+                    onVisDelaysReceived = { channel, numOutputs, numReverbs, values ->
+                        updateVisRow(channel, numOutputs, numReverbs, delays = values)
+                    },
+                    onVisLevelsReceived = { channel, numOutputs, numReverbs, values ->
+                        updateVisRow(channel, numOutputs, numReverbs, levels = values)
                     }
                 )
             } catch (e: Exception) {
@@ -534,6 +613,43 @@ class OscService : Service() {
         }
 
         // No staleness cleanup needed - JUCE explicitly sends (0,0) delta when transformations are disabled
+    }
+
+    /**
+     * Merge one /remote/vis/delays or /remote/vis/levels message into the row map.
+     * Rows whose counts mismatch the current config are dropped (they raced a
+     * config change and a fresh pair follows).
+     */
+    private fun updateVisRow(channel: Int, numOutputs: Int, numReverbs: Int,
+                             delays: FloatArray? = null, levels: FloatArray? = null) {
+        val current = _visState.value
+        if (current.numOutputs != 0 &&
+            (numOutputs != current.numOutputs || numReverbs != current.numReverbs)) {
+            return
+        }
+        val existing = current.rows[channel]
+        val compatible = existing != null &&
+                existing.numOutputs == numOutputs && existing.numReverbs == numReverbs
+        val row = VisRow(
+            delaysMs = delays ?: (if (compatible) existing!!.delaysMs else FloatArray(numOutputs + numReverbs)),
+            levelsDb = levels ?: (if (compatible) existing!!.levelsDb else FloatArray(numOutputs + numReverbs) { -60f }),
+            numOutputs = numOutputs,
+            numReverbs = numReverbs,
+            revision = ++visRowRevision
+        )
+        _visState.value = current.copy(rows = current.rows + (channel to row))
+    }
+
+    /**
+     * Pin (channel >= 1) or unpin (0) the visualisation channel. Updates local state
+     * and notifies the server, which replies with that channel's rows. View-only:
+     * never changes the desktop's selected channel.
+     */
+    fun setVisPin(channel: Int) {
+        _visPinnedChannel.value = channel
+        serviceScope.launch {
+            sendOscVisPin(this@OscService, channel)
+        }
     }
 
     fun sendMarkerPosition(markerId: Int, x: Float, y: Float, isCluster: Boolean) {

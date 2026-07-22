@@ -29,7 +29,20 @@
       "xyPad": "Pads XY",
       "clusters": "Clusters",
       "arrayAdjust": "Réglage des groupes",
+      "visualisation": "Visualisation",
       "settings": "Paramètres"
+    },
+
+    "vis": {
+      "follow": "Suit : Entrée",
+      "pinned": "Épinglée : Entrée",
+      "unpin": "Détacher",
+      "delays": "Délais (ms)",
+      "levels": "Niveaux (dB)",
+      "metricDelays": "Délais",
+      "metricLevels": "Niveaux",
+      "noData": "En attente de données…",
+      "requiresServerUpdate": "Cet onglet nécessite un WFS-DIY plus récent sur l'ordinateur (protocole v3)"
     },
 
     "settings": {
