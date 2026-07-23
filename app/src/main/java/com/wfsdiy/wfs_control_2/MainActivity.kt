@@ -479,17 +479,17 @@ fun WFSControlApp() {
         add(loc("remote.tabs.viewInputMarkers"))
         add(loc("remote.tabs.inputParameters"))
         if (padEnabled) add(loc("remote.tabs.xyPad"))
+        add(loc("remote.tabs.visualisation"))
         add(loc("remote.tabs.clusters"))
         add(loc("remote.tabs.arrayAdjust"))
-        add(loc("remote.tabs.visualisation"))
         add(loc("remote.tabs.settings"))
     }
 
     // Dynamic tab index mapping
     val xyPadTabIndex = if (padEnabled) 4 else -1
-    val clustersTabIndex = if (padEnabled) 5 else 4
-    val arrayAdjustTabIndex = if (padEnabled) 6 else 5
-    val visTabIndex = if (padEnabled) 7 else 6
+    val visTabIndex = if (padEnabled) 5 else 4
+    val clustersTabIndex = if (padEnabled) 6 else 5
+    val arrayAdjustTabIndex = if (padEnabled) 7 else 6
     val settingsTabIndex = if (padEnabled) 8 else 7
 
     val dynamicTabFontSize: TextUnit = remember(screenWidthDp) {
