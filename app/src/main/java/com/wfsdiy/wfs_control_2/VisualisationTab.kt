@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -47,12 +46,15 @@ fun VisualisationTab(
     numberOfInputs: Int,
     inputParametersState: InputParametersState,
     serverProtocolVersion: Int,
-    connected: Boolean
+    connected: Boolean,
+    // Hoisted to WFSControlApp so the multi-mode metric choice survives tab
+    // switches (this composable is disposed whenever another tab is shown)
+    showDelaysInMulti: Boolean,
+    onShowDelaysInMultiChange: (Boolean) -> Unit
 ) {
     val visState by viewModel.visState.collectAsState()
     val pinnedChannel by viewModel.visPinnedChannel.collectAsState()
     var showChannelPicker by remember { mutableStateOf(false) }
-    var showDelaysInMulti by rememberSaveable { mutableStateOf(true) }
 
     // Server too old for /remote/vis/* — show a hint instead of empty bars
     if (serverProtocolVersion in 1..2) {
@@ -125,9 +127,9 @@ fun VisualisationTab(
 
                 if (multiMode) {
                     MetricToggleButton(loc("remote.vis.metricDelays"), showDelaysInMulti,
-                        VIS_DELAY_COLOR, headerFontSize) { showDelaysInMulti = true }
+                        VIS_DELAY_COLOR, headerFontSize) { onShowDelaysInMultiChange(true) }
                     MetricToggleButton(loc("remote.vis.metricLevels"), !showDelaysInMulti,
-                        VIS_LEVEL_COLOR, headerFontSize) { showDelaysInMulti = false }
+                        VIS_LEVEL_COLOR, headerFontSize) { onShowDelaysInMultiChange(false) }
                 }
 
                 if (!connected) {

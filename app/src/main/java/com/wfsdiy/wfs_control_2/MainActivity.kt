@@ -420,6 +420,12 @@ fun WFSControlApp() {
     var mapTabVisitCount by remember { mutableIntStateOf(0) }  // Increments each time Map tab is selected
     var inputParamsTabVisitCount by remember { mutableIntStateOf(0) }  // Increments each time Input Parameters tab is selected
 
+    // Visualisation tab: multi-selection metric choice (true = delays, false =
+    // levels). Hoisted here so it survives tab switches (the tab composable is
+    // disposed when another tab is shown); rememberSaveable also carries it
+    // across configuration changes.
+    var visShowDelaysInMulti by rememberSaveable { mutableStateOf(true) }
+
     // XY Pad visibility: controlled by JUCE (sampler active + no hardware Lightpads).
     // The tab list grows/shrinks at position 4 (xyPadTabIndex) when this toggles, so
     // selectedTab must be remapped to (a) avoid pointing at a now-missing index — the
@@ -1016,7 +1022,9 @@ fun WFSControlApp() {
                             numberOfInputs = numberOfInputs,
                             inputParametersState = inputParametersState ?: InputParametersState(),
                             serverProtocolVersion = serverProtocolVersion,
-                            connected = connectionState == OscService.RemoteConnectionState.CONNECTED
+                            connected = connectionState == OscService.RemoteConnectionState.CONNECTED,
+                            showDelaysInMulti = visShowDelaysInMulti,
+                            onShowDelaysInMultiChange = { visShowDelaysInMulti = it }
                         )
                     } ?: Text(loc("common.loading"), color = Color.White)
                 }
