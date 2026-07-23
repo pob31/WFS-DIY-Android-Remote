@@ -67,7 +67,7 @@ fun VisualisationTab(
 
     val displayedChannels = when {
         pinnedChannel > 0 -> listOf(pinnedChannel)
-        visState.selectionSet.size > 1 -> visState.selectionSet
+        visState.selectionSet.isNotEmpty() -> visState.selectionSet
         else -> listOf(visState.primaryChannel)
     }
     val multiMode = displayedChannels.size > 1
@@ -83,7 +83,11 @@ fun VisualisationTab(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val headerChannel = if (pinnedChannel > 0) pinnedChannel else visState.primaryChannel
+                val headerChannel = when {
+                    pinnedChannel > 0 -> pinnedChannel
+                    !multiMode -> displayedChannels.first()
+                    else -> visState.primaryChannel
+                }
                 val headerName = inputParametersState.getChannel(headerChannel)
                     .getParameter("inputName").stringValue
                 val headerLabel = if (pinnedChannel > 0)
