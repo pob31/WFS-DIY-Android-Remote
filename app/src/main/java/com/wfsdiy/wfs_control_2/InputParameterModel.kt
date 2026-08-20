@@ -70,30 +70,91 @@ data class InputChannelState(
     val inputId: Int,
     val parameters: MutableMap<String, InputParameterValue> = mutableMapOf()
 ) {
+    /**
+     * Never inserts. Reads come from Compose draw/measure passes while the OSC
+     * receive thread copies this same map, so a getOrPut here would both grow the
+     * cache with empty placeholders and race that copy into a
+     * ConcurrentModificationException.
+     */
     fun getParameter(variableName: String): InputParameterValue {
-        return parameters.getOrPut(variableName) { InputParameterValue() }
+        return parameters[variableName] ?: InputParameterValue()
     }
-    
+
     fun setParameter(variableName: String, value: InputParameterValue) {
         parameters[variableName] = value
     }
 }
 
 /**
- * Complete state for all 64 input channels
+ * Receive cache of parameter values, keyed by permanent channel number.
+ *
+ * NOT an inventory: entries survive a channel being deleted on the desktop, and a
+ * channel that exists but has not sent anything yet has no entry at all. Which
+ * channels exist, in what order, and which are stereo comes from [ChannelInventory]
+ * only — never from enumerating [channels].
  */
 data class InputParametersState(
     val channels: MutableMap<Int, InputChannelState> = mutableMapOf(),
-    val selectedInputId: Int = 1,  // Currently selected input channel (1-64)
+    val selectedInputId: Int = 1,  // Permanent number of the selected channel (1-64)
     val revision: Long = 0  // Incremented on each update to force Compose change detection
 ) {
+    /**
+     * Read accessor: returns a throw-away empty channel when nothing has been
+     * received for that number, and does NOT insert it. Inserting here fabricated a
+     * channel for every number any caller happened to ask about, which made the
+     * cache look like an inventory and hid deletes.
+     */
     fun getChannel(inputId: Int): InputChannelState {
-        return channels.getOrPut(inputId) { InputChannelState(inputId) }
+        return channels[inputId] ?: InputChannelState(inputId)
     }
-    
+
+    /** True only once data has actually arrived for this channel number. */
+    fun hasChannel(inputId: Int): Boolean = channels.containsKey(inputId)
+
     fun getSelectedChannel(): InputChannelState {
         return getChannel(selectedInputId)
     }
+}
+
+/**
+ * One live input channel: its permanent number (1-64, never reused for another
+ * channel while it exists) and whether it is a stereo pair.
+ */
+data class ChannelInfo(val number: Int, val isStereo: Boolean)
+
+/**
+ * The set of input channels that exist on the desktop, in the desktop's display
+ * order — the array index IS the display position.
+ *
+ * This, not [InputParametersState.channels], is the answer to "which channels
+ * exist": the parameter map is a receive cache that may still hold entries for
+ * channels since deleted, so it must never be enumerated as an inventory. Nor is
+ * the channel COUNT an enumeration: numbers are permanent and decoupled from
+ * position, so a delete leaves gaps and a drag-reorder leaves them unsorted —
+ * 1..count both demands numbers that do not exist and hides ones that do.
+ *
+ * Arrives as a full-replacement snapshot on /remote/channelList (protocol v4).
+ * [inferred] marks an inventory reconstructed locally from a v3 desktop's dump
+ * rather than received: the numbers are real but the order is merely ascending and
+ * every channel is reported mono.
+ */
+data class ChannelInventory(
+    val channels: List<ChannelInfo> = emptyList(),
+    val inferred: Boolean = false
+) {
+    // Computed once per instance: contains() runs inside draw loops. Body vals, so
+    // they stay out of the generated equals() — remember(inventory) and
+    // LaunchedEffect(inventory) still key on the two constructor params alone.
+    private val byNumber: Map<Int, ChannelInfo> = channels.associateBy { it.number }
+
+    /** Permanent channel numbers in display order. */
+    val numbers: List<Int> = channels.map { it.number }
+
+    val size: Int get() = channels.size
+    val isEmpty: Boolean get() = channels.isEmpty()
+
+    fun contains(number: Int): Boolean = byNumber.containsKey(number)
+    fun isStereo(number: Int): Boolean = byNumber[number]?.isStereo == true
 }
 
 /**
@@ -173,6 +234,47 @@ object InputParameterDefinitions {
             enumValues = listOf("Acoustic Precedence", "Minimal Latency"),
             locKey = "inputs.labels.minimalLatency",
             enumLocKeys = listOf("inputs.toggles.acousticPrecedence", "inputs.toggles.minimalLatency")
+        ),
+        InputParameterDefinition(
+            group = "Input",
+            label = "Stereo Width",
+            variableName = "stereoWidth",
+            oscPath = "/remoteInput/stereoWidth",
+            isIncoming = true,
+            isOutgoing = true,
+            uiType = UIComponentType.DIAL,
+            dataType = ParameterType.FLOAT,
+            minValue = 0f,
+            maxValue = 50f,
+            // Squared, like the desktop dial: a linear 0..50 m sweep gives half a
+            // metre per percent of travel and no usable resolution around the 4 m
+            // default. Its own key, because "x*50.0" is shared with the position
+            // parameters and must stay linear for them.
+            formula = "x*x*50.0",
+            unit = "m",
+            // Relevance is a property of the channel, not of another parameter, so it
+            // cannot be expressed as a conditionalEnable: show it only when
+            // ChannelInventory.isStereo(number) is true.
+            note = "Stereo pair leg separation in metres; stereo channels only",
+            locKey = "inputs.labels.stereoWidth"
+        ),
+        InputParameterDefinition(
+            group = "Input",
+            label = "Stereo Axis Offset",
+            variableName = "stereoAxisOffset",
+            oscPath = "/remoteInput/stereoAxisOffset",
+            isIncoming = true,
+            isOutgoing = true,
+            uiType = UIComponentType.DIRECTION_DIAL,
+            dataType = ParameterType.INT,
+            minValue = -179f,
+            maxValue = 180f,
+            formula = "x*359-179",
+            unit = "°",
+            // Same gating as stereoWidth: driven by the inventory, not by a sibling
+            // parameter. 0 = the automatic tangential axis.
+            note = "Rotates the stereo axis; 0 = automatic. Stereo channels only",
+            locKey = "inputs.labels.stereoAxis"
         ),
         InputParameterDefinition(
             group = "Input",
@@ -1193,6 +1295,7 @@ object InputParameterDefinitions {
                         "(x*360)-180" -> (x * 360f) - 180f
                         "(x*180)-90" -> (x * 180f) - 90f
                         "x*50.0" -> x * 50f
+                        "x*x*50.0" -> x * x * 50f
                         "x*19.99+0.01" -> (x * 19.99f) + 0.01f
                         "x*100" -> x * 100f
                         "(x*9.9)+0.1" -> (x * 9.9f) + 0.1f
@@ -1263,6 +1366,7 @@ object InputParameterDefinitions {
                         "(x*360)-180" -> (y + 180f) / 360f
                         "(x*180)-90" -> (y + 90f) / 180f
                         "x*50.0" -> y / 50f
+                        "x*x*50.0" -> kotlin.math.sqrt(y / 50f)
                         "x*19.99+0.01" -> (y - 0.01f) / 19.99f
                         "x*100" -> y / 100f
                         "(x*9.9)+0.1" -> (y - 0.1f) / 9.9f

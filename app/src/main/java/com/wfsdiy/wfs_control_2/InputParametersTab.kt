@@ -57,6 +57,10 @@ private fun getRowColorActive(rowIndex: Int): Color {
 @Composable
 fun InputParametersTab(
     viewModel: MainActivityViewModel,
+    // Channel type comes from the inventory alone: the desktop sends stereoWidth and
+    // stereoAxisOffset for every channel, mono included, so the arrival of a value
+    // says nothing about whether the channel is a stereo pair.
+    inventory: ChannelInventory,
     refreshTrigger: Int = 0  // Incremented each time tab becomes visible to request fresh data
 ) {
     val configuration = LocalConfiguration.current
@@ -198,6 +202,7 @@ fun InputParametersTab(
         RenderInputSection(
             selectedChannel = selectedChannel,
             viewModel = viewModel,
+            inventory = inventory,
             horizontalSliderWidth = horizontalSliderWidth,
             horizontalSliderHeight = horizontalSliderHeight,
             verticalSliderWidth = verticalSliderWidth,
@@ -397,7 +402,7 @@ fun InputParametersTab(
         if (showGridOverlay) {
             InputChannelGridOverlay(
                 selectedInputId = inputParametersState.selectedInputId,
-                maxInputs = numberOfInputs,
+                inventory = inventory,
                 inputParametersState = inputParametersState,
                 onInputSelected = { inputId ->
                     viewModel.setSelectedInput(inputId)
@@ -414,6 +419,7 @@ fun InputParametersTab(
 private fun RenderInputSection(
     selectedChannel: InputChannelState,
     viewModel: MainActivityViewModel,
+    inventory: ChannelInventory,
     horizontalSliderWidth: androidx.compose.ui.unit.Dp,
     horizontalSliderHeight: androidx.compose.ui.unit.Dp,
     verticalSliderWidth: androidx.compose.ui.unit.Dp,
@@ -2181,6 +2187,168 @@ private fun RenderInputSection(
                 enabled = true,
                 sizeMultiplier = 0.7f
             )
+        }
+    }
+
+    // Stereo pair geometry. The desktop sends stereoWidth and stereoAxisOffset for
+    // EVERY channel, mono included, so a received value is not an indication that the
+    // channel is a pair: the inventory is the only source of truth for the type.
+    val isStereoChannel = inventory.isStereo(inputId)
+
+    // Both states below are declared whatever the type is: gating the declarations on
+    // isStereoChannel would tear them down on every mono channel and lose the value the
+    // dump already delivered for the stereo one.
+
+    // Stereo Width (0-50m)
+    val stereoWidth = selectedChannel.getParameter("stereoWidth")
+    var stereoWidthValue by remember { mutableStateOf(stereoWidth.normalizedValue) }
+    var stereoWidthDisplayValue by remember {
+        mutableStateOf(stereoWidth.displayValue.replace("m", "").trim().ifEmpty { "0.00" })
+    }
+
+    LaunchedEffect(inputId, stereoWidth.normalizedValue) {
+        stereoWidthValue = stereoWidth.normalizedValue
+        val definition = InputParameterDefinitions.parametersByVariableName["stereoWidth"]!!
+        val actualValue = InputParameterDefinitions.applyFormula(definition, stereoWidth.normalizedValue)
+        stereoWidthDisplayValue = String.format(Locale.US, "%.2f", actualValue)
+    }
+
+    // Stereo Axis Offset (-179..180°, 0 = automatic), held in degrees as the dial reads them
+    val stereoAxisOffset = selectedChannel.getParameter("stereoAxisOffset")
+    var stereoAxisValue by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(inputId, stereoAxisOffset.normalizedValue) {
+        val definition = InputParameterDefinitions.parametersByVariableName["stereoAxisOffset"]!!
+        stereoAxisValue = InputParameterDefinitions.applyFormula(definition, stereoAxisOffset.normalizedValue)
+    }
+
+    if (isStereoChannel) {
+        Spacer(modifier = Modifier.height(spacing.smallSpacing / 2))
+
+        // Fifth Row with 10% padding: stereo-only dials (Stereo Width | Stereo Axis),
+        // each with its help text alongside where the screen is wide enough for it
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = screenWidthDp * 0.1f, end = screenWidthDp * 0.1f),
+            horizontalArrangement = Arrangement.spacedBy(spacing.smallSpacing),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Cell 1: Stereo Width dial
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(loc("inputs.labels.stereoWidth"), fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
+                BasicDial(
+                    value = stereoWidthValue,
+                    onValueChange = { newValue ->
+                        stereoWidthValue = newValue
+                        val definition = InputParameterDefinitions.parametersByVariableName["stereoWidth"]!!
+                        val actualValue = InputParameterDefinitions.applyFormula(definition, newValue)
+                        stereoWidthDisplayValue = String.format(Locale.US, "%.2f", actualValue)
+                        selectedChannel.setParameter("stereoWidth", InputParameterValue(
+                            normalizedValue = newValue,
+                            stringValue = "",
+                            displayValue = "${String.format(Locale.US, "%.2f", actualValue)}m"
+                        ))
+                        viewModel.sendInputParameterFloat("/remoteInput/stereoWidth", inputId, actualValue)
+                    },
+                    dialColor = Color.DarkGray,
+                    indicatorColor = Color.White,
+                    trackColor = getRowColor(3),
+                    displayedValue = stereoWidthDisplayValue,
+                    valueUnit = "m",
+                    isValueEditable = true,
+                    onDisplayedValueChange = {},
+                    onValueCommit = { committedValue ->
+                        committedValue.toFloatOrNull()?.let { value ->
+                            val coercedValue = value.coerceIn(0f, 50f)
+                            val definition = InputParameterDefinitions.parametersByVariableName["stereoWidth"]!!
+                            val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
+                            stereoWidthValue = normalized
+                            stereoWidthDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
+                            selectedChannel.setParameter("stereoWidth", InputParameterValue(
+                                normalizedValue = normalized,
+                                stringValue = "",
+                                displayValue = "${String.format(Locale.US, "%.2f", coercedValue)}m"
+                            ))
+                            viewModel.sendInputParameterFloat("/remoteInput/stereoWidth", inputId, coercedValue)
+                        }
+                    },
+                    valueTextColor = Color.White,
+                    enabled = true,
+                    sizeMultiplier = 0.7f
+                )
+            }
+
+            // Cell 2: Stereo Width help
+            if (!isPhone) {
+                Text(
+                    loc("inputs.help.stereoWidthDial"),
+                    fontSize = 10.sp,
+                    color = Color.LightGray,
+                    modifier = Modifier.weight(2f)
+                )
+            }
+
+            // Cell 3: Stereo Axis dial
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(loc("inputs.labels.stereoAxis"), fontSize = 12.sp, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
+                AngleDial(
+                    value = stereoAxisValue,
+                    onValueChange = { newValue ->
+                        // The dial and its typed-entry path both wrap into [-180,180), but the
+                        // parameter runs -179..180: -180 names the same axis as +180, so fold
+                        // it up rather than send a value the desktop has to clamp.
+                        val wrapped = ((newValue + 540f) % 360f) - 180f
+                        val degrees = wrapped.roundToInt().let { if (it <= -180) 180 else it }
+                        stereoAxisValue = degrees.toFloat()
+                        val definition = InputParameterDefinitions.parametersByVariableName["stereoAxisOffset"]!!
+                        selectedChannel.setParameter("stereoAxisOffset", InputParameterValue(
+                            normalizedValue = InputParameterDefinitions.reverseFormula(definition, degrees.toFloat()),
+                            stringValue = "",
+                            displayValue = "$degrees°"
+                        ))
+                        viewModel.sendInputParameterInt("/remoteInput/stereoAxisOffset", inputId, degrees)
+                    },
+                    dialColor = Color.DarkGray,
+                    indicatorColor = Color.White,
+                    trackColor = getRowColor(3),
+                    isValueEditable = true,
+                    onDisplayedValueChange = {},
+                    valueTextColor = Color.White,
+                    enabled = true,
+                    sizeMultiplier = 0.7f
+                )
+            }
+
+            // Cell 4: Stereo Axis help
+            if (!isPhone) {
+                Text(
+                    loc("inputs.help.stereoAxisDial"),
+                    fontSize = 10.sp,
+                    color = Color.LightGray,
+                    modifier = Modifier.weight(2f)
+                )
+            }
+        }
+
+        // Phone: the same help below the dials — 0 = automatic is not guessable from the
+        // dial, and a weight(2f) column is unreadable at this width
+        if (isPhone) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = screenWidthDp * 0.05f, end = screenWidthDp * 0.05f, top = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(spacing.smallSpacing / 2)
+            ) {
+                Text(loc("inputs.help.stereoWidthDial"), fontSize = 10.sp, color = Color.LightGray)
+                Text(loc("inputs.help.stereoAxisDial"), fontSize = 10.sp, color = Color.LightGray)
+            }
         }
     }
 }

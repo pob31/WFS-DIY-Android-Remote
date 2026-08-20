@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -19,7 +20,7 @@ import com.wfsdiy.wfs_control_2.localization.loc
 
 @Composable
 fun VisibilityTab(
-    numberOfInputs: Int,
+    inventory: ChannelInventory,
     markers: List<Marker>,
     onMarkersChanged: (List<Marker>) -> Unit
 ) {
@@ -36,8 +37,14 @@ fun VisibilityTab(
         onMarkersChanged(updatedMarkersList)
     }
 
-    val inputMarkers = markers.take(numberOfInputs)
-    val rowsOfInputMarkers = inputMarkers.chunked(itemsPerRow)
+    // markers is the fixed 64-entry backing store, so take(count) was an existence
+    // test that both listed deleted channels and hid ones numbered above the count.
+    // Ordered idiom: the grid must follow the desktop's display order, not the ids.
+    val rowsOfInputMarkers = remember(markers, inventory) {
+        inventory.numbers
+            .mapNotNull { number -> markers.find { it.id == number } }
+            .chunked(itemsPerRow)
+    }
 
     LazyColumn(
         modifier = Modifier

@@ -91,8 +91,18 @@ class OscService : Service() {
     // we request a full re-dump (once per seq, guarded by lastFullResyncRequestedSeq).
     @Volatile private var currentDumpSeq = -1
     @Volatile private var lastFullResyncRequestedSeq = -1
+    // Whether a /remote/channelList arrived in the current dump cycle. A v3 desktop
+    // never sends one, so its absence at stateComplete is the trigger to infer the
+    // inventory from the ids the dump did mention.
+    @Volatile private var inventoryReceivedThisDump = false
+    // Whether the inventory we hold was sent by the desktop we are talking to NOW.
+    // Connection-scoped rather than dump-scoped: without it, a real inventory kept
+    // from a previous session would veto the v3 inference forever after connecting
+    // to an older desktop, which is exactly the case the inference exists for.
+    @Volatile private var inventoryFromCurrentConnection = false
     private var resyncJob: kotlinx.coroutines.Job? = null
     private var resyncFallbackJob: kotlinx.coroutines.Job? = null
+    private var inventoryRefreshJob: kotlinx.coroutines.Job? = null
 
     companion object {
         private const val NOTIFICATION_ID = 1
@@ -103,6 +113,9 @@ class OscService : Service() {
         private const val RESYNC_SETTLE_MS = 400L   // let trailing bundles land before first check
         private const val RESYNC_BACKOFF_MS = 1200L // wait for a resend to arrive before re-checking
         private const val RESYNC_FALLBACK_MS = 1500L // if stateComplete is itself lost, verify anyway
+        // A count change walks one add/remove at a time and emits an /inputs per
+        // step; collapse the storm into a single re-dump request.
+        private const val INVENTORY_REFRESH_DEBOUNCE_MS = 700L
     }
 
     // Service state tracking
@@ -212,6 +225,13 @@ class OscService : Service() {
 
     private val _numberOfInputs = MutableStateFlow(64)
     val numberOfInputs: StateFlow<Int> = _numberOfInputs.asStateFlow()
+
+    // Which channels exist, in display order, and which are stereo (protocol v4).
+    // The source of truth for enumeration — numberOfInputs above is only a
+    // "did I receive everything" signal, never a range to iterate. Empty until the
+    // first dump completes; UI must treat empty as "not known yet", not "none".
+    private val _channelInventory = MutableStateFlow(ChannelInventory())
+    val channelInventory: StateFlow<ChannelInventory> = _channelInventory.asStateFlow()
     
     private val _inputParametersState = MutableStateFlow(InputParametersState())
     val inputParametersState: StateFlow<InputParametersState> = _inputParametersState.asStateFlow()
@@ -383,11 +403,11 @@ class OscService : Service() {
                         _numberOfInputs.value = newCount
                         // The /inputs message is part of the dump; remember the count so we
                         // can verify completeness even if the stateComplete marker is lost.
+                        // It is a completeness signal only — the count says nothing about
+                        // WHICH numbers exist, so the vis-pin check moved to
+                        // applyChannelInventory().
                         if (newCount > 0) expectedChannelCount = newCount
-                        // A pin beyond the new channel count can never receive rows again
-                        if (newCount in 1 until _visPinnedChannel.value) {
-                            setVisPin(0)
-                        }
+                        scheduleInferredInventoryRefresh()
                     },
                     onInputParameterIntReceived = { oscPath, inputId, value ->
                         inputParameterUpdates.offer(OscInputParameterUpdate(oscPath, inputId, intValue = value))
@@ -439,6 +459,10 @@ class OscService : Service() {
                         // server also announces every dump with /remote/dumpBegin.)
                         if (!wasConnected) {
                             resetSyncTracking()
+                            // The peer may be a different (or downgraded) desktop, so
+                            // whatever inventory we still hold is no longer proof that
+                            // this one can send us a fresh one.
+                            inventoryFromCurrentConnection = false
                             scheduleResyncFallback()
                             // The server clears per-target vis pins on connect; restore ours
                             if (_visPinnedChannel.value > 0) {
@@ -496,6 +520,9 @@ class OscService : Service() {
                         } else {
                             if (expectedCount > 0) expectedChannelCount = expectedCount
                             stateCompleteSeen = true
+                            // Before the verifier, so it can already work off the
+                            // inventory rather than off 1..count.
+                            inferInventoryIfMissing()
                             launchResyncVerifier()
                         }
                     },
@@ -603,6 +630,14 @@ class OscService : Service() {
                     },
                     onVisLevelsReceived = { channel, numOutputs, numReverbs, values ->
                         updateVisRow(channel, numOutputs, numReverbs, levels = values)
+                    },
+                    onChannelListReceived = { channels ->
+                        // Already validated in the parser (arity, ranges, uniqueness):
+                        // reaching here means the snapshot is whole, so replacing
+                        // outright is correct — including a snapshot with no channels.
+                        inventoryReceivedThisDump = true
+                        inventoryFromCurrentConnection = true
+                        applyChannelInventory(ChannelInventory(channels, inferred = false))
                     }
                 )
             } catch (e: Exception) {
@@ -985,10 +1020,103 @@ class OscService : Service() {
     private fun resetSyncTracking() {
         resyncJob?.cancel()
         resyncFallbackJob?.cancel()
+        // The dump starting now supersedes any re-dump we were about to ask for.
+        inventoryRefreshJob?.cancel()
         receivedNames.clear()
         receivedPositions.clear()
         expectedChannelCount = 0
         stateCompleteSeen = false
+        // Per dump cycle: an inventory from the PREVIOUS dump must not suppress the
+        // v3 inference in this one. The stored inventory itself is kept — a stale
+        // one is still better than none while the new dump streams in.
+        inventoryReceivedThisDump = false
+    }
+
+    /**
+     * Install a channel inventory that the server described, or that we inferred from
+     * a dump. Both are knowledge about which channels exist, so a pin absent from it
+     * is genuinely gone; the initial empty default never comes through here.
+     */
+    private fun applyChannelInventory(inventory: ChannelInventory) {
+        _channelInventory.value = inventory
+        // A pin on a channel that no longer exists can never receive rows again.
+        val pinned = _visPinnedChannel.value
+        if (pinned > 0 && !inventory.contains(pinned)) {
+            setVisPin(0)
+        }
+    }
+
+    /**
+     * v3-desktop fallback: reconstruct the inventory from the ids the dump actually
+     * mentioned when no /remote/channelList arrived in this cycle.
+     *
+     * A desktop that predates v4 still names and positions every live channel, so the
+     * observed id set IS the real one, gaps included. Without this a v4 tablet facing
+     * a v3 desktop would have no inventory at all and show nothing — worse than the
+     * 1..count enumeration it replaces. What cannot be recovered is marked: display
+     * order can only be ascending number, every channel is reported mono, and the
+     * result carries inferred = true.
+     */
+    private fun inferInventoryIfMissing() {
+        if (inventoryReceivedThisDump) return
+
+        val current = _channelInventory.value
+        // Never overwrite an inventory THIS desktop sent with a guess; one left over
+        // from an earlier connection carries no such authority.
+        if (!current.isEmpty && !current.inferred && inventoryFromCurrentConnection) return
+
+        // Union of both sets, deduplicated through an explicit HashSet: a channel
+        // that reported only a name or only a position still exists, and a number in
+        // both must not end up twice in the inventory.
+        val union = HashSet<Int>(receivedNames)
+        union.addAll(receivedPositions)
+        val observed = union.filter { it in 1..MAX_INPUTS }.sorted()
+        if (observed.isEmpty() || observed == current.numbers) return
+
+        applyChannelInventory(
+            ChannelInventory(observed.map { ChannelInfo(it, isStereo = false) }, inferred = true)
+        )
+    }
+
+    // True from /remote/dumpBegin until the verifier that closes the cycle has run.
+    // A dump cycle ends in its own inference, so an /inputs that arrives inside one
+    // needs nothing done about it.
+    private fun dumpCycleInProgress(): Boolean =
+        resyncFallbackJob?.isActive == true || resyncJob?.isActive == true
+
+    /**
+     * A v3 desktop announces a mid-session structural change with /inputs plus a
+     * burst of names and positions, and never re-dumps. Without this an inferred
+     * inventory would stay frozen at the channel set observed when the connection
+     * came up: added channels unlistable and unpickable, deleted ones still drawn
+     * on the Map and the Locking/Visibility tabs, and a pin on a dead channel never
+     * cleared.
+     *
+     * Asks for a full dump rather than re-deriving from the tracking sets, because
+     * those sets only ever grow — a deletion leaves no trace in them — and clearing
+     * them first would throw away the burst, which is sent direct while the /inputs
+     * that brought us here went through the desktop's rate limiter and can arrive
+     * after it.
+     */
+    private fun scheduleInferredInventoryRefresh() {
+        // A real /remote/channelList is authoritative and is itself re-sent on every
+        // structural edit; only a guessed inventory can go stale unnoticed.
+        if (!_channelInventory.value.inferred) return
+        if (dumpCycleInProgress()) return
+
+        inventoryRefreshJob?.cancel()
+        inventoryRefreshJob = serviceScope.launch {
+            delay(INVENTORY_REFRESH_DEBOUNCE_MS)
+            // Re-checked after the delay: a dump whose dumpBegin merely arrived after
+            // this /inputs ends in the same inference, making the request redundant.
+            if (isActive && _channelInventory.value.inferred && !dumpCycleInProgress() &&
+                _connectionState.value == RemoteConnectionState.CONNECTED) {
+                android.util.Log.d("OscService",
+                    "channel count now $expectedChannelCount with an inferred inventory - " +
+                    "requesting a full re-dump")
+                sendOscRequestResync(this@OscService, emptyList())
+            }
+        }
     }
 
     // If the stateComplete marker is itself dropped, still verify after a fixed delay
@@ -1004,11 +1132,20 @@ class OscService : Service() {
         }
     }
 
-    // Channels (1-based) that are missing a name and/or a position after the dump.
+    // Channels missing a name and/or a position after the dump, by permanent number.
+    // Driven by the inventory, never by 1..count: numbers are permanent and gapped,
+    // so 1..count asks for channels that do not exist — and since the server cannot
+    // answer for them, every retry fails identically and the dump is declared
+    // permanently incomplete.
     private fun computeMissingChannels(): List<Int> {
-        val n = expectedChannelCount
-        if (n <= 0) return emptyList()
-        return (1..n).filter { it !in receivedNames || it !in receivedPositions }
+        val inventory = _channelInventory.value
+        // An INFERRED inventory is built out of the very arrivals this check counts,
+        // so it can never name a channel that was lost outright. Against a v3 desktop
+        // the 1..count guess remains the only way to notice one.
+        val candidates =
+            if (!inventory.isEmpty && !inventory.inferred) inventory.numbers
+            else (1..expectedChannelCount).toList()
+        return candidates.filter { it !in receivedNames || it !in receivedPositions }
     }
 
     // Verify the dump arrived complete; re-request missing channels with bounded retries.
@@ -1019,6 +1156,16 @@ class OscService : Service() {
             var attempt = 0
             var complete = false
             while (attempt < MAX_RESYNC_ATTEMPTS && isActive) {
+                // Re-derived on every pass rather than once before the loop: the
+                // retries below are what recover the channels lost in transit, so
+                // an inventory inferred from the first pass alone would stay frozen
+                // at those losses while the loop goes on to declare the dump
+                // complete — and a channel missing from the inventory is filtered
+                // out of the Map, Locking and Visibility tabs and the picker for the
+                // rest of the connection. Also covers the path where stateComplete
+                // itself was lost and the fallback timer brought us here. No-op once
+                // a real inventory has arrived.
+                inferInventoryIfMissing()
                 val missing = computeMissingChannels()
                 if (missing.isEmpty()) {
                     android.util.Log.d("OscService", "State dump complete ($expectedChannelCount channels)")
@@ -1032,6 +1179,8 @@ class OscService : Service() {
                 delay(RESYNC_BACKOFF_MS) // wait for the resend to arrive before re-checking
             }
             if (!complete) {
+                // The final attempt's arrivals never went through the loop head.
+                inferInventoryIfMissing()
                 val stillMissing = computeMissingChannels()
                 if (stillMissing.isNotEmpty()) {
                     android.util.Log.e("OscService",

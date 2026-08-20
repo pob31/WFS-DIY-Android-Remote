@@ -25,7 +25,14 @@ import kotlin.times
 // v2: versioned ping/pong, /remote/dumpBegin marker, dumpSeq on /remote/stateComplete.
 // v3: /remote/vis/* visualisation mirroring (config, outputArrays, selection,
 //     delays/levels rows) and tablet-side /remote/vis/pin.
-const val REMOTE_PROTOCOL_VERSION = 3
+// v4: /remote/channelList — the live channel numbers in display order, each paired
+//     with its mono/stereo flag. It replaces the channel count as the tablet's
+//     enumeration source, because a permanent channel number is not an index:
+//     deletes leave gaps and a drag-reorder puts the numbers out of ascending
+//     order, so enumerating 1..count both demands channels that do not exist and
+//     hides ones that do. Adds /remoteInput/stereoWidth and
+//     /remoteInput/stereoAxisOffset.
+const val REMOTE_PROTOCOL_VERSION = 4
 
 fun getPaddedBytes(input: String, charsets: java.nio.charset.Charset = Charsets.UTF_8): ByteArray {
     val stringBytes = input.toByteArray(charsets)
@@ -1098,6 +1105,9 @@ typealias OscVisConfigCallback = (numOutputs: Int, numReverbs: Int) -> Unit
 typealias OscVisOutputArraysCallback = (arrays: IntArray) -> Unit
 typealias OscVisSelectionCallback = (primary: Int, clusterId: Int, selection: List<Int>) -> Unit
 typealias OscVisRowCallback = (channel: Int, numOutputs: Int, numReverbs: Int, values: FloatArray) -> Unit
+// Full-replacement channel inventory (v4). Already validated when this fires: the
+// list is in display order, every number is in 1..MAX_INPUTS and unique.
+typealias OscChannelListCallback = (channels: List<ChannelInfo>) -> Unit
 
 fun parseAndProcessOscPacket(
     context: Context,
@@ -1141,7 +1151,8 @@ fun parseAndProcessOscPacket(
     onVisOutputArraysReceived: OscVisOutputArraysCallback? = null,
     onVisSelectionReceived: OscVisSelectionCallback? = null,
     onVisDelaysReceived: OscVisRowCallback? = null,
-    onVisLevelsReceived: OscVisRowCallback? = null
+    onVisLevelsReceived: OscVisRowCallback? = null,
+    onChannelListReceived: OscChannelListCallback? = null
 ) {
     if (data.isEmpty()) {
         return
@@ -1186,7 +1197,8 @@ fun parseAndProcessOscPacket(
                     onRemoteStateCompleteReceived,
                     onRemoteDumpBeginReceived,
                     onVisConfigReceived, onVisOutputArraysReceived,
-                    onVisSelectionReceived, onVisDelaysReceived, onVisLevelsReceived
+                    onVisSelectionReceived, onVisDelaysReceived, onVisLevelsReceived,
+                    onChannelListReceived
                 )
             }
         } catch (e: Exception) {
@@ -1530,6 +1542,34 @@ fun parseAndProcessOscPacket(
                     if (typeTags == ",ii" && buffer.remaining() >= 4) parseOscInt(buffer) else -1
                 onRemoteStateCompleteReceived?.invoke(expectedCount, dumpSeq)
             }
+            address == "/remote/channelList" -> {
+                // Channel inventory (v4). ",i…i" with 1 + 2N arguments: N, then one
+                // (permanent number, isStereo) pair per channel IN DISPLAY ORDER —
+                // the array index is the display position. Full-replacement
+                // snapshot, no sequence number, last one wins.
+                if (!buffer.hasRemaining()) return
+                val typeTags = parseOscString(buffer)
+                if (typeTags.length < 2 || typeTags[0] != ',' ||
+                    typeTags.drop(1).any { it != 'i' }) return
+                if (buffer.remaining() < 4) return
+                val count = parseOscInt(buffer)
+                if (count !in 0..MAX_INPUTS) return
+                if (typeTags.length != 2 + 2 * count) return
+                if (buffer.remaining() < count * 8) return
+                val channels = ArrayList<ChannelInfo>(count)
+                val seen = HashSet<Int>()
+                repeat(count) {
+                    val number = parseOscInt(buffer)
+                    val stereoFlag = parseOscInt(buffer)
+                    // Bail before invoking the callback, never partway through it:
+                    // a half-applied inventory would hide live channels, whereas
+                    // keeping the previous one only goes stale until the next push.
+                    if (number !in 1..MAX_INPUTS || stereoFlag !in 0..1) return
+                    if (!seen.add(number)) return
+                    channels.add(ChannelInfo(number, stereoFlag == 1))
+                }
+                onChannelListReceived?.invoke(channels)
+            }
             // Visualisation mirroring (protocol v3): channel counts, per-output array
             // assignments, desktop selection, and per-channel delay/level rows.
             address == "/remote/vis/config" -> {
@@ -1706,7 +1746,8 @@ suspend fun startOscServer(
     onVisOutputArraysReceived: OscVisOutputArraysCallback? = null,
     onVisSelectionReceived: OscVisSelectionCallback? = null,
     onVisDelaysReceived: OscVisRowCallback? = null,
-    onVisLevelsReceived: OscVisRowCallback? = null
+    onVisLevelsReceived: OscVisRowCallback? = null,
+    onChannelListReceived: OscChannelListCallback? = null
 ) {
     var serverSocket: DatagramSocket? = null
     try {
@@ -1803,7 +1844,8 @@ suspend fun startOscServer(
                         onVisOutputArraysReceived,
                         onVisSelectionReceived,
                         onVisDelaysReceived,
-                        onVisLevelsReceived
+                        onVisLevelsReceived,
+                        onChannelListReceived
                     )
                 } catch (e: Exception) {
                     // Ignore malformed packets

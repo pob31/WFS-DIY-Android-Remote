@@ -327,7 +327,7 @@ fun canvasToStagePosition(
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun InputMapTab(
-    numberOfInputs: Int,
+    inventory: ChannelInventory,
     markers: List<Marker>,
     refreshTrigger: Int = 0,  // Increments when tab becomes visible to force position refresh
     onMarkersInitiallyPositioned: (List<Marker>) -> Unit,
@@ -364,6 +364,21 @@ fun InputMapTab(
     val draggingHiddenRefs = remember { mutableStateMapOf<Long, Int>() }   // pointerId -> clusterId (for hidden reference markers in mode 0)
     val currentMarkersState by rememberUpdatedState(markers)
     val currentClusterConfigs by rememberUpdatedState(clusterConfigs)
+    // The gesture handler and the cluster-snapshot helpers run from a pointerInput
+    // block that restarts only when the view transform changes, so they must read
+    // membership through a State; a list captured from composition would freeze at
+    // that restart and keep testing a stale inventory.
+    val currentInventory by rememberUpdatedState(inventory)
+
+    // The markers list is a fixed 64-entry backing store (id == index + 1) that is
+    // never resized, so "which channels exist" is the inventory's answer, not a
+    // prefix of that list: permanent numbers survive deletes and reorders, and a
+    // channel numbered above the live count would be sliced away by .take(count).
+    // Keyed on the `markers` PARAMETER — keying on currentMarkersState would capture
+    // a stale list, because rememberUpdatedState deliberately does not recompose.
+    val liveMarkers = remember(markers, inventory) {
+        markers.filter { inventory.contains(it.id) }
+    }
 
     // Local state for smooth dragging without blocking global updates
     val localMarkerPositions = remember { mutableStateMapOf<Int, Offset>() }
@@ -444,7 +459,7 @@ fun InputMapTab(
     ) {
         if (clusterId !in 1..10) return
         if (activeClusterTranslations.containsKey(clusterId)) return
-        val members = currentMarkersState.take(numberOfInputs).filter { it.clusterId == clusterId }
+        val members = currentMarkersState.filter { currentInventory.contains(it.id) && it.clusterId == clusterId }
         // Include EVERY member in the rigid-body snapshot. If a member has no
         // cached stage position (e.g. a hidden / locked / not-yet-synced input
         // that never received an individual position update), derive it from the
@@ -696,7 +711,7 @@ fun InputMapTab(
 
         // Fit all inputs to screen function
         fun fitAllInputsToScreen() {
-            val visibleMarkers = currentMarkersState.take(numberOfInputs).filter { it.isVisible }
+            val visibleMarkers = currentMarkersState.filter { currentInventory.contains(it.id) && it.isVisible }
             if (visibleMarkers.isEmpty()) {
                 fitStageToScreen()
                 return
@@ -759,9 +774,11 @@ fun InputMapTab(
         // Update marker stage positions from server inputParametersState
         // refreshTrigger forces update when returning to this tab
         // This stores the TRUE positions in stage meters (independent of view)
-        LaunchedEffect(inputParametersState?.revision, refreshTrigger, stageWidth, stageDepth, stageOriginX, stageOriginY, numberOfInputs, clusterSyncTrigger) {
-            if (inputParametersState != null && stageWidth > 0f && stageDepth > 0f && numberOfInputs > 0) {
-                (1..numberOfInputs).forEach { inputId ->
+        LaunchedEffect(inputParametersState?.revision, refreshTrigger, stageWidth, stageDepth, stageOriginX, stageOriginY, inventory, clusterSyncTrigger) {
+            // An empty inventory means "the dump has not landed yet", not "no channels":
+            // syncing nothing is correct in that window.
+            if (inputParametersState != null && stageWidth > 0f && stageDepth > 0f && !inventory.isEmpty) {
+                inventory.numbers.forEach { inputId ->
                     // Skip cluster members during a local cluster gesture: the gesture
                     // handler is writing extrapolated positions to markerStagePositions
                     // at touch rate; reading stale positionX/Y from inputParametersState
@@ -810,12 +827,15 @@ fun InputMapTab(
         // Recalculate canvas positions when view changes (pan/zoom) or stage positions change
         // Only affects markers that have stored stage positions (from server or dragging)
         // Markers without stage positions keep their canvas positions and get transformed relative to view changes
-        LaunchedEffect(panOffsetX, panOffsetY, actualViewWidth, actualViewHeight, canvasWidth, canvasHeight, markerRadius, stageOriginX, stageOriginY, numberOfInputs, markerStagePositionsVersion) {
-            if (canvasWidth > 0f && canvasHeight > 0f && numberOfInputs > 0 && actualViewWidth > 0f && actualViewHeight > 0f) {
+        LaunchedEffect(panOffsetX, panOffsetY, actualViewWidth, actualViewHeight, canvasWidth, canvasHeight, markerRadius, stageOriginX, stageOriginY, inventory, markerStagePositionsVersion) {
+            if (canvasWidth > 0f && canvasHeight > 0f && !inventory.isEmpty && actualViewWidth > 0f && actualViewHeight > 0f) {
                 val hasPrevView = lastViewInitialized && lastViewWidth > 0f && lastViewHeight > 0f
 
-                val updatedMarkers = currentMarkersState.mapIndexed { index, marker ->
-                    if (index < numberOfInputs) {
+                // Position by permanent number, not by list index: the backing store is
+                // fixed at 64 entries, so the index of a live channel is unrelated to
+                // both the live count and the channel's display position.
+                val updatedMarkers = currentMarkersState.map { marker ->
+                    if (inventory.contains(marker.id)) {
                         val inputId = marker.id
                         val stagePos = markerStagePositions[inputId]
 
@@ -922,14 +942,14 @@ fun InputMapTab(
         }
 
         // Note: marker names and clusterIds are synced in MainActivity's LaunchedEffect
-        // (inputParametersState?.revision, numberOfInputs) to avoid race conditions.
+        // (inputParametersState?.revision, inventory) to avoid race conditions.
 
-        LaunchedEffect(canvasWidth, canvasHeight, initialLayoutDone, numberOfInputs) {
-            if (canvasWidth > 0f && canvasHeight > 0f && !initialLayoutDone && numberOfInputs > 0) {
+        LaunchedEffect(canvasWidth, canvasHeight, initialLayoutDone, inventory) {
+            if (canvasWidth > 0f && canvasHeight > 0f && !initialLayoutDone && !inventory.isEmpty) {
                 // Check if we have position data from the server before applying grid layout
                 // If inputParametersState has position data for any input, skip grid layout
                 val hasServerPositionData = inputParametersState?.let { state ->
-                    (1..numberOfInputs).any { inputId ->
+                    inventory.numbers.any { inputId ->
                         val channel = state.getChannel(inputId)
                         channel.parameters["positionX"] != null || channel.parameters["positionY"] != null
                     }
@@ -942,7 +962,14 @@ fun InputMapTab(
                 }
 
                 val numCols = 8
-                val numRows = (numberOfInputs + numCols - 1) / numCols
+                val numRows = (inventory.size + numCols - 1) / numCols
+
+                // Grid cells are addressed by DISPLAY POSITION in the inventory, not by
+                // index in the 64-entry markers list: after a delete, channel 9 can be
+                // the 5th channel of a 5-channel show, and laying it out at cell 8 would
+                // put it outside the grid the other four occupy.
+                val displayPositions = inventory.numbers.withIndex()
+                    .associate { (position, number) -> number to position }
 
                 // Calculate responsive spacing factor based on screen size
                 val baseSpacingFactor = (screenWidthDp.value / 4f).coerceIn(60f, 100f) // 60-100dp range (more compact)
@@ -956,11 +983,11 @@ fun InputMapTab(
                 val centeredStartX = ((canvasWidth - totalVisualWidth) / 2f) + markerRadius
                 val centeredStartY = ((canvasHeight - totalVisualHeight) / 2f) + markerRadius
 
-                val newFullMarkersList = currentMarkersState.mapIndexed { originalIndex, marker ->
-                    if (originalIndex < numberOfInputs) { // Only update positions for *active* markers
-                        val indexForCalc = originalIndex // Use originalIndex for grid calculation
-                        val logicalCol = indexForCalc % numCols
-                        var logicalRow = indexForCalc / numCols
+                val newFullMarkersList = currentMarkersState.map { marker ->
+                    val displayPosition = displayPositions[marker.id]
+                    if (displayPosition != null) { // Only update positions for *live* channels
+                        val logicalCol = displayPosition % numCols
+                        var logicalRow = displayPosition / numCols
                         if (numRows > 1) { // Reverse row order for Y if multi-row
                             logicalRow = (numRows - 1) - logicalRow
                         }
@@ -972,18 +999,18 @@ fun InputMapTab(
                             positionY = yPos.coerceIn(markerRadius, canvasHeight - markerRadius)
                         )
                     } else {
-                        // For markers beyond numberOfInputs, return them unchanged
+                        // Backing-store entries for channels that do not exist stay untouched
                         marker
                     }
                 }
                 onMarkersInitiallyPositioned(newFullMarkersList)
                 onInitialLayoutDone()
-            } else if (numberOfInputs == 0 && !initialLayoutDone) {
-                // If numberOfInputs is 0, reset positions
-                val resetMarkersList = currentMarkersState.map { it.copy(positionX = 0f, positionY = 0f) }
-                onMarkersInitiallyPositioned(resetMarkersList)
-                onInitialLayoutDone()
             }
+            // No else: an empty inventory means the dump has not landed yet, and the
+            // Map is the tab showing at cold start, so this effect's FIRST run always
+            // sees one. Doing anything here would burn the one-shot before the grid
+            // could ever be laid out — and there is nothing to do anyway, since the
+            // draw path renders only channels the inventory lists.
         }
 
         // Wrap Canvas in Box for floating buttons overlay
@@ -1002,7 +1029,11 @@ fun InputMapTab(
 
                     while (true) {
                         val event = awaitPointerEvent()
-                        val activeMarkersSnapshot = currentMarkersState.take(numberOfInputs).toMutableList()
+                        // Re-derived per event rather than hoisted into composition: this
+                        // pointerInput block restarts only on a view-transform change, so a
+                        // captured list would keep serving the inventory as it stood then.
+                        val liveMarkersNow = currentMarkersState.filter { currentInventory.contains(it.id) }
+                        val activeMarkersSnapshot = liveMarkersNow.toMutableList()
 
                         event.changes.forEach { change ->
                             val pointerId = change.id
@@ -1108,7 +1139,7 @@ fun InputMapTab(
                                                 if (draggingBarycenters.containsValue(clusterId) || draggingHiddenRefs.containsValue(clusterId)) continue
 
                                                 // Check for barycenter (mode 1)
-                                                val barycenter = findClusterBarycenter(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
+                                                val barycenter = findClusterBarycenter(clusterId, liveMarkersNow, clusterConfigs)
                                                 if (barycenter != null && distance(touchPosition, barycenter) <= markerRadius * pickupRadiusMultiplier) {
                                                     if (draggingBarycenters.size + draggingMarkers.size + draggingHiddenRefs.size < 10) {
                                                         draggingBarycenters[pointerValue] = clusterId
@@ -1119,7 +1150,7 @@ fun InputMapTab(
                                                 }
 
                                                 // Check for hidden reference (mode 0)
-                                                val hiddenRef = findHiddenClusterReference(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
+                                                val hiddenRef = findHiddenClusterReference(clusterId, liveMarkersNow, clusterConfigs)
                                                 if (hiddenRef != null && distance(touchPosition, hiddenRef) <= markerRadius * pickupRadiusMultiplier) {
                                                     if (draggingBarycenters.size + draggingMarkers.size + draggingHiddenRefs.size < 10) {
                                                         draggingHiddenRefs[pointerValue] = clusterId
@@ -1170,9 +1201,9 @@ fun InputMapTab(
                                                     val closestClusterId = availableClusters.firstOrNull()
                                                     closestClusterId?.let { clusterId ->
                                                         // Find the reference position (barycenter or hidden ref)
-                                                        val barycenterPos = findClusterBarycenter(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
+                                                        val barycenterPos = findClusterBarycenter(clusterId, liveMarkersNow, clusterConfigs)
                                                         val hiddenRefPos = if (barycenterPos == null)
-                                                            findHiddenClusterReference(clusterId, currentMarkersState.take(numberOfInputs), clusterConfigs)
+                                                            findHiddenClusterReference(clusterId, liveMarkersNow, clusterConfigs)
                                                         else null
                                                         val referencePos = barycenterPos ?: hiddenRefPos
                                                         val pivotMode = if (barycenterPos != null) 1 else 0
@@ -1891,8 +1922,8 @@ fun InputMapTab(
                     }
                 } else {
                     // Cluster target: recalculate barycenter or hidden ref position
-                    findClusterBarycenter(vectorControl.clusterId, currentMarkersState.take(numberOfInputs), currentClusterConfigs)
-                        ?: findHiddenClusterReference(vectorControl.clusterId, currentMarkersState.take(numberOfInputs), currentClusterConfigs)
+                    findClusterBarycenter(vectorControl.clusterId, liveMarkers, currentClusterConfigs)
+                        ?: findHiddenClusterReference(vectorControl.clusterId, liveMarkers, currentClusterConfigs)
                 }
 
                 if (currentReferencePosition != null) {
@@ -1947,7 +1978,7 @@ fun InputMapTab(
             // Draw cluster relationship lines (behind markers)
             if (currentClusterConfigs.isNotEmpty()) {
                 // Build markers with current positions (including local drag positions)
-                val displayMarkers = currentMarkersState.take(numberOfInputs).map { marker ->
+                val displayMarkers = liveMarkers.map { marker ->
                     if (localMarkerPositions.containsKey(marker.id)) {
                         marker.copy(
                             positionX = localMarkerPositions[marker.id]!!.x,
@@ -1975,7 +2006,7 @@ fun InputMapTab(
             }
             inputsNeedingCompositeDraw.forEach { inputId ->
                 val marker = currentMarkersState.find { it.id == inputId }
-                if (marker != null && marker.isVisible && inputId <= numberOfInputs) {
+                if (marker != null && marker.isVisible && inventory.contains(inputId)) {
                     // Get the target canvas position (use local position if dragging)
                     val targetCanvasPos = if (localMarkerPositions.containsKey(marker.id)) {
                         localMarkerPositions[marker.id]!!
@@ -2020,7 +2051,7 @@ fun InputMapTab(
             }
 
             // Draw markers on top of the grid and labels
-            currentMarkersState.take(numberOfInputs).sortedByDescending { it.id }.forEach { marker ->
+            liveMarkers.sortedByDescending { it.id }.forEach { marker ->
                 // Use local position if available for smooth dragging, otherwise use global position
                 val displayMarker = if (localMarkerPositions.containsKey(marker.id)) {
                     marker.copy(

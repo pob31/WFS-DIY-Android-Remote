@@ -43,7 +43,10 @@ private const val VIS_LEVEL_MIN_DB = -60f
 @Composable
 fun VisualisationTab(
     viewModel: MainActivityViewModel,
-    numberOfInputs: Int,
+    // Which channels the picker may offer. Not a count: a pinnable channel can be
+    // numbered above the channel count, and 1..count would both omit it and offer
+    // numbers that were deleted.
+    inventory: ChannelInventory,
     inputParametersState: InputParametersState,
     serverProtocolVersion: Int,
     connected: Boolean,
@@ -193,7 +196,7 @@ fun VisualisationTab(
         if (showChannelPicker) {
             InputChannelGridOverlay(
                 selectedInputId = if (pinnedChannel > 0) pinnedChannel else visState.primaryChannel,
-                maxInputs = numberOfInputs,
+                inventory = inventory,
                 inputParametersState = inputParametersState,
                 onInputSelected = { inputId ->
                     viewModel.setVisPin(inputId)

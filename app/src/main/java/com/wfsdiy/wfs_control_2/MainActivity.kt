@@ -58,8 +58,13 @@ internal const val KEY_INCOMING_PORT = "incoming_port"
 internal const val KEY_OUTGOING_PORT = "outgoing_port"
 internal const val KEY_IP_ADDRESS = "ip_address"
 internal const val KEY_NUMBER_OF_INPUTS = "number_of_inputs"
-internal const val KEY_LOCK_STATES = "lock_states"
-internal const val KEY_VISIBILITY_STATES = "visibility_states"
+// Lock / visibility flags keyed by PERMANENT channel number ("number:flag" pairs).
+// The pre-v4 keys ("lock_states" / "visibility_states") were positional lists, so a
+// desktop reorder restored a saved flag onto whichever channel now sat at that index.
+// Deliberately new keys, not a migration: nothing in a positional list identifies the
+// channel it was written for, so the old values are simply ignored and left to rot.
+internal const val KEY_LOCK_STATES_BY_NUMBER = "lock_states_by_number"
+internal const val KEY_VISIBILITY_STATES_BY_NUMBER = "visibility_states_by_number"
 internal const val KEY_FIND_DEVICE_PASSWORD = "find_device_password"
 internal const val KEY_PRESSURE_CAL_MIN = "pressure_cal_min"
 internal const val KEY_PRESSURE_CAL_MAX = "pressure_cal_max"
@@ -260,24 +265,42 @@ fun saveAppSettings(context: Context, numberOfInputs: Int, markers: List<Marker>
     val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     with(sharedPrefs.edit()) {
         putInt(KEY_NUMBER_OF_INPUTS, numberOfInputs)
-        // Storing boolean arrays as comma-separated strings
-        val lockStatesString = markers.joinToString(",") { it.isLocked.toString() }
-        val visibilityStatesString = markers.joinToString(",") { it.isVisible.toString() }
-        putString(KEY_LOCK_STATES, lockStatesString)
-        putString(KEY_VISIBILITY_STATES, visibilityStatesString)
+        // "number:flag" pairs, never a bare positional list: marker.id is the permanent
+        // channel number and is the only thing that still means the same channel after
+        // the desktop deletes or drag-reorders inputs between two runs of the app.
+        putString(KEY_LOCK_STATES_BY_NUMBER, markers.joinToString(",") { "${it.id}:${it.isLocked}" })
+        putString(KEY_VISIBILITY_STATES_BY_NUMBER, markers.joinToString(",") { "${it.id}:${it.isVisible}" })
         apply()
     }
 }
 
-fun loadAppSettings(context: Context): Triple<Int, List<Boolean>, List<Boolean>> {
+/**
+ * Parses a saved "number:flag" list into flags keyed by permanent channel number.
+ * Malformed pairs and out-of-range numbers are dropped individually so one bad entry
+ * (or a value written by an older build) cannot take the whole preference with it.
+ */
+private fun parseFlagsByChannelNumber(stored: String?): Map<Int, Boolean> {
+    if (stored.isNullOrEmpty()) return emptyMap()
+    return stored.split(",").mapNotNull { entry ->
+        val parts = entry.split(":")
+        if (parts.size != 2) return@mapNotNull null
+        val number = parts[0].trim().toIntOrNull() ?: return@mapNotNull null
+        if (number !in 1..MAX_INPUTS) return@mapNotNull null
+        number to parts[1].trim().toBoolean()
+    }.toMap()
+}
+
+/**
+ * Returns the saved input count plus lock and visibility flags keyed by permanent
+ * channel number. A number absent from either map has never been saved and must fall
+ * back to the default (unlocked / visible) rather than to a neighbour's flag.
+ */
+fun loadAppSettings(context: Context): Triple<Int, Map<Int, Boolean>, Map<Int, Boolean>> {
     val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     val numberOfInputs = sharedPrefs.getInt(KEY_NUMBER_OF_INPUTS, MAX_INPUTS)
 
-    val lockStatesString = sharedPrefs.getString(KEY_LOCK_STATES, null)
-    val lockStates = lockStatesString?.split(",")?.map { it.toBoolean() } ?: List(MAX_INPUTS) { false }
-
-    val visibilityStatesString = sharedPrefs.getString(KEY_VISIBILITY_STATES, null)
-    val visibilityStates = visibilityStatesString?.split(",")?.map { it.toBoolean() } ?: List(MAX_INPUTS) { true }
+    val lockStates = parseFlagsByChannelNumber(sharedPrefs.getString(KEY_LOCK_STATES_BY_NUMBER, null))
+    val visibilityStates = parseFlagsByChannelNumber(sharedPrefs.getString(KEY_VISIBILITY_STATES_BY_NUMBER, null))
 
     return Triple(numberOfInputs, lockStates, visibilityStates)
 }
@@ -531,6 +554,18 @@ fun WFSControlApp() {
         }
     }
 
+    // Which channels exist, in the desktop's display order, and which are stereo.
+    // This is the enumeration; numberOfInputs is only a "did the dump finish" signal.
+    // Channel numbers are permanent, so a delete leaves gaps and a drag-reorder leaves
+    // them unsorted — 1..numberOfInputs both demands numbers that do not exist and
+    // hides ones that do. An empty inventory means "not known yet", never "no channels".
+    var channelInventory by remember { mutableStateOf(ChannelInventory()) }
+    LaunchedEffect(oscService) {
+        oscService?.channelInventory?.collect { inventory ->
+            channelInventory = inventory
+        }
+    }
+
     // Protocol version the WFS-DIY server reported (0 = unknown yet)
     var serverProtocolVersion by remember { mutableIntStateOf(0) }
     LaunchedEffect(viewModel) {
@@ -626,10 +661,12 @@ fun WFSControlApp() {
         
         val (loadedInputs, loadedLockStates, loadedVisibilityStates) = loadAppSettings(context)
         numberOfInputs = loadedInputs
-        markers = markers.mapIndexed { index, marker ->
+        markers = markers.map { marker ->
+            // Restore by permanent channel number, not by position in this fixed
+            // 64-entry list: the desktop may have reordered channels since the save.
             marker.copy(
-                isLocked = loadedLockStates.getOrElse(index) { false },
-                isVisible = loadedVisibilityStates.getOrElse(index) { true }
+                isLocked = loadedLockStates[marker.id] ?: false,
+                isVisible = loadedVisibilityStates[marker.id] ?: true
             )
         }
         initialInputLayoutDone = false
@@ -743,40 +780,39 @@ fun WFSControlApp() {
 
     // Sync input names and cluster IDs from inputParametersState to markers
     // This ensures LockingTab, VisibilityTab, and other views have access to marker names/clusters
-    LaunchedEffect(inputParametersState?.revision, numberOfInputs) {
+    LaunchedEffect(inputParametersState?.revision, channelInventory) {
         val state = inputParametersState ?: return@LaunchedEffect
-        if (numberOfInputs > 0) {
-            var hasChanges = false
-            val updatedMarkers = markers.mapIndexed { index, marker ->
-                if (index < numberOfInputs) {
-                    val inputId = marker.id
-                    val channel = state.getChannel(inputId)
-                    var updatedMarker = marker
+        var hasChanges = false
+        val updatedMarkers = markers.map { marker ->
+            // markers is a fixed 64-entry backing store, so its index means nothing: a
+            // marker stands for a live channel only if its permanent number is in the
+            // inventory. Reconciling by position would copy a deleted channel's stale
+            // name and cluster onto whichever channel now sits at that index.
+            if (!channelInventory.contains(marker.id)) return@map marker
 
-                    // Sync name
-                    val inputName = channel.parameters["inputName"]?.stringValue ?: ""
-                    if (inputName.isNotEmpty() && inputName != updatedMarker.name) {
-                        hasChanges = true
-                        updatedMarker = updatedMarker.copy(name = inputName)
-                    }
+            val channel = state.getChannel(marker.id)
+            var updatedMarker = marker
 
-                    // Sync clusterId (normalizedValue stores the raw int for DROPDOWN types)
-                    val clusterParam = channel.parameters["cluster"]
-                    val newClusterId = clusterParam?.normalizedValue?.let { kotlin.math.round(it).toInt() } ?: 0
-                    if (newClusterId != updatedMarker.clusterId) {
-                        hasChanges = true
-                        updatedMarker = updatedMarker.copy(clusterId = newClusterId)
-                    }
-
-                    updatedMarker
-                } else {
-                    marker
-                }
+            // Sync name
+            val inputName = channel.parameters["inputName"]?.stringValue ?: ""
+            if (inputName.isNotEmpty() && inputName != updatedMarker.name) {
+                hasChanges = true
+                updatedMarker = updatedMarker.copy(name = inputName)
             }
 
-            if (hasChanges) {
-                markers = updatedMarkers
+            // Sync clusterId (normalizedValue stores the raw int for DROPDOWN types)
+            val clusterParam = channel.parameters["cluster"]
+            val newClusterId = clusterParam?.normalizedValue?.let { kotlin.math.round(it).toInt() } ?: 0
+            if (newClusterId != updatedMarker.clusterId) {
+                hasChanges = true
+                updatedMarker = updatedMarker.copy(clusterId = newClusterId)
             }
+
+            updatedMarker
+        }
+
+        if (hasChanges) {
+            markers = updatedMarkers
         }
     }
 
@@ -901,7 +937,7 @@ fun WFSControlApp() {
 
             when (selectedTab) {
                 0 -> InputMapTab(
-                    numberOfInputs = numberOfInputs,
+                    inventory = channelInventory,
                     markers = markers,
                     refreshTrigger = mapTabVisitCount,
                     onMarkersInitiallyPositioned = { newMarkerList ->
@@ -967,7 +1003,7 @@ fun WFSControlApp() {
                     samplerPlaying = samplerPlaying
                 )
                 1 -> LockingTab(
-                    numberOfInputs = numberOfInputs,
+                    inventory = channelInventory,
                     markers = markers,
                 onMarkersChanged = { updatedMarkers -> 
                     markers = updatedMarkers
@@ -976,7 +1012,7 @@ fun WFSControlApp() {
                 }
                 )
                 2 -> VisibilityTab(
-                    numberOfInputs = numberOfInputs,
+                    inventory = channelInventory,
                     markers = markers,
                 onMarkersChanged = { updatedMarkers -> 
                     markers = updatedMarkers
@@ -986,7 +1022,11 @@ fun WFSControlApp() {
                 )
                 3 -> {
                     viewModel?.let { vm ->
-                        InputParametersTab(viewModel = vm, refreshTrigger = inputParamsTabVisitCount)
+                        InputParametersTab(
+                            viewModel = vm,
+                            inventory = channelInventory,
+                            refreshTrigger = inputParamsTabVisitCount
+                        )
                     } ?: Text(loc("common.loading"), color = Color.White)
                 }
                 xyPadTabIndex -> {
@@ -1019,7 +1059,7 @@ fun WFSControlApp() {
                     viewModel?.let { vm ->
                         VisualisationTab(
                             viewModel = vm,
-                            numberOfInputs = numberOfInputs,
+                            inventory = channelInventory,
                             inputParametersState = inputParametersState ?: InputParametersState(),
                             serverProtocolVersion = serverProtocolVersion,
                             connected = connectionState == OscService.RemoteConnectionState.CONNECTED,

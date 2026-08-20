@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -385,23 +387,29 @@ fun InputChannelSelector(
 }
 
 /**
- * Grid overlay for selecting input channel
+ * Grid overlay for selecting an input channel.
+ *
+ * Serves both the Input Parameters picker and the Visualisation pin picker, and is
+ * driven by [inventory] rather than by a count: channel numbers are permanent and
+ * decoupled from display position, so generating 1..count offered numbers that no
+ * longer exist and made a channel numbered above the count unselectable.
  */
 @Composable
 fun InputChannelGridOverlay(
     selectedInputId: Int,
-    maxInputs: Int,
+    inventory: ChannelInventory,
     inputParametersState: InputParametersState,
     onInputSelected: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    // Calculate grid columns based on maxInputs
+    // Tile count, not the highest number: a 5-channel show numbered up to 40 still
+    // wants the 4-column layout.
     val columns = when {
-        maxInputs <= 16 -> 4
-        maxInputs <= 32 -> 6
+        inventory.size <= 16 -> 4
+        inventory.size <= 32 -> 6
         else -> 8
     }
-    
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -452,8 +460,10 @@ fun InputChannelGridOverlay(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(count = maxInputs) { index ->
-                    val inputId = index + 1
+                // Display order is the inventory's order, which is the desktop's —
+                // it is not sorted, so a drag-reorder there must reorder here too.
+                items(items = inventory.channels, key = { it.number }) { channel ->
+                    val inputId = channel.number
                     val isSelected = inputId == selectedInputId
 
                     // Get the marker color for this input
@@ -497,15 +507,47 @@ fun InputChannelGridOverlay(
                                 )
                             }
                         }
+
+                        if (channel.isStereo) {
+                            // Two overlapping circles, as the desktop draws a stereo
+                            // pair. Corner overlay rather than a third line, so the
+                            // centred number and name keep their sizes.
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(6.dp)
+                                    .size(width = 19.dp, height = 12.dp)
+                            ) {
+                                val dotBorder = Color.Black.copy(alpha = 0.4f)
+                                Box(
+                                    modifier = Modifier
+                                        .size(12.dp)
+                                        .background(Color.White.copy(alpha = 0.9f), CircleShape)
+                                        .border(1.dp, dotBorder, CircleShape)
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .offset(x = 7.dp)
+                                        .size(12.dp)
+                                        .background(Color.White.copy(alpha = 0.9f), CircleShape)
+                                        .border(1.dp, dotBorder, CircleShape)
+                                )
+                            }
+                        }
                     }
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            
-            // Footer info
+
+            // An empty inventory means the state dump has not landed yet, never that
+            // the show has no channels — say nothing about counts until it has.
             Text(
-                text = loc("remote.inputSelector.showingInputs", "max" to maxInputs.toString()),
+                text = if (inventory.isEmpty) {
+                    loc("common.loading")
+                } else {
+                    loc("remote.inputSelector.showingChannels", "count" to inventory.size.toString())
+                },
                 fontSize = 12.sp,
                 color = Color.Gray
             )

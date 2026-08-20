@@ -155,7 +155,7 @@
       "inputChannel": "Canal d'entrée",
       "inputPrefix": "Entrée",
       "selectInputChannel": "Sélectionner le canal d'entrée",
-      "showingInputs": "Affichage 1-{max} sur 64 entrées",
+      "showingChannels": "Affichage de {count} canaux",
       "inputName": "Nom de l'entrée"
     }
   },
@@ -177,6 +177,8 @@
       "cluster": "Groupe :",
       "attenuation": "Atténuation",
       "delayLatency": "Compensation de latence / Délai",
+      "stereoWidth": "Largeur stéréo",
+      "stereoAxis": "Axe stéréo",
       "positionX": "Position X",
       "positionY": "Position Y",
       "positionZ": "Position Z",
@@ -239,6 +241,11 @@
       "phaseY": "Phase Y",
       "phaseZ": "Phase Z",
       "gyrophone": "Gyrophone"
+    },
+
+    "help": {
+      "stereoWidthDial": "Largeur de l'image stéréo en mètres : la distance physique entre les branches gauche et droite de la paire. La position du canal reste le centre de la paire. 0 m réduit la paire à une source ponctuelle.",
+      "stereoAxisDial": "Fait pivoter l'axe d'étalement stéréo, positif dans le sens antihoraire vu de dessus. 0 = automatique : la paire s'étale perpendiculairement à la ligne allant de l'origine à la source. ±180° échange la gauche et la droite."
     },
 
     "toggles": {

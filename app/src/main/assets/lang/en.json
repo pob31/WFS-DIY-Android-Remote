@@ -155,7 +155,7 @@
       "inputChannel": "Input Channel",
       "inputPrefix": "Input",
       "selectInputChannel": "Select Input Channel",
-      "showingInputs": "Showing 1-{max} of 64 inputs",
+      "showingChannels": "Showing {count} channels",
       "inputName": "Input Name"
     }
   },
@@ -177,6 +177,8 @@
       "cluster": "Cluster:",
       "attenuation": "Attenuation",
       "delayLatency": "Latency compensation / Delay",
+      "stereoWidth": "Stereo Width",
+      "stereoAxis": "Stereo Axis",
       "positionX": "Position X",
       "positionY": "Position Y",
       "positionZ": "Position Z",
@@ -239,6 +241,11 @@
       "phaseY": "Phase Y",
       "phaseZ": "Phase Z",
       "gyrophone": "Gyrophone"
+    },
+
+    "help": {
+      "stereoWidthDial": "Stereo image width in metres: the physical distance between the pair's left and right legs. The channel position stays the centre of the pair. 0 m collapses the pair to a point source.",
+      "stereoAxisDial": "Rotates the stereo spread axis, positive counter-clockwise seen from above. 0 = automatic: the pair spreads perpendicular to the line from the origin to the source. ±180° swaps left and right."
     },
 
     "toggles": {
