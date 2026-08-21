@@ -246,11 +246,16 @@ object InputParameterDefinitions {
             dataType = ParameterType.FLOAT,
             minValue = 0f,
             maxValue = 50f,
-            // Squared, like the desktop dial: a linear 0..50 m sweep gives half a
-            // metre per percent of travel and no usable resolution around the 4 m
-            // default. Its own key, because "x*50.0" is shared with the position
-            // parameters and must stay linear for them.
-            formula = "x*x*50.0",
+            // Cubic, and it must stay identical to the desktop dial's law or the two
+            // controls feel different for the same stored metres. A linear 0..50 m sweep
+            // gives half a metre per percent of travel and no usable resolution around
+            // the 4 m default; squared still bunched the small widths at the bottom of
+            // the sweep. Cubic puts 0..10 m in the first ~58% of the travel and the 4 m
+            // default near mid-dial. Its own key, because "x*50.0" is shared with the
+            // position parameters and must stay linear for them — and because a formula
+            // string with no case in applyFormula/reverseFormula silently degrades to
+            // the linear fallback instead of failing.
+            formula = "x*x*x*50.0",
             unit = "m",
             // Relevance is a property of the channel, not of another parameter, so it
             // cannot be expressed as a conditionalEnable: show it only when
@@ -1296,6 +1301,7 @@ object InputParameterDefinitions {
                         "(x*180)-90" -> (x * 180f) - 90f
                         "x*50.0" -> x * 50f
                         "x*x*50.0" -> x * x * 50f
+                        "x*x*x*50.0" -> x * x * x * 50f
                         "x*19.99+0.01" -> (x * 19.99f) + 0.01f
                         "x*100" -> x * 100f
                         "(x*9.9)+0.1" -> (x * 9.9f) + 0.1f
@@ -1367,6 +1373,10 @@ object InputParameterDefinitions {
                         "(x*180)-90" -> (y + 90f) / 180f
                         "x*50.0" -> y / 50f
                         "x*x*50.0" -> kotlin.math.sqrt(y / 50f)
+                        // java.lang.Math.cbrt rather than pow(1/3): pow of a negative
+                        // base is NaN, and y is only guaranteed non-negative while the
+                        // parameter's minValue stays 0.
+                        "x*x*x*50.0" -> Math.cbrt((y / 50f).toDouble()).toFloat()
                         "x*19.99+0.01" -> (y - 0.01f) / 19.99f
                         "x*100" -> y / 100f
                         "(x*9.9)+0.1" -> (y - 0.1f) / 9.9f
