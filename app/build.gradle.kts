@@ -4,8 +4,15 @@ plugins {
     id("kotlin-parcelize")
 }
 
+// Single source for the version. The APK FILENAME and the manifest are two separate
+// places to state it and they drifted: archivesName was still saying beta_10 after
+// versionName moved to beta_11, so a correctly-versioned build shipped under the old
+// name. Deriving the archive name means that cannot happen again.
+val appVersionCode = 11
+val appVersionName = "1.0-beta_11"
+
 base {
-    archivesName.set("wfs-control-1.0-beta_10")
+    archivesName.set("wfs-control-$appVersionName")
 }
 
 android {
@@ -16,8 +23,8 @@ android {
         applicationId = "com.wfsdiy.wfs_control_2"
         minSdk = 24
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.0-beta_10"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
