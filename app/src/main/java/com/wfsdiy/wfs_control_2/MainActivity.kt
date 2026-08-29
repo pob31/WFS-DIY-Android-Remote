@@ -72,6 +72,12 @@ internal const val KEY_PRESSURE_CAL_MAX = "pressure_cal_max"
 // Maximum number of inputs the system can handle
 internal const val MAX_INPUTS = 64
 
+/** How many stand-in markers the Map shows before any channel list has arrived.
+  * Purely cosmetic: it stops a first-time user being greeted by an empty map, and is
+  * replaced the moment the desktop says which channels actually exist. Kept small on
+  * purpose -- it is a preview, not a claim about the rig. */
+internal const val PREVIEW_CHANNEL_COUNT = 8
+
 enum class SecondaryTouchFunction(val modeNumber: Int, val locKey: String) {
     OFF(-1, "remote.secondaryTouch.off"),
     ATTENUATION(0, "remote.secondaryTouch.attenuation"),

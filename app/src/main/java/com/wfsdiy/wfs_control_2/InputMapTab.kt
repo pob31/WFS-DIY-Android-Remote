@@ -376,8 +376,22 @@ fun InputMapTab(
     // channel numbered above the live count would be sliced away by .take(count).
     // Keyed on the `markers` PARAMETER — keying on currentMarkersState would capture
     // a stale list, because rememberUpdatedState deliberately does not recompose.
-    val liveMarkers = remember(markers, inventory) {
-        markers.filter { inventory.contains(it.id) }
+    // Before any channel list has arrived the map would be blank, which is what greets a
+    // first-time user who has not connected yet. Stand in a small preview grid instead.
+    //
+    // DISPLAY ONLY. The real ChannelInventory in OscService is untouched, so nothing in the
+    // v4 connection, resync or dump-completeness logic can mistake this for an inventory the
+    // desktop sent -- which is exactly the confusion the inventory replaced 1..N to avoid.
+    val isPreviewInventory = inventory.isEmpty
+    val displayInventory = remember(inventory) {
+        if (inventory.isEmpty)
+            ChannelInventory((1..PREVIEW_CHANNEL_COUNT).map { ChannelInfo(it, isStereo = false) })
+        else
+            inventory
+    }
+
+    val liveMarkers = remember(markers, displayInventory) {
+        markers.filter { displayInventory.contains(it.id) }
     }
 
     // Local state for smooth dragging without blocking global updates
@@ -943,6 +957,36 @@ fun InputMapTab(
 
         // Note: marker names and clusterIds are synced in MainActivity's LaunchedEffect
         // (inputParametersState?.revision, inventory) to avoid race conditions.
+
+        // Preview grid, deliberately separate from the real initial layout below and
+        // deliberately NOT calling onInitialLayoutDone(): burning that one-shot here would
+        // mean a real inventory arriving later never gets its own grid layout.
+        LaunchedEffect(canvasWidth, canvasHeight, isPreviewInventory) {
+            if (isPreviewInventory && canvasWidth > 0f && canvasHeight > 0f) {
+                val numCols = 4
+                val count = PREVIEW_CHANNEL_COUNT
+                val numRows = (count + numCols - 1) / numCols
+
+                val spacingFactor = (screenWidthDp.value / 4f).coerceIn(60f, 100f)
+                val contentWidthOfCenters = (numCols - 1) * spacingFactor
+                val contentHeightOfCenters = (numRows - 1) * spacingFactor
+                val startX = ((canvasWidth - (contentWidthOfCenters + markerRadius * 2f)) / 2f) + markerRadius
+                val startY = ((canvasHeight - (contentHeightOfCenters + markerRadius * 2f)) / 2f) + markerRadius
+
+                onMarkersInitiallyPositioned(currentMarkersState.map { marker ->
+                    val position = marker.id - 1
+                    if (position in 0 until count) {
+                        val col = position % numCols
+                        var row = position / numCols
+                        if (numRows > 1) row = (numRows - 1) - row
+                        marker.copy(
+                            positionX = (startX + col * spacingFactor).coerceIn(markerRadius, canvasWidth - markerRadius),
+                            positionY = (startY + row * spacingFactor).coerceIn(markerRadius, canvasHeight - markerRadius)
+                        )
+                    } else marker
+                })
+            }
+        }
 
         LaunchedEffect(canvasWidth, canvasHeight, initialLayoutDone, inventory) {
             if (canvasWidth > 0f && canvasHeight > 0f && !initialLayoutDone && !inventory.isEmpty) {
@@ -2062,8 +2106,23 @@ fun InputMapTab(
                     marker
                 }
 
+                // Colour picked on the desktop, or null when nothing has arrived for this
+                // channel yet -- resolveInputColor then falls back to the derived hue.
+                // Reading it here rather than inside drawMarker keeps that function free of
+                // any dependency on the parameter state, and the redraw is already driven by
+                // inputParametersState.revision, which every OSC update bumps.
+                val markerColour = inputParametersState?.let { state ->
+                    if (state.hasChannel(marker.id))
+                        state.getChannel(marker.id).parameters["inputColour"]?.normalizedValue?.toInt()
+                    else null
+                }
+
                 // Assuming drawMarker is defined elsewhere and handles its own textPaint settings for visibility/zoom
-                drawMarker(displayMarker, draggingMarkers.containsValue(marker.id), textPaint, false, stageWidth, stageDepth, stageOriginX, stageOriginY, canvasWidth, canvasHeight, !isPhone)
+                drawMarker(displayMarker, draggingMarkers.containsValue(marker.id), textPaint, false, stageWidth, stageDepth, stageOriginX, stageOriginY, canvasWidth, canvasHeight, !isPhone,
+                           colorOverride = resolveInputColor(markerColour, marker.id),
+                           // Ghosted while standing in for a channel list that has not
+                           // arrived, so the map reads as a preview rather than a live rig.
+                           alpha = if (isPreviewInventory) 0.35f else 1f)
             }
 
             // Draw drag coordinates for markers being dragged

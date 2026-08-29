@@ -32,6 +32,12 @@ import kotlin.times
 //     order, so enumerating 1..count both demands channels that do not exist and
 //     hides ones that do. Adds /remoteInput/stereoWidth and
 //     /remoteInput/stereoAxisOffset.
+// Still v4: /remoteInput/inputColour. NOT a version bump -- it is purely additive, and
+//     an older tablet drops the unknown address at its catch-all with no side effect,
+//     which is the same reasoning /remote/channelList shipped under. The value is the
+//     STORED one: 24-bit RGB, or -1 meaning the desktop has no colour set for that
+//     channel, in which case this app keeps deriving the hue from the channel number.
+//     Read-only here -- the picker lives on the desktop and the tablet only follows.
 const val REMOTE_PROTOCOL_VERSION = 4
 
 fun getPaddedBytes(input: String, charsets: java.nio.charset.Charset = Charsets.UTF_8): ByteArray {

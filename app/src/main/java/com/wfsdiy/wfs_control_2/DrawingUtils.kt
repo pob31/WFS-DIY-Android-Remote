@@ -22,6 +22,23 @@ fun getMarkerColor(id: Int, isClusterMarker: Boolean = false): Color {
     return Color.hsl(hue, if (isClusterMarker) 0.7f else 0.9f, if (isClusterMarker) 0.7f else 0.6f)
 }
 
+/**
+ * The colour of an input: the one picked on the desktop, or the derived hue when none is.
+ *
+ * The desktop sends the STORED value over /remoteInput/inputColour -- 24-bit RGB, or -1
+ * meaning "auto" -- rather than a resolved colour, so this app keeps owning the fallback
+ * and an untouched channel is still tinted by exactly the formula above. There is no
+ * picker here: colours are chosen on the desktop and only followed.
+ *
+ * @param storedColour the raw value received, or null if none has arrived yet
+ */
+fun resolveInputColor(storedColour: Int?, id: Int): Color {
+    if (storedColour != null && storedColour >= 0)
+        return Color(0xFF000000.toInt() or (storedColour and 0x00FFFFFF))
+
+    return getMarkerColor(id, isClusterMarker = false)
+}
+
 // Data class for Stage Coordinate drawing information
 internal data class StagePointInfo(
     val stageX: Float,
@@ -143,7 +160,9 @@ fun <T> DrawScope.drawMarker(
     currentStageOriginY: Float,
     canvasPixelW: Float,
     canvasPixelH: Float,
-    isTablet: Boolean = false
+    isTablet: Boolean = false,
+    colorOverride: Color? = null,
+    alpha: Float = 1f
 ) where T : Any {
     val id: Int
     val position: Offset
@@ -168,7 +187,7 @@ fun <T> DrawScope.drawMarker(
 
     if (!isClusterMarker && !markerIsVisible) return
 
-    val baseColor = getMarkerColor(id, isClusterMarker)
+    val baseColor = colorOverride ?: getMarkerColor(id, isClusterMarker)
     val finalOuterColor: Color
     val labelColor: Int
 
@@ -181,8 +200,8 @@ fun <T> DrawScope.drawMarker(
     }
 
     val innerRadius = radius * 0.6f
-    drawCircle(color = finalOuterColor, radius = radius, center = position)
-    drawCircle(color = Color.Black, radius = innerRadius, center = position)
+    drawCircle(color = finalOuterColor.copy(alpha = finalOuterColor.alpha * alpha), radius = radius, center = position)
+    drawCircle(color = Color.Black.copy(alpha = alpha), radius = innerRadius, center = position)
 
     val referenceDimension = min(size.width, size.height)
     val baseTextSize = referenceDimension / (if (isClusterMarker) 40f else 45f) // Larger text (was 45f/52.5f)
@@ -190,7 +209,13 @@ fun <T> DrawScope.drawMarker(
 
     textPaint.textAlign = Paint.Align.CENTER
     textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-    textPaint.color = labelColor
+    // The label has to fade with the disc, or a ghosted marker keeps a solid white number.
+    textPaint.color = if (alpha >= 1f) labelColor
+                      else android.graphics.Color.argb(
+                          (android.graphics.Color.alpha(labelColor) * alpha).toInt().coerceIn(0, 255),
+                          android.graphics.Color.red(labelColor),
+                          android.graphics.Color.green(labelColor),
+                          android.graphics.Color.blue(labelColor))
     val idText = id.toString()
 
     if (!isClusterMarker && markerName.isNotBlank()) {

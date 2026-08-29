@@ -192,6 +192,21 @@ object InputParameterDefinitions {
         ),
         InputParameterDefinition(
             group = "Input",
+            label = "Input Colour",
+            variableName = "inputColour",
+            oscPath = "/remoteInput/inputColour",
+            isIncoming = true,
+            isOutgoing = false,
+            uiType = UIComponentType.NONE,
+            dataType = ParameterType.INT,
+            minValue = -1f,
+            maxValue = 16777215f,
+            note = "24-bit RGB as a positive int, or -1 = auto (derive the hue from the " +
+                   "channel number, as this app always has). Read-only here: colours are " +
+                   "picked on the desktop."
+        ),
+        InputParameterDefinition(
+            group = "Input",
             label = "Attenuation",
             variableName = "attenuation",
             oscPath = "/remoteInput/attenuation",

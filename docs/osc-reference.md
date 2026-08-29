@@ -110,6 +110,15 @@ All input parameter messages follow this pattern:
 /remoteInput/inputName <inputID:i> <name:s>
 ```
 
+**Input Colour** (incoming only)
+```
+/remoteInput/inputColour <inputID:i> <rgb:i>
+```
+- 24-bit RGB (`0xRRGGBB`) as a positive int, or `-1` meaning *auto*
+- `-1` is the default: the app then derives the hue from the channel number, as it
+  always has, so an untouched channel looks exactly as before
+- Read-only on the tablet. Colours are picked on the desktop; this app only follows
+
 **Attenuation** (dB)
 ```
 /remoteInput/attenuation <inputID:i> <dB:f>

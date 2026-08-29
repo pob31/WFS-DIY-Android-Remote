@@ -883,8 +883,13 @@ class OscService : Service() {
                 // For dropdowns and text buttons, don't normalize - store the integer directly
                 // ON/OFF switches use 0=OFF, 1=ON matching JUCE convention (no inversion needed)
                 // For direction dials, we need special handling to normalize with proper range coercion
+                // NONE covers values that are data rather than a control -- inputColour, a
+                // 24-bit RGB -- where normalising to 0..1 and back would be lossy and
+                // meaningless. A Float represents every integer up to 2^24 exactly and the
+                // colour maxes at 2^24 - 1, so storing it raw here round-trips.
                 val shouldNotNormalize = definition.uiType == UIComponentType.DROPDOWN ||
-                                        definition.uiType == UIComponentType.TEXT_BUTTON
+                                        definition.uiType == UIComponentType.TEXT_BUTTON ||
+                                        definition.uiType == UIComponentType.NONE
 
                 val normalized = if (shouldNotNormalize) {
                     intValue.toFloat()
