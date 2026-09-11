@@ -455,6 +455,11 @@ fun WFSControlApp() {
     // across configuration changes.
     var visShowDelaysInMulti by rememberSaveable { mutableStateOf(true) }
 
+    // Map tab: second-finger edits (input rotation/height, cluster scale/rotation)
+    // on or suspended. Hoisted for the same reason — the map composable is disposed
+    // on every tab switch. Session-only: never written to preferences.
+    var mapSecondaryTouchEnabled by rememberSaveable { mutableStateOf(true) }
+
     // XY Pad visibility: controlled by JUCE (sampler active + no hardware Lightpads).
     // The tab list grows/shrinks at position 4 (xyPadTabIndex) when this toggles, so
     // selectedTab must be remapped to (a) avoid pointing at a now-missing index — the
@@ -1006,7 +1011,9 @@ fun WFSControlApp() {
                         }
                     },
                     compositePositions = rememberSmoothedCompositePositions(compositePositions),
-                    samplerPlaying = samplerPlaying
+                    samplerPlaying = samplerPlaying,
+                    secondaryTouchEnabled = mapSecondaryTouchEnabled,
+                    onSecondaryTouchEnabledChange = { mapSecondaryTouchEnabled = it }
                 )
                 1 -> LockingTab(
                     inventory = channelInventory,

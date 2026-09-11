@@ -84,7 +84,10 @@
     "map": {
       "secondaryTouchInfo": "2ème doigt : Entrée(Rotation/Pincer=Orient./Hauteur) Cluster(Rotation/Pincer=Tourner/Échelle)",
       "fitStage": "Ajuster la scène",
-      "fitAllInputs": "Ajuster toutes les entrées"
+      "fitAllInputs": "Ajuster toutes les entrées",
+      "secondaryTouchOff": "2ème doigt : désactivé (réglages des entrées et clusters suspendus)",
+      "secondaryTouchSuspend": "Suspendre les réglages au 2ème doigt",
+      "secondaryTouchResume": "Réactiver les réglages au 2ème doigt"
     },
 
     "arrayAdjust": {

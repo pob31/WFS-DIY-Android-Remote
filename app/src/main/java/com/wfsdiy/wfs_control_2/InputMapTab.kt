@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.DoNotTouch
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.Pinch
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -356,7 +358,9 @@ fun InputMapTab(
     onClusterDragEnd: ((clusterId: Int) -> Unit)? = null,
     onClusterMembersSettled: ((clusterId: Int, members: List<Triple<Int, Float, Float>>) -> Unit)? = null,
     compositePositions: Map<Int, Pair<Float, Float>> = emptyMap(),  // inputId -> (deltaX, deltaY) in stage meters
-    samplerPlaying: Map<Int, Boolean> = emptyMap()  // inputId -> true while a sampler cell is playing on that input
+    samplerPlaying: Map<Int, Boolean> = emptyMap(),  // inputId -> true while a sampler cell is playing on that input
+    secondaryTouchEnabled: Boolean = true,  // false = second-finger edits suspended (pan/zoom unaffected)
+    onSecondaryTouchEnabledChange: (Boolean) -> Unit = {}  // map toggle button; the caller owns the session-only state
 ) {
     val context = LocalContext.current
     val draggingMarkers = remember { mutableStateMapOf<Long, Int>() }
@@ -369,6 +373,9 @@ fun InputMapTab(
     // membership through a State; a list captured from composition would freeze at
     // that restart and keep testing a stale inventory.
     val currentInventory by rememberUpdatedState(inventory)
+    // Read by the gesture loop for the same reason. Never add it to the pointerInput
+    // keys instead: a restart of that block cancels any drag in progress.
+    val currentSecondaryTouchEnabled by rememberUpdatedState(secondaryTouchEnabled)
 
     // The markers list is a fixed 64-entry backing store (id == index + 1) that is
     // never resized, so "which channels exist" is the inventory's answer, not a
@@ -609,6 +616,25 @@ fun InputMapTab(
             // are replaced by the JUCE-authoritative values that landed during the
             // delay window above.
             clusterSyncTrigger++
+        }
+    }
+
+    // Suspending second-finger edits mid-gesture: end every live vector control the
+    // way a secondary-finger release would (cluster ones bake and send the scale=0
+    // gesture end), then drop them. A finger still down stays in the gesture loop's
+    // pointersThatAttemptedGrab, so it is inert until lifted and its release finds
+    // no vector control left to end. The primary finger keeps its drag.
+    LaunchedEffect(secondaryTouchEnabled) {
+        if (!secondaryTouchEnabled && vectorControls.isNotEmpty()) {
+            val clusterIds = vectorControls.values.filter { it.targetType == 1 }.map { it.clusterId }.toSet()
+            if (initialLayoutDone) {
+                clusterIds.forEach { clusterId ->
+                    bakeClusterScaleRotation(clusterId)
+                    onClusterScaleRotation?.invoke(clusterId, 0f, 0f)
+                }
+            }
+            vectorControls.clear()
+            vectorControlsUpdateTrigger++
         }
     }
 
@@ -1231,8 +1257,9 @@ fun InputMapTab(
                                                         pointerIdToCurrentLogicalPosition[pointerId] = it.position
                                                     }
                                                 }
-                                            } else {
+                                            } else if (currentSecondaryTouchEnabled) {
                                                 // No cluster target and no marker found - check for vector control (secondary touch)
+                                                // (skipped while suspended from the map toggle: the finger stays untracked, still consumed below)
                                                 var vectorControlCreated = false
 
                                                 // Check for secondary touch on dragged cluster targets (barycenters or hidden refs)
@@ -1874,11 +1901,15 @@ fun InputMapTab(
         ) { // DrawScope
             drawRect(Color.Black) // Background for the canvas
 
-            // Draw secondary touch info above the grid
-            val secondaryTouchText = locStatic("remote.map.secondaryTouchInfo")
+            // Draw secondary touch info above the grid (amber notice while suspended).
+            // Reading the State here makes the canvas redraw when the toggle flips.
+            val secondaryTouchOn = currentSecondaryTouchEnabled
+            val secondaryTouchText = locStatic(
+                if (secondaryTouchOn) "remote.map.secondaryTouchInfo" else "remote.map.secondaryTouchOff"
+            )
 
             val headerPaint = Paint().apply {
-                color = android.graphics.Color.WHITE
+                color = if (secondaryTouchOn) android.graphics.Color.WHITE else 0xFFFF9800.toInt()  // Material Orange 500
                 textSize = canvasHeight / 60f
                 textAlign = Paint.Align.CENTER
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
@@ -2142,7 +2173,7 @@ fun InputMapTab(
             }
         }
 
-            // Floating buttons for fit-to-screen (top right)
+            // Floating buttons for fit-to-screen and the 2nd-finger toggle (top right)
             Column(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -2168,6 +2199,21 @@ fun InputMapTab(
                     Icon(
                         Icons.Default.CenterFocusStrong,
                         contentDescription = loc("remote.map.fitAllInputs"),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                // Second-finger edits toggle; the description names the action a tap performs
+                FloatingActionButton(
+                    onClick = { onSecondaryTouchEnabledChange(!secondaryTouchEnabled) },
+                    modifier = Modifier.size(40.dp),
+                    containerColor = if (secondaryTouchEnabled) MaterialTheme.colorScheme.tertiaryContainer
+                                     else MaterialTheme.colorScheme.errorContainer
+                ) {
+                    Icon(
+                        if (secondaryTouchEnabled) Icons.Default.Pinch else Icons.Default.DoNotTouch,
+                        contentDescription = loc(
+                            if (secondaryTouchEnabled) "remote.map.secondaryTouchSuspend" else "remote.map.secondaryTouchResume"
+                        ),
                         modifier = Modifier.size(24.dp)
                     )
                 }
