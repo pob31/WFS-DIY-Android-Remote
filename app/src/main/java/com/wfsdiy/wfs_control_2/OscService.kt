@@ -339,6 +339,14 @@ class OscService : Service() {
     private val _clusterPresetAxes = MutableStateFlow(IntArray(16) { 0 })
     val clusterPresetAxes: StateFlow<IntArray> = _clusterPresetAxes.asStateFlow()
 
+    // Whole-array output mutes (ArrayMuteProtocol), 1 = muted, as the desktop last
+    // reported them. Known only once this connection's desktop has sent them: an older
+    // desktop never does, and the Array Adjust tab then keeps its mute column disabled.
+    private val _arrayMutes = MutableStateFlow(IntArray(ArrayMuteProtocol.NUM_ARRAYS))
+    val arrayMutes: StateFlow<IntArray> = _arrayMutes.asStateFlow()
+    private val _arrayMuteKnown = MutableStateFlow(false)
+    val arrayMuteKnown: StateFlow<Boolean> = _arrayMuteKnown.asStateFlow()
+
     // Visualisation mirroring (protocol v3). Rows arrive throttled to <=10 Hz
     // server-side, so direct StateFlow copy-replace is fine — no queue buffering
     // needed (unlike the high-rate position streams above).
@@ -526,6 +534,7 @@ class OscService : Service() {
                             // whatever inventory we still hold is no longer proof that
                             // this one can send us a fresh one.
                             inventoryFromCurrentConnection = false
+                            endConnectionScopedArrayMute()
                             scheduleResyncFallback()
                             // The server clears per-target vis pins on connect; restore ours
                             if (_visPinnedChannel.value > 0) {
@@ -568,6 +577,7 @@ class OscService : Service() {
                         connectionTimeoutJob?.cancel()
                         resyncJob?.cancel()
                         endConnectionScopedVisState()
+                        endConnectionScopedArrayMute()
                     },
                     onRemoteDumpBeginReceived = { dumpSeq, expectedCount ->
                         // A fresh full dump is starting (connect, project load, or full
@@ -735,6 +745,10 @@ class OscService : Service() {
                         inventoryReceivedThisDump = true
                         inventoryFromCurrentConnection = true
                         applyChannelInventory(ChannelInventory(channels, inferred = false))
+                    },
+                    onArrayMuteReceived = { states ->
+                        if (!_arrayMutes.value.contentEquals(states)) _arrayMutes.value = states
+                        _arrayMuteKnown.value = true
                     }
                 )
             } catch (e: Exception) {
@@ -1139,6 +1153,7 @@ class OscService : Service() {
                 if (timeSinceLastHeartbeat >= CONNECTION_TIMEOUT_MS) {
                     _connectionState.value = RemoteConnectionState.DISCONNECTED
                     endConnectionScopedVisState()
+                    endConnectionScopedArrayMute()
                     android.util.Log.d("OscService", "Connection timeout - no heartbeat for ${timeSinceLastHeartbeat}ms")
                     break
                 }
@@ -1176,6 +1191,13 @@ class OscService : Service() {
     private fun endConnectionScopedVisState() {
         visFallbackResyncSent = false
         clearDesktopNotHearing()
+    }
+
+    // The array mutes belong to the desktop this connection reached; the next one (maybe
+    // another desktop, maybe an older one) states its own in its dump, or never does.
+    private fun endConnectionScopedArrayMute() {
+        _arrayMuteKnown.value = false
+        _arrayMutes.value = IntArray(ArrayMuteProtocol.NUM_ARRAYS)
     }
 
     /**
@@ -1370,6 +1392,7 @@ class OscService : Service() {
             _visState.value = VisualisationState()
             _serverProtocolVersion.value = 0
             endConnectionScopedVisState()
+            endConnectionScopedArrayMute()
             startServer()
         }
     }

@@ -76,6 +76,13 @@ import kotlin.times
 //     would drop the writes at its catch-all. Numbers that arrive as text (",is", the
 //     echo of a value an older desktop holds as a string after a load, a recall or an
 //     undo) are read as the number they hold instead of as 0.
+// Still v4: whole-array output mute on the Array Adjust tab (ArrayMuteProtocol). The
+//     tablet sends /arrayAdjust/mute (",ii" array 1..10, 0|1), an absolute state beside
+//     the /arrayAdjust/ deltas, and shows only what the desktop sends back:
+//     /remote/array/mute (",i" count, then 0|1 per array) in the dump, after every
+//     change and every 2 s. The mute is desktop session state, never saved. An older
+//     desktop never sends it, so the column stays disabled, and counts the write as a
+//     parse error with no side effect.
 const val REMOTE_PROTOCOL_VERSION = 4
 
 fun getPaddedBytes(input: String, charsets: java.nio.charset.Charset = Charsets.UTF_8): ByteArray {
@@ -1192,6 +1199,8 @@ typealias OscVisRowCallback = (channel: Int, numOutputs: Int, numReverbs: Int, v
 // Full-replacement channel inventory (v4). Already validated when this fires: the
 // list is in display order, every number is in 1..MAX_INPUTS and unique.
 typealias OscChannelListCallback = (channels: List<ChannelInfo>) -> Unit
+// /remote/array/mute, already decoded: exactly ArrayMuteProtocol.NUM_ARRAYS states, 1 = muted.
+typealias OscArrayMuteCallback = (states: IntArray) -> Unit
 
 // A dropped /remote/vis/* message used to vanish without a trace, which is how an
 // over-cap rig could leave the tab on "Waiting for data…" with nothing to show why.
@@ -1253,7 +1262,8 @@ fun parseAndProcessOscPacket(
     onVisSelectionReceived: OscVisSelectionCallback? = null,
     onVisDelaysReceived: OscVisRowCallback? = null,
     onVisLevelsReceived: OscVisRowCallback? = null,
-    onChannelListReceived: OscChannelListCallback? = null
+    onChannelListReceived: OscChannelListCallback? = null,
+    onArrayMuteReceived: OscArrayMuteCallback? = null
 ) {
     if (data.isEmpty()) {
         return
@@ -1299,7 +1309,8 @@ fun parseAndProcessOscPacket(
                     onRemoteDumpBeginReceived,
                     onVisConfigReceived, onVisOutputArraysReceived,
                     onVisSelectionReceived, onVisDelaysReceived, onVisLevelsReceived,
-                    onChannelListReceived
+                    onChannelListReceived,
+                    onArrayMuteReceived
                 )
             }
         } catch (e: Exception) {
@@ -1777,6 +1788,10 @@ fun parseAndProcessOscPacket(
                 if (buffer.remaining() < 4) return
                 onClusterPresetCountReceived?.invoke(parseOscInt(buffer))
             }
+            address == ArrayMuteProtocol.INCOMING -> {
+                // ",i" + N ints: count, then 0/1 per array (desktop session state)
+                ArrayMuteProtocol.decode(buffer)?.let { onArrayMuteReceived?.invoke(it) }
+            }
             else -> {
 
             }
@@ -1827,7 +1842,8 @@ suspend fun startOscServer(
     onVisSelectionReceived: OscVisSelectionCallback? = null,
     onVisDelaysReceived: OscVisRowCallback? = null,
     onVisLevelsReceived: OscVisRowCallback? = null,
-    onChannelListReceived: OscChannelListCallback? = null
+    onChannelListReceived: OscChannelListCallback? = null,
+    onArrayMuteReceived: OscArrayMuteCallback? = null
 ) {
     var serverSocket: DatagramSocket? = null
     try {
@@ -1925,7 +1941,8 @@ suspend fun startOscServer(
                         onVisSelectionReceived,
                         onVisDelaysReceived,
                         onVisLevelsReceived,
-                        onChannelListReceived
+                        onChannelListReceived,
+                        onArrayMuteReceived
                     )
                 } catch (e: Exception) {
                     // Ignore malformed packets
@@ -2151,6 +2168,25 @@ fun sendOscClusterLFOActive(context: Context, clusterId: Int, active: Int) {
                 return@launch
             val oscPacketBytes = getPaddedBytes("/wfs/cluster/lfoActive") +
                     getPaddedBytes(",ii") + clusterId.toBytesBigEndian() + active.toBytesBigEndian()
+            DatagramSocket().use { socket ->
+                socket.send(DatagramPacket(oscPacketBytes, oscPacketBytes.size,
+                    InetAddress.getByName(ipAddressStr), outgoingPort))
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+}
+
+/** /arrayAdjust/mute ",ii": ask the desktop to mute (or unmute) a whole output array.
+ *  Unthrottled, a single toggle; the desktop's /remote/array/mute echo drives the display. */
+fun sendOscArrayMute(context: Context, arrayId: Int, muted: Boolean) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull() ?: return@launch
+            if (!isValidPort(outgoingPortStr) || ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr))
+                return@launch
+            val oscPacketBytes = getPaddedBytes(ArrayMuteProtocol.OUTGOING) +
+                    getPaddedBytes(",ii") + arrayId.toBytesBigEndian() + (if (muted) 1 else 0).toBytesBigEndian()
             DatagramSocket().use { socket ->
                 socket.send(DatagramPacket(oscPacketBytes, oscPacketBytes.size,
                     InetAddress.getByName(ipAddressStr), outgoingPort))

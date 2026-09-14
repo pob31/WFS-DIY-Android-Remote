@@ -421,6 +421,18 @@ All input parameter messages follow this pattern:
 - 0 = OFF
 - 1 = Clockwise
 
+### Array Mute State
+
+```
+/remote/array/mute <count:i> <muted1:i> ... <mutedN:i>
+```
+- **count**: Number of arrays that follow (10)
+- **mutedN**: 1 while array N is muted, else 0
+- Whole-array output mutes, desktop session state (never saved in the project, cleared when one is loaded)
+- Sent in the connection/resync state dump, after every change (also to the tablet that asked for it) and every 2 s
+- A desktop that never sends it predates the feature: the Array Adjust MUTE column stays disabled
+- **Example**: `/remote/array/mute 10 0 0 1 0 0 0 0 0 0 0` (array 3 muted)
+
 ### Special Commands
 
 #### Find Device
@@ -486,7 +498,7 @@ Messages the app sends to the WFS-DIY server.
 ```
 /arrayAdjust/delayLatency <arrayID:i> <deltaMs:f>
 ```
-- **arrayID**: Array number (1-5)
+- **arrayID**: Array number (1-10)
 - **deltaMs**: Change in milliseconds (±1.0, ±0.1)
 - **Example**: `/arrayAdjust/delayLatency 1 0.1`
 
@@ -510,6 +522,14 @@ Messages the app sends to the WFS-DIY server.
 ```
 - **deltaMeters**: Change in meters (±1.0, ±0.1)
 - **Example**: `/arrayAdjust/Vparallax 4 -0.1`
+
+#### Array Mute
+```
+/arrayAdjust/mute <arrayID:i> <muted:i>
+```
+- **muted**: 1 = mute the whole array, 0 = unmute. An absolute state, unlike the deltas above
+- Sent by the MUTE column; the column shows only what the desktop reports back in `/remote/array/mute`
+- **Example**: `/arrayAdjust/mute 3 1`
 
 ### Input Parameter Updates
 

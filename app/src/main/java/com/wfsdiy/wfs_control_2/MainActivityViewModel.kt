@@ -237,6 +237,10 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
 
     val clusterLFOActive: StateFlow<IntArray> = oscService.clusterLFOActive
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), IntArray(10) { 0 })
+    val arrayMutes: StateFlow<IntArray> = oscService.arrayMutes
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), IntArray(ArrayMuteProtocol.NUM_ARRAYS))
+    val arrayMuteKnown: StateFlow<Boolean> = oscService.arrayMuteKnown
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val clusterPresetNames: StateFlow<Array<String>> = oscService.clusterPresetNames
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Array(16) { "" })
     val clusterPresetPopulated: StateFlow<BooleanArray> = oscService.clusterPresetPopulated

@@ -518,6 +518,12 @@ fun WFSControlApp() {
     LaunchedEffect(viewModel) { viewModel?.clusterPresetAxes?.collect { clusterPresetAxes = it } }
     LaunchedEffect(viewModel) { viewModel?.clusterConfigs?.collect { clusterConfigs = it } }
 
+    // Whole-array output mutes (desktop session state, shown on the Array Adjust tab)
+    var arrayMutes by remember { mutableStateOf(IntArray(ArrayMuteProtocol.NUM_ARRAYS)) }
+    var arrayMuteKnown by remember { mutableStateOf(false) }
+    LaunchedEffect(viewModel) { viewModel?.arrayMutes?.collect { arrayMutes = it } }
+    LaunchedEffect(viewModel) { viewModel?.arrayMuteKnown?.collect { arrayMuteKnown = it } }
+
     val tabs = buildList {
         add(loc("remote.tabs.map"))
         add(loc("remote.tabs.lockInputMarkers"))
@@ -1086,7 +1092,11 @@ fun WFSControlApp() {
                         onStopAll = { sendOscClusterLFOStopAll(context) }
                     )
                 }
-                arrayAdjustTabIndex -> ArrayAdjustTab()
+                arrayAdjustTabIndex -> ArrayAdjustTab(
+                    arrayMutes = arrayMutes,
+                    arrayMuteKnown = arrayMuteKnown,
+                    onArrayMuteToggle = { arrayId, muted -> sendOscArrayMute(context, arrayId, muted) }
+                )
                 visTabIndex -> {
                     viewModel?.let { vm ->
                         VisualisationTab(

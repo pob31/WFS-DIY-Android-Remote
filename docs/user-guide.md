@@ -551,15 +551,22 @@ Adjust the Z-axis (height) position of each cluster independently.
 
 ## Array Adjust Tab
 
-Quick adjustment controls for 5 speaker arrays using a matrix layout.
+Quick adjustment controls for 10 speaker arrays using a matrix layout.
 
 ![Array Adjust Tab](screenshots/array-adjust.png)
 
 ### Layout
 
-The tab is organized as a 5×4 grid:
-- **5 rows**: One for each array (Array 1-5)
-- **4 columns**: One for each adjustment type
+The tab is organized as a grid:
+- **10 rows**: One for each array (Array 1-10)
+- **A MUTE column**, then **4 columns**: One for each adjustment type
+
+### MUTE (Red Column)
+Mutes or unmutes a whole array on the computer, the same mute as the **Mute Array** button in WFS-DIY's Outputs tab:
+- **Tap** a row to mute that array; the cell turns red and reads **MUTED**. Tap again to unmute.
+- The cell shows what the computer reports, so a mute set on the computer (or from another tablet) appears here too.
+- The mute lasts for the session only: it is not saved with the project and is cleared when a project is loaded.
+- The column stays dimmed until the computer reports its mutes; a WFS-DIY older than 1.0.0beta50 never does.
 
 ### Adjustment Types (Columns)
 

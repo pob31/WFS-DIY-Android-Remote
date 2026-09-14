@@ -1,7 +1,12 @@
 package com.wfsdiy.wfs_control_2
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.VerticalDivider
@@ -29,10 +34,22 @@ val timeColumnColor = Color(0xFF4A90E2) // Blueish
 val levelColumnColor = Color(0xFF50E3C2) // Greenish
 val horizontalParallaxColor = Color(0xFFF5A623) // Orangeish
 val verticalParallaxColor = Color(0xFFBD10E0) // Purpleish
+val muteColumnColor = Color(0xFFE53935) // Red
+val mutedCellColor = Color(0xFFB71C1C)  // Lit mute, as the Clusters tab's ALL OFF
 val defaultColumnColor = Color.DarkGray
 
+/**
+ * @param arrayMutes whole-array mutes as the desktop last reported them (1 = muted)
+ * @param arrayMuteKnown false until this connection's desktop has reported them: an
+ *        older desktop never does, and the mute column then stays disabled
+ * @param onArrayMuteToggle (array 1..10, wanted state); the display follows the echo
+ */
 @Composable
-fun ArrayAdjustTab() {
+fun ArrayAdjustTab(
+    arrayMutes: IntArray = IntArray(ArrayMuteProtocol.NUM_ARRAYS),
+    arrayMuteKnown: Boolean = false,
+    onArrayMuteToggle: (arrayId: Int, muted: Boolean) -> Unit = { _, _ -> }
+) {
     // Device detection for responsive sizing
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
@@ -51,7 +68,9 @@ fun ArrayAdjustTab() {
     val headerFontSize = if (isPhone) 8.sp else 16.sp // 50% smaller on phone
     val row2FontSize = if (isPhone) 6.sp else 12.sp // 50% smaller on phone
     val arrayLabelFontSize = if (isPhone) 7.sp else 14.sp // 50% smaller on phone
-    
+    val muteColumnWeight = if (isPhone) 0.9f else 0.6f
+    val muteCellFontSize = if (isPhone) 7.sp else 12.sp
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -73,6 +92,20 @@ fun ArrayAdjustTab() {
                     .fillMaxHeight(),
                 arrayLabels = arrayLabels,
                 arrayLabelFontSize = arrayLabelFontSize
+            )
+
+            VerticalDivider()
+
+            // Whole-array mute, before the adjustment columns
+            MuteColumn(
+                modifier = Modifier
+                    .weight(muteColumnWeight)
+                    .fillMaxHeight(),
+                arrayMutes = arrayMutes,
+                enabled = arrayMuteKnown,
+                onToggle = onArrayMuteToggle,
+                headerFontSize = headerFontSize,
+                cellFontSize = muteCellFontSize
             )
 
             VerticalDivider()
@@ -289,6 +322,80 @@ fun SideColumn(modifier: Modifier = Modifier, arrayLabels: List<String>, arrayLa
 
         FourSplitCell(labels = List(4) { " " }, themeColor = defaultColumnColor, labelFontSize = 12.sp)
     }
+}
+
+/**
+ * One mute toggle per array, on the same vertical rhythm as the other columns (three
+ * half-height header rows, ten array rows, one half-height footer) so the rows line up.
+ * A tap asks the desktop for the opposite of what it last reported; nothing changes
+ * here until its echo arrives.
+ */
+@Composable
+fun MuteColumn(
+    modifier: Modifier = Modifier,
+    arrayMutes: IntArray,
+    enabled: Boolean,
+    onToggle: (arrayId: Int, muted: Boolean) -> Unit,
+    headerFontSize: TextUnit = 16.sp,
+    cellFontSize: TextUnit = 12.sp
+) {
+    val muteLabel = loc("remote.arrayAdjust.mute")
+    val mutedLabel = loc("remote.arrayAdjust.muted")
+    Column(
+        modifier = modifier
+            .alpha(if (enabled) 1f else 0.35f)
+            .background(muteColumnColor.copy(alpha = 0.1f))
+            .padding(horizontal = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        HeaderCell(text = muteLabel, themeColor = muteColumnColor, fontSize = headerFontSize)
+        BlankHalfRow(muteColumnColor, alpha = 0.3f)
+        BlankHalfRow(muteColumnColor, alpha = 0.2f)
+
+        repeat(ArrayMuteProtocol.NUM_ARRAYS) { arrayIndex ->
+            val muted = enabled && arrayMutes.getOrElse(arrayIndex) { 0 } != 0
+            val rowBackground = if (arrayIndex % 2 == 0) Color.Transparent else Color.White.copy(alpha = 0.15f)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .background(rowBackground)
+                    .padding(2.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (muted) mutedCellColor else Color(0xFF424242))
+                        .border(1.dp, if (muted) muteColumnColor else Color(0xFF616161), RoundedCornerShape(6.dp))
+                        .then(
+                            if (enabled) Modifier.clickable { onToggle(arrayIndex + 1, !muted) }
+                            else Modifier
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        if (muted) mutedLabel else muteLabel,
+                        color = if (muted) Color.White else Color(0xFF9E9E9E),
+                        fontSize = cellFontSize,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+        BlankHalfRow(muteColumnColor, alpha = 0.2f)
+    }
+}
+
+@Composable
+private fun ColumnScope.BlankHalfRow(themeColor: Color, alpha: Float) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .weight(0.5f)
+            .background(themeColor.copy(alpha = alpha))
+    )
 }
 
 @Composable

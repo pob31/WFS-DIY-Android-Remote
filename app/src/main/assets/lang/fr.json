@@ -96,6 +96,8 @@
 
     "arrayAdjust": {
       "arrayPrefix": "Groupe",
+      "mute": "COUPER",
+      "muted": "COUPÉ",
       "time": "DÉLAI",
       "level": "NIVEAU",
       "horizontalParallax": "PARALLAXE HORIZONTALE",

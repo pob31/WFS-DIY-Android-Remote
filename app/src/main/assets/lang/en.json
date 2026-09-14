@@ -96,6 +96,8 @@
 
     "arrayAdjust": {
       "arrayPrefix": "Array",
+      "mute": "MUTE",
+      "muted": "MUTED",
       "time": "TIME",
       "level": "LEVEL",
       "horizontalParallax": "HORIZONTAL PARALLAX",
