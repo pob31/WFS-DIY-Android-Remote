@@ -60,9 +60,15 @@ data class VisRow(
 /**
  * Mirrored desktop visualisation state: channel counts, per-output array assignments,
  * the desktop's current selection, and the delay/level rows received so far.
+ *
+ * [primaryConfirmed] says [primaryChannel] is one the desktop itself named, which it
+ * only ever does for a live channel. False for the default 1 and for a previous primary
+ * kept when a /remote/vis/selection carried 0; only those may give way to another live
+ * channel (displayedVisChannels), since this tablet's inventory can lag the desktop's.
  */
 data class VisualisationState(
     val primaryChannel: Int = 1,
+    val primaryConfirmed: Boolean = false,
     val clusterId: Int = 0,
     val selectionSet: List<Int> = emptyList(),
     val numOutputs: Int = 0,
@@ -91,13 +97,21 @@ class OscService : Service() {
     private var lastHeartbeatReceivedTime: Long = 0
     private var connectionTimeoutJob: kotlinx.coroutines.Job? = null
 
+    // When our socket last (re)started (SystemClock.elapsedRealtime), and whether the
+    // one follow-up /remote/disconnect for that start already went out (see the
+    // heartbeat handler).
+    @Volatile private var serverStartedAtMs = 0L
+    @Volatile private var rehandshakeNudged = false
+
     // "The desktop cannot hear this tablet." The desktop pings only while its handshake
     // with us is still Connecting; once one of our pongs lands it sends a dump (opened by
     // /remote/dumpBegin) and heartbeats from then on. So pings that keep coming with
-    // neither in between mean our pongs never reach it: its Remote target IP or port is
-    // wrong, its IP filter drops us, or a firewall does. Meanwhile this side hears the
-    // pings, shows a green dot, and the Visualisation tab would wait for data forever,
-    // since the desktop sends a target nothing until the handshake completes.
+    // neither in between mean our pongs never reach it. The pings themselves prove its
+    // Remote target IP and port right; the pongs go to this tablet's own IP Address and
+    // Outgoing Port settings, so those come first, then the desktop's receive port, its
+    // IP filter and any firewall. Meanwhile this side hears the pings, shows a green
+    // dot, and the Visualisation tab would wait for data forever, since the desktop
+    // sends a target nothing until the handshake completes.
     private val pingsWithoutHeartbeat = AtomicInteger(0)
     private val _desktopNotHearing = MutableStateFlow(false)
     val desktopNotHearing: StateFlow<Boolean> = _desktopNotHearing.asStateFlow()
@@ -147,6 +161,10 @@ class OscService : Service() {
         // How long a map stereo gesture's final pair waits before going out: longer than
         // the 20 ms throttle replay, so any send still in flight lands first.
         private const val STEREO_FINAL_SEND_DELAY_MS = 60L
+        // How long after our socket starts a heartbeat with no ping yet is taken as the
+        // desktop having missed our /remote/disconnect. Its heartbeats are 2 s apart, and
+        // one already in flight when that disconnect landed arrives within this.
+        private const val REHANDSHAKE_GRACE_MS = 1000L
     }
 
     // Service state tracking
@@ -392,6 +410,8 @@ class OscService : Service() {
         serverJob = serviceScope.launch {
             try {
                 isServerRunning = true
+                serverStartedAtMs = SystemClock.elapsedRealtime()
+                rehandshakeNudged = false
                 // Notify JUCE we're (re)starting so it resets connection state
                 // and sends full state dump on next ping/pong handshake
                 sendOscDisconnect(this@OscService)
@@ -524,6 +544,20 @@ class OscService : Service() {
                         lastHeartbeatReceivedTime = System.currentTimeMillis()
                         // Heartbeats only go to a target whose pong landed.
                         clearDesktopNotHearing()
+                        // No ping since our socket started, yet heartbeats: the desktop
+                        // missed the /remote/disconnect startServer sent and still counts
+                        // us as connected, so it will neither ping nor dump. The protocol
+                        // version would stay unknown for the whole connection, hiding the
+                        // mismatch banner and the Visualisation tab's update hint. Ask
+                        // once more per start, after the grace period; the handshake that
+                        // follows brings the version, a dump and, at its dumpBegin, our pin.
+                        if (_serverProtocolVersion.value == 0 && !rehandshakeNudged &&
+                            SystemClock.elapsedRealtime() - serverStartedAtMs >= REHANDSHAKE_GRACE_MS) {
+                            rehandshakeNudged = true
+                            android.util.Log.w("OscService",
+                                "Heartbeat but no ping since the socket started - re-sending /remote/disconnect")
+                            serviceScope.launch { sendOscDisconnect(this@OscService) }
+                        }
                         if (_connectionState.value != RemoteConnectionState.CONNECTED) {
                             _connectionState.value = RemoteConnectionState.CONNECTED
                             startConnectionTimeoutMonitor()
@@ -675,7 +709,8 @@ class OscService : Service() {
                         // Primary 0 means the desktop has no live selected channel (it
                         // was deleted, or the loaded session lacks it). Keep the one we
                         // show rather than pointing the bars at nothing; the cluster and
-                        // the set still apply.
+                        // the set still apply. A kept one is no longer vouched for, so it
+                        // may give way to a live channel.
                         val effectivePrimary = if (primary >= 1) primary else current.primaryChannel
                         // Evict rows no longer displayed (selection ∪ primary ∪ pin)
                         val keep = selection.toMutableSet()
@@ -683,6 +718,7 @@ class OscService : Service() {
                         if (_visPinnedChannel.value > 0) keep.add(_visPinnedChannel.value)
                         _visState.value = current.copy(
                             primaryChannel = effectivePrimary,
+                            primaryConfirmed = primary >= 1,
                             clusterId = clusterId,
                             selectionSet = selection,
                             rows = current.rows.filterKeys { it in keep })
@@ -728,8 +764,8 @@ class OscService : Service() {
         val compatible = existing != null &&
                 existing.numOutputs == numOutputs && existing.numReverbs == numReverbs
         val row = VisRow(
-            delaysMs = delays ?: (if (compatible) existing!!.delaysMs else FloatArray(numOutputs + numReverbs)),
-            levelsDb = levels ?: (if (compatible) existing!!.levelsDb else FloatArray(numOutputs + numReverbs) { -60f }),
+            delaysMs = delays ?: (if (compatible) existing.delaysMs else FloatArray(numOutputs + numReverbs)),
+            levelsDb = levels ?: (if (compatible) existing.levelsDb else FloatArray(numOutputs + numReverbs) { -60f }),
             numOutputs = numOutputs,
             numReverbs = numReverbs,
             revision = ++visRowRevision,

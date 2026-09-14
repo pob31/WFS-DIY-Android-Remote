@@ -23,9 +23,9 @@ class VisRefreshWatchdogTest {
         )
 
     private fun state(rows: Map<Int, VisRow>, numOutputs: Int = 2, primary: Int = 1,
-                      selection: List<Int> = emptyList()) =
-        VisualisationState(primaryChannel = primary, selectionSet = selection,
-            numOutputs = numOutputs, numReverbs = 1, rows = rows)
+                      selection: List<Int> = emptyList(), primaryConfirmed: Boolean = false) =
+        VisualisationState(primaryChannel = primary, primaryConfirmed = primaryConfirmed,
+            selectionSet = selection, numOutputs = numOutputs, numReverbs = 1, rows = rows)
 
     private fun inventory(vararg numbers: Int) =
         ChannelInventory(numbers.map { ChannelInfo(it, isStereo = false) })
@@ -57,6 +57,20 @@ class VisRefreshWatchdogTest {
     @Test
     fun anInventoryNotKnownYetKeepsThePrimary() {
         assertEquals(listOf(1), displayedVisChannels(state(emptyMap(), primary = 1), 0, ChannelInventory()))
+    }
+
+    @Test
+    fun aPrimaryTheDesktopNamedIsShownEvenWhenTheInventoryHasNotCaughtUp() {
+        // Channel 9 was added and selected on the desktop, and the /remote/channelList
+        // announcing it was lost: the desktop still sends its rows.
+        val s = state(emptyMap(), primary = 9, primaryConfirmed = true)
+        assertEquals(listOf(9), displayedVisChannels(s, 0, inventory(1, 4)))
+    }
+
+    @Test
+    fun aKeptPrimaryTheDesktopNoLongerVouchesForStillGivesWay() {
+        val s = state(emptyMap(), primary = 9, primaryConfirmed = false)
+        assertEquals(listOf(1), displayedVisChannels(s, 0, inventory(1, 4)))
     }
 
     // --- VisRefreshWatchdog ---

@@ -42,7 +42,7 @@
       "metricDelays": "Delays",
       "metricLevels": "Levels",
       "noData": "Waiting for data…",
-      "desktopNotHearing": "The desktop isn't receiving this tablet — check its Remote target IP/port, IP filter and firewall",
+      "desktopNotHearing": "The computer isn't receiving this tablet — check IP Address and Outgoing Port in this tablet's Settings, then the computer's UDP receive port, IP filter and firewall",
       "requiresServerUpdate": "This tab needs a newer WFS-DIY on the computer (protocol v3)"
     },
 

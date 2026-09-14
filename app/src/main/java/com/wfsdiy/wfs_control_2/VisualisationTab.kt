@@ -286,10 +286,12 @@ fun VisualisationTab(
 
 /**
  * The channels the tab shows rows for: the pinned one, else the desktop's selection,
- * else its primary. A primary that is not live (the default 1 before any selection
- * arrived, or a deleted channel an older desktop still names) gives way to the first
- * live channel, instead of the bars waiting on rows that can never come. An inventory
- * that is not known yet vetoes nothing.
+ * else its primary. A primary the desktop has not vouched for (the default 1 before any
+ * selection arrived, or one kept when an older desktop sent 0 for a deleted channel)
+ * gives way to the first live channel if it is not live, instead of the bars waiting on
+ * rows that can never come. One the desktop named is always shown: it is live there,
+ * and this tablet's inventory may simply not have caught up (a lost /remote/channelList
+ * after the channel was added). An inventory that is not known yet vetoes nothing.
  */
 internal fun displayedVisChannels(
     state: VisualisationState,
@@ -298,7 +300,8 @@ internal fun displayedVisChannels(
 ): List<Int> = when {
     pinnedChannel > 0 -> listOf(pinnedChannel)
     state.selectionSet.isNotEmpty() -> state.selectionSet
-    inventory.isEmpty || inventory.contains(state.primaryChannel) -> listOf(state.primaryChannel)
+    state.primaryConfirmed || inventory.isEmpty || inventory.contains(state.primaryChannel) ->
+        listOf(state.primaryChannel)
     else -> listOf(inventory.numbers.first())
 }
 
@@ -455,13 +458,14 @@ private fun BargraphRow(
                 val x = if (i < row.numOutputs) i * unitWidth
                         else (i + gapUnits) * unitWidth
                 // A NaN made the rounding throw. Any non-finite value now draws an empty
-                // bar and no label.
+                // bar and no label: a fraction of 0 for both metrics, where a stand-in
+                // value of 0 would read as a full 0 dB level.
                 val raw = values[i]
-                val value = if (raw.isFinite()) raw else 0f
-                val fraction = if (useDelays)
-                    (value / VIS_DELAY_MAX_MS).coerceIn(0f, 1f)
-                else
-                    ((value - VIS_LEVEL_MIN_DB) / -VIS_LEVEL_MIN_DB).coerceIn(0f, 1f)
+                val fraction = when {
+                    !raw.isFinite() -> 0f
+                    useDelays -> (raw / VIS_DELAY_MAX_MS).coerceIn(0f, 1f)
+                    else -> ((raw - VIS_LEVEL_MIN_DB) / -VIS_LEVEL_MIN_DB).coerceIn(0f, 1f)
+                }
 
                 drawRect(
                     color = VIS_BAR_BACKGROUND,

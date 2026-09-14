@@ -42,7 +42,7 @@
       "metricDelays": "Délais",
       "metricLevels": "Niveaux",
       "noData": "En attente de données…",
-      "desktopNotHearing": "L'ordinateur ne reçoit pas cette tablette — vérifiez l'IP/le port de sa cible Remote, le filtre IP et le pare-feu",
+      "desktopNotHearing": "L'ordinateur ne reçoit pas cette tablette — vérifiez l'adresse IP et le port sortant dans les Paramètres de la tablette, puis le port de réception UDP, le filtre IP et le pare-feu de l'ordinateur",
       "requiresServerUpdate": "Cet onglet nécessite un WFS-DIY plus récent sur l'ordinateur (protocole v3)"
     },
 
