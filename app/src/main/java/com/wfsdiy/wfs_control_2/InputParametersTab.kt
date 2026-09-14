@@ -2346,12 +2346,11 @@ private fun RenderInputSection(
                         loc("inputs.toggles.stereoAxisLockOn")
                     ),
                     onSelectionChange = { index ->
+                        // The index is the immediate feedback; the send publishes the value
+                        // through the service's atomic update. No setParameter: that writes
+                        // into the published state's map in place, racing the OSC thread's
+                        // copy of it.
                         stereoAxisLockIndex = index
-                        selectedChannel.setParameter("stereoAxisLock", InputParameterValue(
-                            normalizedValue = index.toFloat(),
-                            stringValue = "",
-                            displayValue = listOf("OFF", "ON")[index]
-                        ))
                         viewModel.sendInputParameterInt("/remoteInput/stereoAxisLock", inputId, index)
                     },
                     activeIndex = 1,
