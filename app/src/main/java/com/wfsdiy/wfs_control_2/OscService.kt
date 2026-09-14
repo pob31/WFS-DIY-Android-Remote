@@ -28,7 +28,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import com.wfsdiy.wfs_control_2.localization.locStatic
-import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
@@ -1057,86 +1056,7 @@ class OscService : Service() {
         // the gesture is handled by the activeClusterTranslations skip in
         // InputMapTab's LaunchedEffect, not by dropping updates here.
 
-        val paramValue = when {
-            stringValue != null -> {
-                InputParameterValue(
-                    normalizedValue = 0f,
-                    stringValue = stringValue,
-                    displayValue = stringValue
-                )
-            }
-            intValue != null -> {
-                // For dropdowns and text buttons, don't normalize - store the integer directly
-                // ON/OFF switches use 0=OFF, 1=ON matching JUCE convention (no inversion needed)
-                // For direction dials, we need special handling to normalize with proper range coercion
-                // NONE covers values that are data rather than a control -- inputColour, a
-                // 24-bit RGB -- where normalising to 0..1 and back would be lossy and
-                // meaningless. A Float represents every integer up to 2^24 exactly and the
-                // colour maxes at 2^24 - 1, so storing it raw here round-trips.
-                val shouldNotNormalize = definition.uiType == UIComponentType.DROPDOWN ||
-                                        definition.uiType == UIComponentType.TEXT_BUTTON ||
-                                        definition.uiType == UIComponentType.NONE
-
-                val normalized = if (shouldNotNormalize) {
-                    intValue.toFloat()
-                } else if (definition.uiType == UIComponentType.DIRECTION_DIAL) {
-                    // Special handling for direction dials: coerce to range and normalize
-                    val coercedValue = when {
-                        definition.formula == "(x*360)-180" -> {
-                            // For rotation (-179 to 180): coerce using modulo and normalize
-                            val coerced = ((intValue % 360) + 360) % 360
-                            val rangeValue = if (coerced > 180) coerced - 360 else coerced
-                            (rangeValue + 180f) / 360f
-                        }
-                        definition.formula == "x*359-179" -> {
-                            // For phase (-179 to 180): convert from any range and normalize
-                            val rangeValue = if (intValue > 180) intValue - 360 else if (intValue < -179) intValue + 360 else intValue
-                            (rangeValue.coerceIn(-179, 180) + 179f) / 359f
-                        }
-                        else -> {
-                            // For other direction dials, use standard reverse formula
-                            InputParameterDefinitions.reverseFormula(definition, intValue.toFloat())
-                        }
-                    }
-                    coercedValue
-                } else {
-                    InputParameterDefinitions.reverseFormula(definition, intValue.toFloat())
-                }
-
-                val actualValue = if (shouldNotNormalize) {
-                    intValue.toFloat()
-                } else {
-                    InputParameterDefinitions.applyFormula(definition, normalized)
-                }
-
-                val displayText = if (definition.enumValues != null && intValue >= 0 && intValue < definition.enumValues.size) {
-                    definition.enumValues[intValue]
-                } else {
-                    "${actualValue.toInt()}${definition.unit ?: ""}"
-                }
-                InputParameterValue(
-                    normalizedValue = normalized,
-                    stringValue = "",
-                    displayValue = displayText
-                )
-            }
-            floatValue != null -> {
-                // For phase dials, incoming floats from JUCE state dump may be in 0-360 range
-                val adjustedFloat = if (definition.formula == "x*359-179" && floatValue > 180f) {
-                    floatValue - 360f
-                } else {
-                    floatValue
-                }
-                val normalized = InputParameterDefinitions.reverseFormula(definition, adjustedFloat)
-                val actualValue = InputParameterDefinitions.applyFormula(definition, normalized)
-                InputParameterValue(
-                    normalizedValue = normalized,
-                    stringValue = "",
-                    displayValue = "${String.format(Locale.US, "%.2f", actualValue)}${definition.unit ?: ""}"
-                )
-            }
-            else -> return
-        }
+        val paramValue = InputParameterDefinitions.inboundValue(definition, intValue, floatValue, stringValue) ?: return
 
         // Read-modify-write as one compare-and-set loop. Two threads write here: the OSC
         // processing coroutine (every inbound value) and the UI thread (the local echo of

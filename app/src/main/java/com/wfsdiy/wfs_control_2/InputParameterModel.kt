@@ -1,7 +1,9 @@
 package com.wfsdiy.wfs_control_2
 
+import java.util.Locale
 import kotlin.math.log10
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
 /**
  * Represents the type of data for a parameter
@@ -1299,9 +1301,115 @@ object InputParameterDefinitions {
     )
     
     val parametersByGroup: Map<String, List<InputParameterDefinition>> = allParameters.groupBy { it.group }
-    
+
     val parametersByVariableName: Map<String, InputParameterDefinition> = allParameters.associateBy { it.variableName }
-    
+
+    /**
+     * The value to store for one inbound /remoteInput argument, or null to ignore it.
+     * Exactly one of [intValue], [floatValue] and [stringValue] carries the argument.
+     *
+     * A numeric parameter can arrive as text: desktops before 1.0.0beta50 echo a value
+     * that a snapshot recall, a session load or an undo left in their tree as a string
+     * as ",is". It is read as the number it holds, through the int or float path of its
+     * parameter; stored as text it sat at normalized 0, the bottom of the control's
+     * range, until the next dump. Text that is not a number is ignored.
+     */
+    fun inboundValue(
+        definition: InputParameterDefinition,
+        intValue: Int? = null,
+        floatValue: Float? = null,
+        stringValue: String? = null
+    ): InputParameterValue? {
+        if (stringValue != null && definition.dataType != ParameterType.STRING) {
+            val number = stringValue.trim().toFloatOrNull()?.takeIf { it.isFinite() } ?: return null
+            return if (definition.dataType == ParameterType.INT)
+                inboundValue(definition, intValue = number.roundToInt())
+            else
+                inboundValue(definition, floatValue = number)
+        }
+
+        return when {
+            stringValue != null -> {
+                InputParameterValue(
+                    normalizedValue = 0f,
+                    stringValue = stringValue,
+                    displayValue = stringValue
+                )
+            }
+            intValue != null -> {
+                // For dropdowns and text buttons, don't normalize - store the integer directly
+                // ON/OFF switches use 0=OFF, 1=ON matching JUCE convention (no inversion needed)
+                // For direction dials, we need special handling to normalize with proper range coercion
+                // NONE covers values that are data rather than a control -- inputColour, a
+                // 24-bit RGB -- where normalising to 0..1 and back would be lossy and
+                // meaningless. A Float represents every integer up to 2^24 exactly and the
+                // colour maxes at 2^24 - 1, so storing it raw here round-trips.
+                val shouldNotNormalize = definition.uiType == UIComponentType.DROPDOWN ||
+                                        definition.uiType == UIComponentType.TEXT_BUTTON ||
+                                        definition.uiType == UIComponentType.NONE
+
+                val normalized = if (shouldNotNormalize) {
+                    intValue.toFloat()
+                } else if (definition.uiType == UIComponentType.DIRECTION_DIAL) {
+                    // Special handling for direction dials: coerce to range and normalize
+                    val coercedValue = when {
+                        definition.formula == "(x*360)-180" -> {
+                            // For rotation (-179 to 180): coerce using modulo and normalize
+                            val coerced = ((intValue % 360) + 360) % 360
+                            val rangeValue = if (coerced > 180) coerced - 360 else coerced
+                            (rangeValue + 180f) / 360f
+                        }
+                        definition.formula == "x*359-179" -> {
+                            // For phase (-179 to 180): convert from any range and normalize
+                            val rangeValue = if (intValue > 180) intValue - 360 else if (intValue < -179) intValue + 360 else intValue
+                            (rangeValue.coerceIn(-179, 180) + 179f) / 359f
+                        }
+                        else -> {
+                            // For other direction dials, use standard reverse formula
+                            reverseFormula(definition, intValue.toFloat())
+                        }
+                    }
+                    coercedValue
+                } else {
+                    reverseFormula(definition, intValue.toFloat())
+                }
+
+                val actualValue = if (shouldNotNormalize) {
+                    intValue.toFloat()
+                } else {
+                    applyFormula(definition, normalized)
+                }
+
+                val displayText = if (definition.enumValues != null && intValue >= 0 && intValue < definition.enumValues.size) {
+                    definition.enumValues[intValue]
+                } else {
+                    "${actualValue.toInt()}${definition.unit ?: ""}"
+                }
+                InputParameterValue(
+                    normalizedValue = normalized,
+                    stringValue = "",
+                    displayValue = displayText
+                )
+            }
+            floatValue != null -> {
+                // For phase dials, incoming floats from JUCE state dump may be in 0-360 range
+                val adjustedFloat = if (definition.formula == "x*359-179" && floatValue > 180f) {
+                    floatValue - 360f
+                } else {
+                    floatValue
+                }
+                val normalized = reverseFormula(definition, adjustedFloat)
+                val actualValue = applyFormula(definition, normalized)
+                InputParameterValue(
+                    normalizedValue = normalized,
+                    stringValue = "",
+                    displayValue = "${String.format(Locale.US, "%.2f", actualValue)}${definition.unit ?: ""}"
+                )
+            }
+            else -> null
+        }
+    }
+
     /**
      * Apply formula to convert normalized value (0-1) to actual value
      */
