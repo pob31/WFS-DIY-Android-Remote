@@ -884,6 +884,19 @@ class OscService : Service() {
         }
     }
 
+    /**
+     * The final value of a control gesture on one float parameter - a dial let go, a
+     * value typed in - sent for the same reasons and in the same way as
+     * [sendStereoImageFinal].
+     */
+    fun sendInputParameterFloatFinal(oscPath: String, inputId: Int, value: Float) {
+        serviceScope.launch {
+            delay(GESTURE_FINAL_SEND_DELAY_MS)
+            OscThrottleManager.clearPending(OscThrottleManager.inputParameterKey(oscPath, inputId))
+            sendInputParameterFloatNow(oscPath, inputId, value)
+        }
+    }
+
     // Unthrottled twins of sendInputParameterInt/Float, for a gesture's final value: the
     // same local update first, then a send that neither waits behind the throttle nor is
     // parked as a pending.

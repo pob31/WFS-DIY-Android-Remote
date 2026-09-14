@@ -82,6 +82,9 @@ data class InputChannelState(
         return parameters[variableName] ?: InputParameterValue()
     }
 
+    /** True once a value has arrived for this parameter; never inserts either. */
+    fun hasParameter(variableName: String): Boolean = parameters.containsKey(variableName)
+
     fun setParameter(variableName: String, value: InputParameterValue) {
         parameters[variableName] = value
     }
@@ -1298,8 +1301,27 @@ object InputParameterDefinitions {
             locKey = "inputs.labels.gyrophone",
             enumLocKeys = listOf("inputs.lfo.gyrophone.antiClockwise", "inputs.lfo.gyrophone.off", "inputs.lfo.gyrophone.clockwise")
         )
+    ) + (1..ArraySends.ARRAY_COUNT).map(::arrayAttenDefinition)
+
+    // Array Attenuation group: one level per speaker array, generated rather than
+    // written out ten times. A function, not a val, so it is safe to call from the
+    // initializer above.
+    private fun arrayAttenDefinition(array: Int) = InputParameterDefinition(
+        group = "Array Attenuation",
+        label = "Array $array",
+        variableName = ArraySends.variableName(array),
+        oscPath = ArraySends.oscPath(array),
+        isIncoming = true,
+        isOutgoing = true,
+        uiType = UIComponentType.DIAL,
+        dataType = ParameterType.FLOAT,
+        minValue = ArraySends.MIN_DB,
+        maxValue = ArraySends.MAX_DB,
+        formula = ArraySends.FORMULA,
+        unit = "dB",
+        note = "Dimmed when no output belongs to Array $array (/remote/vis/outputArrays)"
     )
-    
+
     val parametersByGroup: Map<String, List<InputParameterDefinition>> = allParameters.groupBy { it.group }
 
     val parametersByVariableName: Map<String, InputParameterDefinition> = allParameters.associateBy { it.variableName }

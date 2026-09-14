@@ -114,6 +114,7 @@ fun InputParametersTab(
     }
 
     // State for section expansion and references
+    var isArrayAttenuationExpanded by remember { mutableStateOf(false) }
     var isDirectivityExpanded by remember { mutableStateOf(false) }
     var isLiveSourceExpanded by remember { mutableStateOf(false) }
     var isFloorReflectionsExpanded by remember { mutableStateOf(false) }
@@ -124,6 +125,7 @@ fun InputParametersTab(
     val scrollState = rememberScrollState()
 
     // Track section positions for shortcut buttons
+    var arrayAttenuationSectionPosition by remember { mutableFloatStateOf(0f) }
     var directivitySectionPosition by remember { mutableFloatStateOf(0f) }
     var liveSourceSectionPosition by remember { mutableFloatStateOf(0f) }
     var floorReflectionsSectionPosition by remember { mutableFloatStateOf(0f) }
@@ -212,7 +214,21 @@ fun InputParametersTab(
             isPhone = isPhone,
             refreshTrigger = refreshTrigger
         )
-        
+
+        // Array Attenuation Group: the input's level to each speaker array
+        RenderArrayAttenuationSection(
+            selectedChannel = selectedChannel,
+            viewModel = viewModel,
+            spacing = spacing,
+            screenWidthDp = screenWidthDp,
+            isPhone = isPhone,
+            isExpanded = isArrayAttenuationExpanded,
+            onExpandedChange = { isArrayAttenuationExpanded = it },
+            scrollState = scrollState,
+            coroutineScope = coroutineScope,
+            onPositionChanged = { arrayAttenuationSectionPosition = it }
+        )
+
         // Directivity Group (now has its own collapsible header)
         RenderDirectivitySection(
             selectedChannel = selectedChannel,
@@ -320,6 +336,19 @@ fun InputParametersTab(
                             scrollState.animateScrollTo(0)
                         }
                         recentlyClickedShortcut = "Top"
+                    }
+                )
+                HorizontalSectionShortcutButton(
+                    text = loc("inputs.sections.arrayAttenuation"),
+                    isHighlighted = recentlyClickedShortcut == "Array Attenuation",
+                    onClick = {
+                        isArrayAttenuationExpanded = true
+                        if (arrayAttenuationSectionPosition > 0) {
+                            coroutineScope.launch {
+                                scrollState.animateScrollTo(arrayAttenuationSectionPosition.toInt())
+                            }
+                        }
+                        recentlyClickedShortcut = "Array Attenuation"
                     }
                 )
                 HorizontalSectionShortcutButton(
@@ -2383,6 +2412,201 @@ private fun RenderInputSection(
                 Text(loc("inputs.help.stereoAxisDial"), fontSize = 10.sp, color = Color.LightGray)
                 Text(loc("inputs.help.stereoAxisLockButton"), fontSize = 10.sp, color = Color.LightGray)
             }
+        }
+    }
+}
+
+/**
+ * The input's level to each of the ten speaker arrays (the desktop's Array Attenuation
+ * dials): one dial per array in the array's colour, dimmed when no output belongs to
+ * the array, as on the desktop. One row on tablets, two rows of five on phones.
+ */
+@Composable
+private fun RenderArrayAttenuationSection(
+    selectedChannel: InputChannelState,
+    viewModel: MainActivityViewModel,
+    spacing: ResponsiveSpacing,
+    screenWidthDp: androidx.compose.ui.unit.Dp,
+    isPhone: Boolean,
+    isExpanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    scrollState: androidx.compose.foundation.ScrollState,
+    coroutineScope: kotlinx.coroutines.CoroutineScope,
+    onPositionChanged: (Float) -> Unit
+) {
+    var sectionYPosition by remember { mutableStateOf(0f) }
+
+    LaunchedEffect(isExpanded) {
+        if (isExpanded && sectionYPosition > 0) {
+            coroutineScope.launch {
+                scrollState.animateScrollTo(sectionYPosition.toInt())
+            }
+        }
+    }
+
+    // Collapsible header
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = screenWidthDp * 0.1f, end = screenWidthDp * 0.1f)
+            .clickable { onExpandedChange(!isExpanded) }
+            .onGloballyPositioned { coordinates ->
+                sectionYPosition = coordinates.positionInParent().y
+                onPositionChanged(sectionYPosition)
+            }
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = loc("inputs.sections.arrayAttenuation"),
+            fontSize = 18.sp,
+            color = Color(0xFF00BCD4),
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = if (isExpanded) "▼" else "▶",
+            fontSize = 16.sp,
+            color = Color(0xFF00BCD4)
+        )
+    }
+
+    if (isExpanded) {
+        // Collected only while expanded, and read inside derivedStateOf, so the
+        // Visualisation stream's updates recompose this section only when the set of
+        // arrays without outputs actually changes
+        val visState = viewModel.visState.collectAsState()
+        val dimmedArrays by remember { derivedStateOf { ArraySends.dimmedArrays(visState.value.outputArrays) } }
+
+        // A desktop before 1.0.0beta50 never sends the levels: rather than show ten
+        // dials at the bottom of their range, keep them disabled until a value arrives
+        val received = (1..ArraySends.ARRAY_COUNT).any { selectedChannel.hasParameter(ArraySends.variableName(it)) }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = if (isPhone) screenWidthDp * 0.05f else screenWidthDp * 0.1f),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(spacing.smallSpacing)
+        ) {
+            if (!received) {
+                Text(
+                    text = loc("inputs.help.arrayAttenWaiting"),
+                    fontSize = 12.sp,
+                    color = Color.LightGray,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val perRow = if (isPhone) ArraySends.ARRAY_COUNT / 2 else ArraySends.ARRAY_COUNT
+                val gap = 8.dp
+                val diameter = minOf((maxWidth - gap * (perRow - 1)) / perRow, 120.dp)
+
+                Column(verticalArrangement = Arrangement.spacedBy(spacing.smallSpacing)) {
+                    (1..ArraySends.ARRAY_COUNT).chunked(perRow).forEach { rowArrays ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(gap)
+                        ) {
+                            rowArrays.forEach { array ->
+                                key(array) {
+                                    ArrayAttenuationDial(
+                                        array = array,
+                                        selectedChannel = selectedChannel,
+                                        viewModel = viewModel,
+                                        diameter = diameter,
+                                        dimmed = array in dimmedArrays,
+                                        enabled = received,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArrayAttenuationDial(
+    array: Int,
+    selectedChannel: InputChannelState,
+    viewModel: MainActivityViewModel,
+    diameter: androidx.compose.ui.unit.Dp,
+    dimmed: Boolean,
+    enabled: Boolean,
+    modifier: Modifier = Modifier
+) {
+    // Read through state: the dial installs its drag handler once, so its callbacks
+    // must not capture the channel they were first composed with
+    val inputId by rememberUpdatedState(selectedChannel.inputId)
+    val oscPath = ArraySends.oscPath(array)
+    val definition = InputParameterDefinitions.parametersByVariableName[ArraySends.variableName(array)]!!
+    val level = selectedChannel.getParameter(ArraySends.variableName(array))
+
+    var dialValue by remember { mutableFloatStateOf(level.normalizedValue) }
+    var displayValue by remember {
+        mutableStateOf(ArraySends.formatDb(InputParameterDefinitions.applyFormula(definition, level.normalizedValue)))
+    }
+    // Bumped by every typed commit to rebuild the dial, whose text field otherwise keeps
+    // what was typed when the committed value displays the same as before (a typed -75
+    // clamped to a dial already at -60.0)
+    var commits by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(inputId, level.normalizedValue) {
+        dialValue = level.normalizedValue
+        displayValue = ArraySends.formatDb(InputParameterDefinitions.applyFormula(definition, level.normalizedValue))
+    }
+
+    val arrayColour = getMarkerColor(array, isClusterMarker = true)
+
+    Column(
+        modifier = modifier.graphicsLayer { alpha = if (dimmed || !enabled) 0.3f else 1f },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "${loc("remote.arrayAdjust.arrayPrefix")} $array",
+            fontSize = 12.sp,
+            color = arrayColour,
+            maxLines = 1
+        )
+        key(commits) {
+            BasicDial(
+                value = dialValue,
+                onValueChange = { newValue ->
+                    dialValue = newValue
+                    val db = InputParameterDefinitions.applyFormula(definition, newValue)
+                    displayValue = ArraySends.formatDb(db)
+                    // The service updates the local state atomically; no setParameter here
+                    viewModel.sendInputParameterFloat(oscPath, inputId, db)
+                },
+                dialColor = Color.DarkGray,
+                indicatorColor = Color.White,
+                trackColor = arrayColour,
+                // Nothing received yet: no number rather than the -60 dB an unset dial reads
+                displayedValue = if (enabled) displayValue else "--",
+                valueUnit = if (enabled) "dB" else "",
+                isValueEditable = enabled,
+                onValueCommit = { text ->
+                    ArraySends.parseDbCommit(text)?.let { db ->
+                        dialValue = InputParameterDefinitions.reverseFormula(definition, db)
+                        displayValue = ArraySends.formatDb(db)
+                        viewModel.sendInputParameterFloatFinal(oscPath, inputId, db)
+                    }
+                    commits++
+                },
+                valueTextColor = Color.White,
+                enabled = enabled,
+                diameter = diameter,
+                // The throttle can hold a drag's last value back; send it on release
+                onValueChangeFinished = {
+                    viewModel.sendInputParameterFloatFinal(
+                        oscPath, inputId, InputParameterDefinitions.applyFormula(definition, dialValue))
+                }
+            )
         }
     }
 }

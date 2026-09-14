@@ -327,6 +327,19 @@ Parameters are organized into logical groups:
 - Rotary dial
 - Additional attenuation applied to all speakers
 
+#### Array Attenuation Group
+
+**Array 1 to Array 10** (-60 to 0 dB)
+- Ten rotary dials, one per speaker array, each in its array's colour (the colours
+  of the Visualisation tab and of the desktop)
+- How much of this input each array plays: 0 dB is full level
+- Tap a dial's value to type a level
+- A dial is dimmed when no output belongs to its array, as on the desktop; it still
+  works
+- One row of ten on tablets, two rows of five on phones
+- The dials stay disabled, with a note, until the computer sends the levels:
+  WFS-DIY 1.0.0beta50 or later
+
 #### Directivity Group
 
 ![Directivity Parameters](screenshots/directivity-params.png)

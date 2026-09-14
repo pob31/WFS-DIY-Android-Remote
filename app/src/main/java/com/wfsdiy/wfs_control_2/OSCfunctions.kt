@@ -68,6 +68,14 @@ import kotlin.times
 //     /remoteInput/rotation is now wrapped into -179..180 in whole degrees, as the
 //     desktop's own gesture sets it; a twist past +-180 used to be sent as it was and
 //     rejected.
+// Still v4: /remoteInput/arrayAtten1..10 (",if" channel, dB -60..0), read and written:
+//     the Input Parameters tab's Array Attenuation dials, an input's level to each
+//     speaker array. A dial's last value goes out once more, unthrottled, when it is
+//     let go or typed in. WFS-DIY 1.0.0beta50 routes them and sends them in its dumps
+//     and echoes; an older desktop never sends them, so the dials stay disabled, and
+//     would drop the writes at its catch-all. Numbers that arrive as text (",is", the
+//     echo of a value an older desktop holds as a string after a load, a recall or an
+//     undo) are read as the number they hold instead of as 0.
 const val REMOTE_PROTOCOL_VERSION = 4
 
 fun getPaddedBytes(input: String, charsets: java.nio.charset.Charset = Charsets.UTF_8): ByteArray {

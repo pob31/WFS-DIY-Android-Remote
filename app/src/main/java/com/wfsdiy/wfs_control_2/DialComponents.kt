@@ -102,6 +102,9 @@ private data class ResponsiveDialSizes(
  * @param onDisplayedValueChange Callback when displayed value changes
  * @param valueTextColor Color of the value text
  * @param enabled Whether the dial is interactive
+ * @param diameter A fixed size instead of the responsive size times [sizeMultiplier], for
+ *   dials laid out to fit a width; the text keeps the proportion it has at 0.7
+ * @param onValueChangeFinished Called when a drag ends or is cancelled
  */
 @Composable
 fun BasicDial(
@@ -118,12 +121,20 @@ fun BasicDial(
     onValueCommit: (String) -> Unit = {},
     valueTextColor: Color = Color.White,
     enabled: Boolean = true,
-    sizeMultiplier: Float = 1.0f
+    sizeMultiplier: Float = 1.0f,
+    diameter: Dp? = null,
+    onValueChangeFinished: (() -> Unit)? = null
 ) {
     val responsiveSizes = getResponsiveDialSizes()
-    val dialSize = responsiveSizes.dialSize * sizeMultiplier
-    val strokeWidth = responsiveSizes.strokeWidth * sizeMultiplier
-    val textSize = responsiveSizes.dialSize // Original size for text, unaffected by multiplier
+    val dialSize = diameter ?: (responsiveSizes.dialSize * sizeMultiplier)
+    val strokeWidth = responsiveSizes.strokeWidth *
+        (if (diameter != null) diameter / responsiveSizes.dialSize else sizeMultiplier)
+    // Original size for text, unaffected by multiplier. A fixed diameter scales it so
+    // the text sits in the dial as it does at the tab's usual 0.7.
+    val textSize = if (diameter != null) diameter / 0.7f else responsiveSizes.dialSize
+    // The drag handler below is installed once per `enabled`, so it must read the
+    // callback through state to reach the current one
+    val currentOnValueChangeFinished by rememberUpdatedState(onValueChangeFinished)
 
     // Convert value (0.0 to 1.0) to angle with dead zone at bottom
     val deadZoneAngle = 60f // Dead zone at bottom center
@@ -142,7 +153,8 @@ fun BasicDial(
                     if (enabled) {
                         detectDragGestures(
                             onDragStart = { },
-                            onDragEnd = { },
+                            onDragEnd = { currentOnValueChangeFinished?.invoke() },
+                            onDragCancel = { currentOnValueChangeFinished?.invoke() },
                             onDrag = { change, _ ->
                                 val center = Offset(size.width / 2f, size.height / 2f)
                                 val touchPosition = change.position
@@ -200,7 +212,7 @@ fun BasicDial(
         ) {
             val center = Offset(size.width / 2f, size.height / 2f)
             val radius = min(size.width, size.height) / 2f - strokeWidth.value / 2f
-            
+
             // Draw dial background circle
             drawCircle(
                 color = dialColor,

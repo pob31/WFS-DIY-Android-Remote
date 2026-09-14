@@ -201,6 +201,20 @@ All input parameter messages follow this pattern:
 ```
 - Range: 0.0 to 100.0
 
+#### Array Attenuation Group
+
+**Array Attenuation 1 to 10** (dB)
+```
+/remoteInput/arrayAtten1 <inputID:i> <dB:f>
+...
+/remoteInput/arrayAtten10 <inputID:i> <dB:f>
+```
+- Range: -60.0 to 0.0 (0 dB = the array plays the input at full level)
+- The input's level to each of the ten speaker arrays: the desktop's Array
+  Attenuation dials
+- Sent by WFS-DIY 1.0.0beta50 or later, in its state dumps and when the selected
+  input's levels change on the computer; an older desktop neither sends nor accepts them
+
 #### Directivity Group Parameters
 
 **Directivity** (degrees)

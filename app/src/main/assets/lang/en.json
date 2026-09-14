@@ -176,7 +176,8 @@
       "liveSource": "Live Source Attenuation",
       "floorReflections": "Floor Reflections",
       "jitter": "Jitter",
-      "lfo": "LFO"
+      "lfo": "LFO",
+      "arrayAttenuation": "Array Attenuation"
     },
 
     "labels": {
@@ -254,7 +255,8 @@
     "help": {
       "stereoWidthDial": "Stereo image width in metres: the physical distance between the pair's left and right legs. The channel position stays the centre of the pair. 0 m collapses the pair to a point source.",
       "stereoAxisDial": "Rotates the stereo spread axis, positive counter-clockwise seen from above. 0 = automatic: the pair spreads perpendicular to the line from the origin to the source. ±180° swaps left and right.",
-      "stereoAxisLockButton": "Locks the stereo image orientation: the pair spreads house left/right turned by the Axis value alone, instead of following the line from the origin to the source. Use it when the image has to hold still while the source walks."
+      "stereoAxisLockButton": "Locks the stereo image orientation: the pair spreads house left/right turned by the Axis value alone, instead of following the line from the origin to the source. Use it when the image has to hold still while the source walks.",
+      "arrayAttenWaiting": "Waiting for the computer: WFS-DIY 1.0.0beta50 or later sends these levels."
     },
 
     "toggles": {

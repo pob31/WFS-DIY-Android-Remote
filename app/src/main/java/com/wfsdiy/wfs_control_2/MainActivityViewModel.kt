@@ -135,6 +135,11 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
         oscService.sendHeightRotationFinal(inputId, positionZ, rotation)
     }
 
+    // The same for one float parameter's final value (a dial let go, a value typed in)
+    fun sendInputParameterFloatFinal(oscPath: String, inputId: Int, value: Float) {
+        oscService.sendInputParameterFloatFinal(oscPath, inputId, value)
+    }
+
     fun sendInputParameterString(oscPath: String, inputId: Int, value: String) {
         oscService.sendInputParameterString(oscPath, inputId, value)
     }

@@ -176,7 +176,8 @@
       "liveSource": "Dompteur de Source Live",
       "floorReflections": "Réflexions du sol",
       "jitter": "Gigue",
-      "lfo": "LFO"
+      "lfo": "LFO",
+      "arrayAttenuation": "Atténuation par groupe"
     },
 
     "labels": {
@@ -254,7 +255,8 @@
     "help": {
       "stereoWidthDial": "Largeur de l'image stéréo en mètres : la distance physique entre les branches gauche et droite de la paire. La position du canal reste le centre de la paire. 0 m réduit la paire à une source ponctuelle.",
       "stereoAxisDial": "Fait pivoter l'axe d'étalement stéréo, positif dans le sens antihoraire vu de dessus. 0 = automatique : la paire s'étale perpendiculairement à la ligne allant de l'origine à la source. ±180° échange la gauche et la droite.",
-      "stereoAxisLockButton": "Verrouille l'orientation de l'image stéréo : la paire s'ouvre à gauche/droite de la salle, tournée par la seule valeur d'Axe, au lieu de suivre la ligne de l'origine à la source. Utile lorsque l'image doit rester fixe pendant que la source se déplace."
+      "stereoAxisLockButton": "Verrouille l'orientation de l'image stéréo : la paire s'ouvre à gauche/droite de la salle, tournée par la seule valeur d'Axe, au lieu de suivre la ligne de l'origine à la source. Utile lorsque l'image doit rester fixe pendant que la source se déplace.",
+      "arrayAttenWaiting": "En attente de l'ordinateur : ces niveaux sont envoyés par WFS-DIY 1.0.0beta50 ou plus récent."
     },
 
     "toggles": {
