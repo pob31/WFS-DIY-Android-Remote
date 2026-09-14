@@ -63,9 +63,11 @@ import kotlin.times
 //     /remoteInput/stereoAxisOffset (",ii") from a second-finger pinch/twist: the
 //     addresses and tags the stereo row's dials already use, always in range, never
 //     inc/dec. A gesture's last pair goes out once more, unthrottled, 60 ms after it
-//     ends. The second finger's /remoteInput/rotation is now wrapped into -179..180 in
-//     whole degrees, as the desktop's own gesture sets it; a twist past +-180 used to
-//     be sent as it was and rejected.
+//     ends, and so does the plain second finger's last /remoteInput/positionZ and
+//     /remoteInput/rotation (also on a tab switch mid-gesture). The second finger's
+//     /remoteInput/rotation is now wrapped into -179..180 in whole degrees, as the
+//     desktop's own gesture sets it; a twist past +-180 used to be sent as it was and
+//     rejected.
 const val REMOTE_PROTOCOL_VERSION = 4
 
 fun getPaddedBytes(input: String, charsets: java.nio.charset.Charset = Charsets.UTF_8): ByteArray {

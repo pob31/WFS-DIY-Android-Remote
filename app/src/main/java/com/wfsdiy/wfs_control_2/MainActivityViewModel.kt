@@ -130,6 +130,11 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
         oscService.sendStereoImageFinal(inputId, width, axisOffset)
     }
 
+    // The same for a map input gesture's final height/orientation (NaN = never set)
+    fun sendHeightRotationFinal(inputId: Int, positionZ: Float, rotation: Float) {
+        oscService.sendHeightRotationFinal(inputId, positionZ, rotation)
+    }
+
     fun sendInputParameterString(oscPath: String, inputId: Int, value: String) {
         oscService.sendInputParameterString(oscPath, inputId, value)
     }

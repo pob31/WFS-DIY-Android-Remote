@@ -158,9 +158,9 @@ class OscService : Service() {
         // declared unable to hear us. It pings every 2 s, so this is 4-6 s; a working
         // handshake needs one ping, two if a pong is lost.
         private const val DESKTOP_NOT_HEARING_PINGS = 3
-        // How long a map stereo gesture's final pair waits before going out: longer than
-        // the 20 ms throttle replay, so any send still in flight lands first.
-        private const val STEREO_FINAL_SEND_DELAY_MS = 60L
+        // How long a map second-finger gesture's final values wait before going out:
+        // longer than the 20 ms throttle replay, so any send still in flight lands first.
+        private const val GESTURE_FINAL_SEND_DELAY_MS = 60L
         // How long after our socket starts a heartbeat with no ping yet is taken as the
         // desktop having missed our /remote/disconnect. Its heartbeats are 2 s apart, and
         // one already in flight when that disconnect landed arrives within this.
@@ -853,13 +853,35 @@ class OscService : Service() {
      */
     fun sendStereoImageFinal(inputId: Int, width: Float, axisOffset: Int) {
         serviceScope.launch {
-            delay(STEREO_FINAL_SEND_DELAY_MS)
+            delay(GESTURE_FINAL_SEND_DELAY_MS)
             val widthPath = "/remoteInput/stereoWidth"
             val axisPath = "/remoteInput/stereoAxisOffset"
             OscThrottleManager.clearPending(OscThrottleManager.inputParameterKey(widthPath, inputId))
             OscThrottleManager.clearPending(OscThrottleManager.inputParameterKey(axisPath, inputId))
             sendInputParameterFloatNow(widthPath, inputId, width)
             sendInputParameterIntNow(axisPath, inputId, axisOffset)
+        }
+    }
+
+    /**
+     * The final height and orientation of a map second-finger gesture on an input, sent
+     * when it ends, for the same reasons and in the same way as [sendStereoImageFinal].
+     * A non-finite value is one the gesture never set (the height needs the finger to
+     * start more than 10 px from the marker) and is left alone.
+     */
+    fun sendHeightRotationFinal(inputId: Int, positionZ: Float, rotation: Float) {
+        serviceScope.launch {
+            delay(GESTURE_FINAL_SEND_DELAY_MS)
+            val heightPath = "/remoteInput/positionZ"
+            val rotationPath = "/remoteInput/rotation"
+            if (positionZ.isFinite()) {
+                OscThrottleManager.clearPending(OscThrottleManager.inputParameterKey(heightPath, inputId))
+                sendInputParameterFloatNow(heightPath, inputId, positionZ)
+            }
+            if (rotation.isFinite()) {
+                OscThrottleManager.clearPending(OscThrottleManager.inputParameterKey(rotationPath, inputId))
+                sendInputParameterFloatNow(rotationPath, inputId, rotation)
+            }
         }
     }
 

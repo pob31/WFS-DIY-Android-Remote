@@ -995,6 +995,9 @@ fun WFSControlApp() {
                     onInputRotationChanged = { inputId, newRotation ->
                         viewModel?.sendInputParameterFloat("/remoteInput/rotation", inputId, newRotation)
                     },
+                    onInputHeightRotationGestureEnd = { inputId, newZ, newRotation ->
+                        viewModel?.sendHeightRotationFinal(inputId, newZ, newRotation)
+                    },
                     onClusterScale = { clusterId, scaleFactor ->
                         viewModel?.sendClusterScale(clusterId, scaleFactor)
                     },
