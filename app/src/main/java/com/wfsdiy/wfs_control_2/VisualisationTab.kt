@@ -1,5 +1,6 @@
 package com.wfsdiy.wfs_control_2
 
+import android.os.SystemClock
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,9 +20,12 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wfsdiy.wfs_control_2.localization.loc
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -29,9 +33,19 @@ import kotlin.math.roundToInt
 private val VIS_DELAY_COLOR = Color(0xFFD4A017)  // yellow
 private val VIS_LEVEL_COLOR = Color(0xFF4A90D9)  // blue
 private val VIS_BAR_BACKGROUND = Color(0xFF1A1A1A)
+// Amber like the protocol-mismatch banner: a setup problem, not a wait
+private val VIS_WARNING_COLOR = Color(0xFFFFA000)
 
 private const val VIS_DELAY_MAX_MS = 350f
 private const val VIS_LEVEL_MIN_DB = -60f
+
+// Pull path (/remote/vis/request). The tab checks its data every 2 s and asks at most
+// 6 times before it waits for fresh rows. A desktop that answers the request also
+// repeats its vis state at least every 2 s, so shown rows that have not moved for 6 s
+// mean it has lost our pin or stopped sending to us.
+private const val VIS_WATCHDOG_INTERVAL_MS = 2000L
+private const val VIS_REQUEST_MAX_ATTEMPTS = 6
+private const val VIS_ROW_STALE_MS = 6000L
 
 /**
  * Mirrors the desktop app's Input Visualisation bargraph (per-output delays and
@@ -57,6 +71,7 @@ fun VisualisationTab(
 ) {
     val visState by viewModel.visState.collectAsState()
     val pinnedChannel by viewModel.visPinnedChannel.collectAsState()
+    val desktopNotHearing by viewModel.desktopNotHearing.collectAsState()
     var showChannelPicker by remember { mutableStateOf(false) }
 
     // Server too old for /remote/vis/* — show a hint instead of empty bars
@@ -70,11 +85,34 @@ fun VisualisationTab(
         return
     }
 
-    val displayedChannels = when {
-        pinnedChannel > 0 -> listOf(pinnedChannel)
-        visState.selectionSet.isNotEmpty() -> visState.selectionSet
-        else -> listOf(visState.primaryChannel)
+    // Pull path. The desktop pushes vis on change, so a tablet that lost the push, or
+    // whose pin the desktop dropped, had nothing to recover from on a static scene. Ask
+    // on entry, on every reconnect while shown, and whenever the watchdog finds the
+    // shown data missing, half there or stale. Keyed on `connected` only: the loop reads
+    // the latest values, so a data update neither restarts it nor resets its budget.
+    val latestVisState by rememberUpdatedState(visState)
+    val latestPinnedChannel by rememberUpdatedState(pinnedChannel)
+    val latestInventory by rememberUpdatedState(inventory)
+    LaunchedEffect(connected) {
+        if (!connected) return@LaunchedEffect
+        val watchdog = VisRefreshWatchdog()
+        while (isActive) {
+            val state = latestVisState
+            val displayed = displayedVisChannels(state, latestPinnedChannel, latestInventory)
+            when (watchdog.next(state, displayed, SystemClock.elapsedRealtime())) {
+                VisRefreshWatchdog.Action.REQUEST -> viewModel.requestVisRefresh()
+                VisRefreshWatchdog.Action.RESYNC -> viewModel.requestVisFallbackResync()
+                VisRefreshWatchdog.Action.NONE -> {}
+            }
+            delay(VIS_WATCHDOG_INTERVAL_MS)
+        }
     }
+
+    // Pings arrive (green dot) but the desktop never hears our pongs, so it sends this
+    // tablet nothing: say what to check instead of "Waiting for data…".
+    val notHeard = connected && desktopNotHearing
+
+    val displayedChannels = displayedVisChannels(visState, pinnedChannel, inventory)
     val multiMode = displayedChannels.size > 1
 
     val configuration = LocalConfiguration.current
@@ -126,7 +164,19 @@ fun VisualisationTab(
                     }
                 }
 
-                Spacer(modifier = Modifier.weight(1f))
+                // The long hint takes the flexible slot, so it wraps there instead of
+                // squeezing the buttons.
+                if (notHeard) {
+                    Text(
+                        loc("remote.vis.desktopNotHearing"),
+                        color = VIS_WARNING_COLOR,
+                        fontSize = headerFontSize,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
 
                 if (multiMode) {
                     MetricToggleButton(loc("remote.vis.metricDelays"), showDelaysInMulti,
@@ -142,7 +192,13 @@ fun VisualisationTab(
 
             if (visState.numOutputs <= 0) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(loc("remote.vis.noData"), color = Color.Gray, fontSize = 16.sp)
+                    if (notHeard) {
+                        Text(loc("remote.vis.desktopNotHearing"), color = VIS_WARNING_COLOR,
+                            fontSize = 16.sp, textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 24.dp))
+                    } else {
+                        Text(loc("remote.vis.noData"), color = Color.Gray, fontSize = 16.sp)
+                    }
                 }
             } else if (!multiMode) {
                 // Single channel: delays on top, levels below (like the desktop sub-tab)
@@ -205,6 +261,83 @@ fun VisualisationTab(
                 onDismiss = { showChannelPicker = false }
             )
         }
+    }
+}
+
+/**
+ * The channels the tab shows rows for: the pinned one, else the desktop's selection,
+ * else its primary. A primary that is not live (the default 1 before any selection
+ * arrived, or a deleted channel an older desktop still names) gives way to the first
+ * live channel, instead of the bars waiting on rows that can never come. An inventory
+ * that is not known yet vetoes nothing.
+ */
+internal fun displayedVisChannels(
+    state: VisualisationState,
+    pinnedChannel: Int,
+    inventory: ChannelInventory
+): List<Int> = when {
+    pinnedChannel > 0 -> listOf(pinnedChannel)
+    state.selectionSet.isNotEmpty() -> state.selectionSet
+    inventory.isEmpty || inventory.contains(state.primaryChannel) -> listOf(state.primaryChannel)
+    else -> listOf(inventory.numbers.first())
+}
+
+/**
+ * Decides, on each pass of the tab's 2 s check while it is shown and connected, whether
+ * to ask the desktop for its vis state again. One instance per visit and connection:
+ * the effect that owns it restarts on every reconnect. Pure, with the clock passed in,
+ * so the policy can be unit-tested.
+ */
+internal class VisRefreshWatchdog(
+    private val maxAttempts: Int = VIS_REQUEST_MAX_ATTEMPTS,
+    private val staleMs: Long = VIS_ROW_STALE_MS
+) {
+    enum class Action { NONE, REQUEST, RESYNC }
+
+    private var entered = false
+    private var attempts = 0
+    private var newestRevisionSeen = Long.MIN_VALUE
+    private var resyncAsked = false
+
+    fun next(state: VisualisationState, displayed: List<Int>, nowMs: Long): Action {
+        // Fresh rows for what is shown: the desktop is answering, so a later gap is a
+        // new episode with a fresh budget. Without the budget, a desktop that cannot
+        // answer (older than the request, or not hearing us) would be asked forever.
+        val newestRevision = displayed.maxOfOrNull { state.rows[it]?.revision ?: Long.MIN_VALUE }
+            ?: Long.MIN_VALUE
+        if (newestRevision > newestRevisionSeen) {
+            newestRevisionSeen = newestRevision
+            attempts = 0
+        }
+        // Always on entry: the state can be old in ways no check sees (a lost selection
+        // change), and the request also restates our pin.
+        val wanted = !entered || needsRefresh(state, displayed, nowMs)
+        entered = true
+        if (!wanted) return Action.NONE
+        if (attempts < maxAttempts) {
+            attempts++
+            return Action.REQUEST
+        }
+        // Still no config after the last attempt: the desktop drops the request, or
+        // every reply was lost. Its full dump carries the config. The service also
+        // keeps this to once per connection, across visits.
+        if (state.numOutputs <= 0 && !resyncAsked) {
+            resyncAsked = true
+            return Action.RESYNC
+        }
+        return Action.NONE
+    }
+
+    /** No config yet, a shown row missing or only half there, or every shown row stale. */
+    fun needsRefresh(state: VisualisationState, displayed: List<Int>, nowMs: Long): Boolean {
+        if (state.numOutputs <= 0) return true
+        var newestReceivedMs = Long.MIN_VALUE
+        for (channel in displayed) {
+            val row = state.rows[channel] ?: return true
+            if (!row.hasDelays || !row.hasLevels) return true
+            newestReceivedMs = maxOf(newestReceivedMs, row.receivedAtMs)
+        }
+        return displayed.isNotEmpty() && nowMs - newestReceivedMs > staleMs
     }
 }
 

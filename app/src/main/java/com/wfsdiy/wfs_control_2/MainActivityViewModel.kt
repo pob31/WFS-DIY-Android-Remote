@@ -247,8 +247,20 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
     val visPinnedChannel: StateFlow<Int> = oscService.visPinnedChannel
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
+    // Pings keep arriving but the desktop never hears our pongs (see OscService)
+    val desktopNotHearing: StateFlow<Boolean> = oscService.desktopNotHearing
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     fun setVisPin(channel: Int) {
         oscService.setVisPin(channel)
+    }
+
+    fun requestVisRefresh() {
+        oscService.requestVisRefresh()
+    }
+
+    fun requestVisFallbackResync() {
+        oscService.requestVisFallbackResync()
     }
 
     // Factory for creating the ViewModel with the OscService dependency

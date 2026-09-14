@@ -45,6 +45,15 @@ import kotlin.times
 //     forever; nothing changes on the wire. A /remote/vis/selection primary of 0 (the
 //     desktop has no live selected channel) is accepted and keeps the previous
 //     primary instead of discarding the whole selection.
+// Still v4: /remote/vis/request (",i" pin, 0 = none), tablet -> desktop, asks for the
+//     whole vis state (config, output arrays, selection, rows), answered to this
+//     tablet only. Sent when the Visualisation tab is shown or reconnects, then every
+//     2 s while its data is missing, half there or stale, a bounded number of times.
+//     An older desktop drops the address at its catch-all and the tab waits for pushes
+//     as before; if even the config never came, one empty /remote/requestResync per
+//     connection fetches it from the dump. The pin (/remote/vis/pin, v3) is also
+//     restated at every /remote/dumpBegin: the desktop clears pins on each handshake,
+//     including ones this tablet never saw as a disconnect.
 const val REMOTE_PROTOCOL_VERSION = 4
 
 fun getPaddedBytes(input: String, charsets: java.nio.charset.Charset = Charsets.UTF_8): ByteArray {
@@ -758,6 +767,41 @@ fun sendOscVisPin(context: Context, channel: Int) {
             val oscPacketBytes = getPaddedBytes("/remote/vis/pin") +
                     getPaddedBytes(",i") +
                     channel.toBytesBigEndian()
+
+            DatagramSocket().use { socket ->
+                val inetAddress = InetAddress.getByName(ipAddressStr)
+                val packet = DatagramPacket(oscPacketBytes, oscPacketBytes.size, inetAddress, outgoingPort)
+                socket.send(packet)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
+
+/**
+ * Ask the server for its whole visualisation state (/remote/vis/request, still v4):
+ * config, output arrays, selection and rows, answered to this tablet only, with no
+ * dump and no change to the desktop's selection. [pinnedChannel] restates this
+ * tablet's pin (0 = none), which a re-handshake may have cleared on the desktop.
+ * Paced by the Visualisation tab (one every 2 s at most), so no throttle. A desktop
+ * older than the address drops it at its catch-all.
+ */
+fun sendOscVisRequest(context: Context, pinnedChannel: Int) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull()
+            if (outgoingPort == null || !isValidPort(outgoingPortStr)) {
+                return@launch
+            }
+            if (ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr)) {
+                return@launch
+            }
+
+            val oscPacketBytes = getPaddedBytes("/remote/vis/request") +
+                    getPaddedBytes(",i") +
+                    pinnedChannel.toBytesBigEndian()
 
             DatagramSocket().use { socket ->
                 val inetAddress = InetAddress.getByName(ipAddressStr)

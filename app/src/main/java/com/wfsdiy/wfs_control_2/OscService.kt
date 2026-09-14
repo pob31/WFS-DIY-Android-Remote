@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -30,19 +31,30 @@ import com.wfsdiy.wfs_control_2.localization.locStatic
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * One channel's visualisation rows (protocol v3, /remote/vis/delays + /remote/vis/levels).
  * Values are output channels first, then reverb feeds. Delays in ms; levels in
  * display-ready dB (clamped [-60, 0] server-side). The revision counter makes every
  * update distinct so Compose recomposes even when values are numerically identical.
+ *
+ * The two halves travel as separate datagrams, and a half that has not arrived is
+ * filled with placeholder values so the row can still be drawn. [hasDelays] and
+ * [hasLevels] say which halves are real, so a row with one half lost reads as
+ * incomplete rather than as a delay or a level of nothing. [receivedAtMs]
+ * (SystemClock.elapsedRealtime) is when either half last arrived, which tells the
+ * Visualisation tab that the desktop stopped refreshing it.
  */
 data class VisRow(
     val delaysMs: FloatArray,
     val levelsDb: FloatArray,
     val numOutputs: Int,
     val numReverbs: Int,
-    val revision: Long
+    val revision: Long,
+    val hasDelays: Boolean,
+    val hasLevels: Boolean,
+    val receivedAtMs: Long
 )
 
 /**
@@ -78,6 +90,17 @@ class OscService : Service() {
 
     private var lastHeartbeatReceivedTime: Long = 0
     private var connectionTimeoutJob: kotlinx.coroutines.Job? = null
+
+    // "The desktop cannot hear this tablet." The desktop pings only while its handshake
+    // with us is still Connecting; once one of our pongs lands it sends a dump (opened by
+    // /remote/dumpBegin) and heartbeats from then on. So pings that keep coming with
+    // neither in between mean our pongs never reach it: its Remote target IP or port is
+    // wrong, its IP filter drops us, or a firewall does. Meanwhile this side hears the
+    // pings, shows a green dot, and the Visualisation tab would wait for data forever,
+    // since the desktop sends a target nothing until the handshake completes.
+    private val pingsWithoutHeartbeat = AtomicInteger(0)
+    private val _desktopNotHearing = MutableStateFlow(false)
+    val desktopNotHearing: StateFlow<Boolean> = _desktopNotHearing.asStateFlow()
 
     // --- Connection-time state-dump completeness tracking ---
     // The server sends ~2000 messages (~70 UDP bundles) right after connect. UDP can
@@ -117,6 +140,10 @@ class OscService : Service() {
         // A count change walks one add/remove at a time and emits an /inputs per
         // step; collapse the storm into a single re-dump request.
         private const val INVENTORY_REFRESH_DEBOUNCE_MS = 700L
+        // Pings with no heartbeat or dumpBegin between them before the desktop is
+        // declared unable to hear us. It pings every 2 s, so this is 4-6 s; a working
+        // handshake needs one ping, two if a pong is lost.
+        private const val DESKTOP_NOT_HEARING_PINGS = 3
     }
 
     // Service state tracking
@@ -300,11 +327,19 @@ class OscService : Service() {
 
     // Channel pinned on the visualisation tab (0 = follow the desktop selection).
     // Service-scoped so the pin survives tab switches; re-sent to the server on
-    // reconnect (the server clears per-target pins on connect).
+    // reconnect, at every dumpBegin and in every /remote/vis/request (the server
+    // clears per-target pins on connect).
     private val _visPinnedChannel = MutableStateFlow(0)
     val visPinnedChannel: StateFlow<Int> = _visPinnedChannel.asStateFlow()
 
     private var visRowRevision = 0L
+
+    // Whether the Visualisation tab's last-resort full re-dump already went out on this
+    // connection (requestVisFallbackResync). Kept here rather than in the tab, which is
+    // disposed on every tab switch: re-entering the tab must not re-dump again. Cleared
+    // wherever a connection ends (endConnectionScopedVisState), so the next one starts
+    // with its own.
+    @Volatile private var visFallbackResyncSent = false
 
     // Store screen dimensions once at startup
     private var screenWidth: Float = 0f
@@ -451,6 +486,11 @@ class OscService : Service() {
                         sendOscPong(this@OscService, sequenceNumber)
                         _serverProtocolVersion.value = serverVersion
                         lastHeartbeatReceivedTime = System.currentTimeMillis()
+                        // The desktop pings only until one of our pongs lands, so a run
+                        // of them means it is not hearing us (desktopNotHearing above).
+                        if (pingsWithoutHeartbeat.incrementAndGet() >= DESKTOP_NOT_HEARING_PINGS) {
+                            _desktopNotHearing.value = true
+                        }
                         val wasConnected = _connectionState.value == RemoteConnectionState.CONNECTED
                         _connectionState.value = RemoteConnectionState.CONNECTED
                         startConnectionTimeoutMonitor()
@@ -479,6 +519,8 @@ class OscService : Service() {
                         // DISCONNECTED forever (asymmetric-loss deadlock).
                         sendOscHeartbeatAck(this@OscService, sequenceNumber)
                         lastHeartbeatReceivedTime = System.currentTimeMillis()
+                        // Heartbeats only go to a target whose pong landed.
+                        clearDesktopNotHearing()
                         if (_connectionState.value != RemoteConnectionState.CONNECTED) {
                             _connectionState.value = RemoteConnectionState.CONNECTED
                             startConnectionTimeoutMonitor()
@@ -489,6 +531,7 @@ class OscService : Service() {
                         _connectionState.value = RemoteConnectionState.DISCONNECTED
                         connectionTimeoutJob?.cancel()
                         resyncJob?.cancel()
+                        endConnectionScopedVisState()
                     },
                     onRemoteDumpBeginReceived = { dumpSeq, expectedCount ->
                         // A fresh full dump is starting (connect, project load, or full
@@ -496,10 +539,20 @@ class OscService : Service() {
                         // PREVIOUS dump don't mask losses in this one, and arm the
                         // fallback verifier in case both end markers get lost.
                         android.util.Log.d("OscService", "dumpBegin seq=$dumpSeq channels=$expectedCount")
+                        // The desktop dumps only to a target it hears.
+                        clearDesktopNotHearing()
                         resetSyncTracking()
                         if (expectedCount > 0) expectedChannelCount = expectedCount
                         currentDumpSeq = dumpSeq
                         scheduleResyncFallback()
+                        // Every handshake clears the desktop's per-target pins, including
+                        // one this tablet never saw as a disconnect (a restart of our
+                        // socket, a lost /remote/disconnect), and a dump always follows
+                        // it. Restating here also works with desktops that predate
+                        // /remote/vis/request, since the pin itself is v3.
+                        if (_visPinnedChannel.value > 0) {
+                            sendOscVisPin(this@OscService, _visPinnedChannel.value)
+                        }
                     },
                     onRemoteStateCompleteReceived = { expectedCount, dumpSeq ->
                         // Server finished the full dump. Verify we got every channel and
@@ -676,7 +729,12 @@ class OscService : Service() {
             levelsDb = levels ?: (if (compatible) existing!!.levelsDb else FloatArray(numOutputs + numReverbs) { -60f }),
             numOutputs = numOutputs,
             numReverbs = numReverbs,
-            revision = ++visRowRevision
+            revision = ++visRowRevision,
+            // The other half only counts if it was kept, i.e. it has the same shape
+            // as this one; otherwise it is the placeholder filled in just above.
+            hasDelays = delays != null || (compatible && existing.hasDelays),
+            hasLevels = levels != null || (compatible && existing.hasLevels),
+            receivedAtMs = SystemClock.elapsedRealtime()
         )
         _visState.value = current.copy(rows = current.rows + (channel to row))
     }
@@ -691,6 +749,31 @@ class OscService : Service() {
         serviceScope.launch {
             sendOscVisPin(this@OscService, channel)
         }
+    }
+
+    /**
+     * Ask the desktop for its whole visualisation state (/remote/vis/request), restating
+     * our pin. Paced by the Visualisation tab; a desktop that predates the address
+     * drops it.
+     */
+    fun requestVisRefresh() {
+        val pinned = _visPinnedChannel.value
+        serviceScope.launch {
+            sendOscVisRequest(this@OscService, pinned)
+        }
+    }
+
+    /**
+     * The Visualisation tab's last resort when no config came back from any of its
+     * requests: the desktop predates /remote/vis/request, or every reply was lost.
+     * Every v3+ desktop's full dump carries the vis config and output arrays. At most
+     * once per connection, so a tab left open, or shown again, never keeps re-dumping.
+     */
+    fun requestVisFallbackResync() {
+        if (visFallbackResyncSent) return
+        visFallbackResyncSent = true
+        android.util.Log.w("OscService", "No vis config after every /remote/vis/request - requesting a full re-dump")
+        requestFullResync()
     }
 
     fun sendMarkerPosition(markerId: Int, x: Float, y: Float, isCluster: Boolean) {
@@ -1025,6 +1108,7 @@ class OscService : Service() {
                 val timeSinceLastHeartbeat = System.currentTimeMillis() - lastHeartbeatReceivedTime
                 if (timeSinceLastHeartbeat >= CONNECTION_TIMEOUT_MS) {
                     _connectionState.value = RemoteConnectionState.DISCONNECTED
+                    endConnectionScopedVisState()
                     android.util.Log.d("OscService", "Connection timeout - no heartbeat for ${timeSinceLastHeartbeat}ms")
                     break
                 }
@@ -1047,6 +1131,21 @@ class OscService : Service() {
         // v3 inference in this one. The stored inventory itself is kept — a stale
         // one is still better than none while the new dump streams in.
         inventoryReceivedThisDump = false
+    }
+
+    // The desktop sends heartbeats and dumps only to a target it hears, so the run of
+    // pings that raised desktopNotHearing is over. Also cleared when the connection
+    // ends: with no pings at all there is nothing left to diagnose.
+    private fun clearDesktopNotHearing() {
+        pingsWithoutHeartbeat.set(0)
+        _desktopNotHearing.value = false
+    }
+
+    // The connection ended, or our socket restarted: what the Visualisation tab's
+    // recovery learned about this connection does not carry over to the next one.
+    private fun endConnectionScopedVisState() {
+        visFallbackResyncSent = false
+        clearDesktopNotHearing()
     }
 
     /**
@@ -1232,6 +1331,15 @@ class OscService : Service() {
         serviceScope.launch {
             // Wait for old server socket to fully close before rebinding
             oldJob?.cancelAndJoin()
+            // New network parameters may point at another desktop, and what the old one
+            // said would pass for its answer: counts and rows that satisfy the
+            // Visualisation tab's checks, a protocol version for the mismatch flag.
+            // Cleared only now that the old socket's processing loop has stopped, so
+            // none of its messages can land after the reset. The pin is this tablet's
+            // choice and is kept; the next dump restates it.
+            _visState.value = VisualisationState()
+            _serverProtocolVersion.value = 0
+            endConnectionScopedVisState()
             startServer()
         }
     }
