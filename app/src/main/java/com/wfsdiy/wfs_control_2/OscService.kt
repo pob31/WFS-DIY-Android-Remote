@@ -76,6 +76,25 @@ data class VisualisationState(
     val rows: Map<Int, VisRow> = emptyMap()
 )
 
+/**
+ * Stereo channels whose stereo image this tablet has never received: listed stereo in
+ * the inventory, with no width or axis offset among their parameters. The map draws a
+ * pair's spread bar from both, and they only arrive in the channel's own dump, so a pair
+ * added while connected to a desktop older than 1.0.0beta50 (which announced it with
+ * its name and position only), or whose pushed dump was lost, drew no bar. The axis
+ * lock is not required: desktops before 1.0.0beta46 never send it.
+ */
+internal fun stereoChannelsMissingImage(
+    inventory: ChannelInventory,
+    parameters: InputParametersState
+): List<Int> = inventory.channels
+    .filter { it.isStereo }
+    .map { it.number }
+    .filter { number ->
+        val known = parameters.channels[number]?.parameters
+        known?.get("stereoWidth") == null || known["stereoAxisOffset"] == null
+    }
+
 class OscService : Service() {
 
     private val binder = OscBinder()
@@ -140,6 +159,7 @@ class OscService : Service() {
     private var resyncJob: kotlinx.coroutines.Job? = null
     private var resyncFallbackJob: kotlinx.coroutines.Job? = null
     private var inventoryRefreshJob: kotlinx.coroutines.Job? = null
+    private var stereoImageJob: kotlinx.coroutines.Job? = null
 
     companion object {
         private const val NOTIFICATION_ID = 1
@@ -164,6 +184,13 @@ class OscService : Service() {
         // desktop having missed our /remote/disconnect. Its heartbeats are 2 s apart, and
         // one already in flight when that disconnect landed arrives within this.
         private const val REHANDSHAKE_GRACE_MS = 1000L
+        // Stereo-image recovery after an inventory change (scheduleStereoImageCheck):
+        // how long the desktop's own push gets to land before a check, how many
+        // requests one change may make, and how many checks it may take while dumps
+        // are still running.
+        private const val STEREO_IMAGE_SETTLE_MS = 1500L
+        private const val STEREO_IMAGE_MAX_REQUESTS = 3
+        private const val STEREO_IMAGE_MAX_CHECKS = 10
     }
 
     // Service state tracking
@@ -745,6 +772,7 @@ class OscService : Service() {
                         inventoryReceivedThisDump = true
                         inventoryFromCurrentConnection = true
                         applyChannelInventory(ChannelInventory(channels, inferred = false))
+                        scheduleStereoImageCheck()
                     },
                     onArrayMuteReceived = { states ->
                         if (!_arrayMutes.value.contentEquals(states)) _arrayMutes.value = states
@@ -1283,6 +1311,34 @@ class OscService : Service() {
                     "channel count now $expectedChannelCount with an inferred inventory - " +
                     "requesting a full re-dump")
                 sendOscRequestResync(this@OscService, emptyList())
+            }
+        }
+    }
+
+    /**
+     * After every inventory change, make sure each stereo pair's stereo image arrived,
+     * and ask for the channel dumps of those that did not (stereoChannelsMissingImage).
+     * A desktop from 1.0.0beta50 pushes a new or retyped channel's dump right after the
+     * inventory, so this usually finds nothing; it covers an older desktop, which never
+     * sends it, and a push lost on the way. Waits out a dump in progress, whose own body
+     * carries every channel's image, and gives up after a few requests so a desktop
+     * that cannot answer is not asked forever.
+     */
+    private fun scheduleStereoImageCheck() {
+        stereoImageJob?.cancel()
+        stereoImageJob = serviceScope.launch {
+            var requests = 0
+            repeat(STEREO_IMAGE_MAX_CHECKS) {
+                delay(STEREO_IMAGE_SETTLE_MS)
+                if (_connectionState.value != RemoteConnectionState.CONNECTED) return@launch
+                if (dumpCycleInProgress()) return@repeat
+                val missing = stereoChannelsMissingImage(
+                    _channelInventory.value, _inputParametersState.value)
+                if (missing.isEmpty() || requests >= STEREO_IMAGE_MAX_REQUESTS) return@launch
+                requests++
+                android.util.Log.d("OscService",
+                    "No stereo image yet for $missing - requesting their channel dumps")
+                sendOscRequestResync(this@OscService, missing)
             }
         }
     }
