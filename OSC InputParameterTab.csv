@@ -4,6 +4,9 @@ Input;Input Name;inputName;/remoteInput/inputName;YES;YES;Text box;STRING;;;;;;
 Input;Attenuation;attenuation;/remoteInput/attenuation;YES;YES;V Slider;FLOAT;-92.0;0.0;20*log10(pow(10,-92./20.)+((1-pow(10,-92./20.))*pow(x,2)));dB;;
 Input;Latency compensation / Delay;delayLatency;/remoteInput/delayLatency;YES;YES;H Bidirectional slider;FLOAT;-100.0;100.0;(x*200.0)-100.0;ms;;
 Input;Minimal Latency;minimalLatency;/remoteInput/minimalLatency;YES;YES;Text button;INT;0;1;;;"Acoustic Precedence; Minimal Latency";
+Input;Stereo Width;stereoWidth;/remoteInput/stereoWidth;YES;YES;Dial;FLOAT;0.0;50.0;x*x*x*50.0;m;;Stereo pair leg separation. Visible only on stereo channels (isStereo == 1 in /remote/channelList)
+Input;Stereo Axis Offset;stereoAxisOffset;/remoteInput/stereoAxisOffset;YES;YES;Direction dial;INT;-179;180;x*359-179;°;;0 = automatic (the pair spreads perpendicular to the origin-to-source line). Visible only on stereo channels
+Input;Stereo Axis Lock;stereoAxisLock;/remoteInput/stereoAxisLock;YES;YES;Text button;INT;0;1;;;"OFF; ON";1 = the pair spreads house left/right turned by stereoAxisOffset alone. Visible only on stereo channels. Needs WFS-DIY 1.0.0beta46 or later
 Input;Position X;positionX;/remoteInput/positionX;YES;YES;Number box;FLOAT;0.0;50.0;;m;;incremented or decremented by horizontal axis of JoystickXY
 Input;Position Y;positionY;/remoteInput/positionY;YES;YES;Number box;FLOAT;0.0;50.0;;m;;incremented or decremented by vertical axis of JoystickXY
 Input;Position Z;positionZ;/remoteInput/positionZ;YES;YES;Number box;FLOAT;0.0;50.0;;m;;incremented or decremented by V slider with return to zero

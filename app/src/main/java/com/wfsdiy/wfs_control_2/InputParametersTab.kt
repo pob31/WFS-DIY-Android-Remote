@@ -2195,7 +2195,7 @@ private fun RenderInputSection(
     // channel is a pair: the inventory is the only source of truth for the type.
     val isStereoChannel = inventory.isStereo(inputId)
 
-    // Both states below are declared whatever the type is: gating the declarations on
+    // The states below are declared whatever the type is: gating the declarations on
     // isStereoChannel would tear them down on every mono channel and lose the value the
     // dump already delivered for the stereo one.
 
@@ -2222,11 +2222,22 @@ private fun RenderInputSection(
         stereoAxisValue = InputParameterDefinitions.applyFormula(definition, stereoAxisOffset.normalizedValue)
     }
 
+    // Stereo Axis Lock (0 = the axis follows the origin-to-source line, 1 = house L/R)
+    val stereoAxisLock = selectedChannel.getParameter("stereoAxisLock")
+    var stereoAxisLockIndex by remember {
+        mutableIntStateOf(stereoAxisLock.normalizedValue.toInt().coerceIn(0, 1))
+    }
+
+    LaunchedEffect(inputId, stereoAxisLock.normalizedValue) {
+        stereoAxisLockIndex = stereoAxisLock.normalizedValue.toInt().coerceIn(0, 1)
+    }
+
     if (isStereoChannel) {
         Spacer(modifier = Modifier.height(spacing.smallSpacing / 2))
 
-        // Fifth Row with 10% padding: stereo-only dials (Stereo Width | Stereo Axis),
-        // each with its help text alongside where the screen is wide enough for it
+        // Fifth Row with 10% padding: stereo-only dials (Stereo Width | Stereo Axis, with
+        // the Axis Lock toggle under it), each with its help text alongside where the
+        // screen is wide enough for it
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2324,12 +2335,35 @@ private fun RenderInputSection(
                     enabled = true,
                     sizeMultiplier = 0.7f
                 )
+                // Under the axis dial it acts on, as on the desktop. The desktop only
+                // takes the write from WFS-DIY 1.0.0beta46 on.
+                Spacer(modifier = Modifier.height(4.dp))
+                ParameterTextButton(
+                    label = "",
+                    selectedIndex = stereoAxisLockIndex,
+                    options = listOf(
+                        loc("inputs.toggles.stereoAxisLockOff"),
+                        loc("inputs.toggles.stereoAxisLockOn")
+                    ),
+                    onSelectionChange = { index ->
+                        stereoAxisLockIndex = index
+                        selectedChannel.setParameter("stereoAxisLock", InputParameterValue(
+                            normalizedValue = index.toFloat(),
+                            stringValue = "",
+                            displayValue = listOf("OFF", "ON")[index]
+                        ))
+                        viewModel.sendInputParameterInt("/remoteInput/stereoAxisLock", inputId, index)
+                    },
+                    activeIndex = 1,
+                    activeColor = getRowColorActive(3),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             // Cell 4: Stereo Axis help
             if (!isPhone) {
                 Text(
-                    loc("inputs.help.stereoAxisDial"),
+                    loc("inputs.help.stereoAxisDial") + "\n" + loc("inputs.help.stereoAxisLockButton"),
                     fontSize = 10.sp,
                     color = Color.LightGray,
                     modifier = Modifier.weight(2f)
@@ -2348,6 +2382,7 @@ private fun RenderInputSection(
             ) {
                 Text(loc("inputs.help.stereoWidthDial"), fontSize = 10.sp, color = Color.LightGray)
                 Text(loc("inputs.help.stereoAxisDial"), fontSize = 10.sp, color = Color.LightGray)
+                Text(loc("inputs.help.stereoAxisLockButton"), fontSize = 10.sp, color = Color.LightGray)
             }
         }
     }

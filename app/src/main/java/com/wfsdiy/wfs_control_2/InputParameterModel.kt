@@ -298,6 +298,25 @@ object InputParameterDefinitions {
         ),
         InputParameterDefinition(
             group = "Input",
+            label = "Stereo Axis Lock",
+            variableName = "stereoAxisLock",
+            oscPath = "/remoteInput/stereoAxisLock",
+            isIncoming = true,
+            isOutgoing = true,
+            uiType = UIComponentType.TEXT_BUTTON,
+            dataType = ParameterType.INT,
+            minValue = 0f,
+            maxValue = 1f,
+            enumValues = listOf("OFF", "ON"),
+            // Same gating as stereoWidth. Without a definition here the desktop's value
+            // was dropped on arrival, so a locked pair could not be shown as locked.
+            note = "1 = the pair spreads along house left/right, turned by the axis offset " +
+                   "alone; 0 = the axis follows the origin-to-source line. Stereo channels only",
+            locKey = "inputs.labels.stereoAxisLock",
+            enumLocKeys = listOf("inputs.toggles.stereoAxisLockOff", "inputs.toggles.stereoAxisLockOn")
+        ),
+        InputParameterDefinition(
+            group = "Input",
             label = "Position X",
             variableName = "positionX",
             oscPath = "/remoteInput/positionX",

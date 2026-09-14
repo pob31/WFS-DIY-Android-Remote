@@ -54,6 +54,11 @@ import kotlin.times
 //     connection fetches it from the dump. The pin (/remote/vis/pin, v3) is also
 //     restated at every /remote/dumpBegin: the desktop clears pins on each handshake,
 //     including ones this tablet never saw as a disconnect.
+// Still v4: /remoteInput/stereoAxisLock (",ii" channel, 0|1) is read and written: the
+//     stereo row's Axis Lock toggle. 1 holds the pair on house left/right, turned by the
+//     axis offset alone. The desktop has sent and routed it since WFS-DIY 1.0.0beta46;
+//     until now this tablet dropped it for want of a definition. A v4 desktop older
+//     than beta46 rejects the write (and logs it) with no other effect.
 const val REMOTE_PROTOCOL_VERSION = 4
 
 fun getPaddedBytes(input: String, charsets: java.nio.charset.Charset = Charsets.UTF_8): ByteArray {

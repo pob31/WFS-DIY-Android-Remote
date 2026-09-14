@@ -183,6 +183,7 @@
       "delayLatency": "Compensation de latence / Délai",
       "stereoWidth": "Largeur stéréo",
       "stereoAxis": "Axe stéréo",
+      "stereoAxisLock": "Axe fixe",
       "positionX": "Position X",
       "positionY": "Position Y",
       "positionZ": "Position Z",
@@ -249,12 +250,15 @@
 
     "help": {
       "stereoWidthDial": "Largeur de l'image stéréo en mètres : la distance physique entre les branches gauche et droite de la paire. La position du canal reste le centre de la paire. 0 m réduit la paire à une source ponctuelle.",
-      "stereoAxisDial": "Fait pivoter l'axe d'étalement stéréo, positif dans le sens antihoraire vu de dessus. 0 = automatique : la paire s'étale perpendiculairement à la ligne allant de l'origine à la source. ±180° échange la gauche et la droite."
+      "stereoAxisDial": "Fait pivoter l'axe d'étalement stéréo, positif dans le sens antihoraire vu de dessus. 0 = automatique : la paire s'étale perpendiculairement à la ligne allant de l'origine à la source. ±180° échange la gauche et la droite.",
+      "stereoAxisLockButton": "Verrouille l'orientation de l'image stéréo : la paire s'ouvre à gauche/droite de la salle, tournée par la seule valeur d'Axe, au lieu de suivre la ligne de l'origine à la source. Utile lorsque l'image doit rester fixe pendant que la source se déplace."
     },
 
     "toggles": {
       "acousticPrecedence": "Précédence acoustique",
       "minimalLatency": "Latence minimale",
+      "stereoAxisLockOff": "Axe fixe : OFF",
+      "stereoAxisLockOn": "Axe fixe : ON",
       "attenuationLawLog": "Log",
       "attenuationLaw1d2": "1/d\u00b2"
     },
