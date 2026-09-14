@@ -41,6 +41,7 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 import com.wfsdiy.wfs_control_2.localization.loc
@@ -411,6 +412,12 @@ fun InputMapTab(
 
     // Version counter to trigger canvas position recalculation when stage positions change
     var markerStagePositionsVersion by remember { mutableIntStateOf(0) }
+
+    // Axis each stereo input's spread bar was last drawn along, read back only while its
+    // anchor sits on the origin, where there is no bearing to derive one from and the
+    // desktop holds its last axis too. The draw pass writes it, so it is a plain map, not
+    // snapshot state: a state write from a DrawScope would invalidate the draw making it.
+    val stereoAxisHold = remember { HashMap<Int, StereoImage.Vec>() }
 
     // Track the last known view parameters for markers without stage positions
     // This allows us to properly transform their canvas positions when view changes
@@ -2069,6 +2076,74 @@ fun InputMapTab(
                     barycenterRadius = markerRadius * 0.6f,
                     textPaint = textPaint
                 )
+            }
+
+            // Draw stereo spread bars (behind the composite dots and the markers): the line
+            // between each stereo input's two legs, derived the way the desktop derives the
+            // legs it renders and draws, so both maps show the same width and axis. None for
+            // the preview grid, which stands in for a channel list that has not arrived.
+            if (!isPreviewInventory && inputParametersState != null) {
+                val widthDef = InputParameterDefinitions.parametersByVariableName["stereoWidth"]!!
+                val axisDef = InputParameterDefinitions.parametersByVariableName["stereoAxisOffset"]!!
+                // The desktop's 2 px line, 3 px dots and 1.5 px ring are fixed pixels beside
+                // its 14 px marker; here they scale with the marker, never below those sizes.
+                val spreadStroke = max(2f, markerRadius * 0.14f)
+                val spreadDotRadius = max(3f, markerRadius * 0.21f)
+                val spreadRing = androidx.compose.ui.graphics.drawscope.Stroke(width = max(1.5f, markerRadius * 0.11f))
+                liveMarkers.forEach { marker ->
+                    val id = marker.id
+                    if (!marker.isVisible || !inventory.isStereo(id) || !inputParametersState.hasChannel(id)) return@forEach
+                    val params = inputParametersState.getChannel(id).parameters
+                    val widthValue = params["stereoWidth"] ?: return@forEach
+                    val width = InputParameterDefinitions.applyFormula(widthDef, widthValue.normalizedValue)
+                    // Legs 1 cm or less apart draw nothing, as on the desktop. Negated, so a
+                    // NaN width is skipped too.
+                    if (!(width > StereoImage.MIN_DRAW_SPAN)) return@forEach
+
+                    // Whole degrees, as the desktop stores the offset: the formula's float
+                    // round trip misses 0 by a few ULPs and would keep rotate() off its exact
+                    // zero path. roundToInt throws on NaN, hence the guard.
+                    val axisRaw = params["stereoAxisOffset"]?.let {
+                        InputParameterDefinitions.applyFormula(axisDef, it.normalizedValue)
+                    } ?: 0f
+                    val axisOffset = if (axisRaw.isFinite()) axisRaw.roundToInt() else 0
+                    // 0/1, stored raw from ",ii" and through the linear formula from ",if".
+                    val locked = (params["stereoAxisLock"]?.normalizedValue ?: 0f) >= 0.5f
+
+                    // The desktop centres the bar on the composite (DSP) position, the grey
+                    // dot: the marker plus the composite delta, so a flipped or offset channel
+                    // spreads around where it sounds. The canvas position follows live drags.
+                    val canvasPos = localMarkerPositions[id] ?: marker.position
+                    val stagePos = markerStagePositions[id] ?: markerCanvasToStage(canvasPos)
+                    val delta = compositePositions[id]
+                    val dx = delta?.first ?: 0f
+                    val dy = delta?.second ?: 0f
+                    val ax = stagePos.first + dx
+                    val ay = stagePos.second + dy
+                    val anchorPx = Offset(canvasPos.x + dx * pixelsPerMeter, canvasPos.y - dy * pixelsPerMeter)
+
+                    val base = StereoImage.baseAxis(ax, ay, locked)?.also { stereoAxisHold[id] = it }
+                        ?: stereoAxisHold[id] ?: StereoImage.HOUSE_AXIS
+                    // The offset turns the axis in the world frame, never mirrored by a flip:
+                    // the flip already mirrored the anchor, and the axis follows it.
+                    val axis = StereoImage.rotate(base, axisOffset.toFloat())
+                    val (left, right) = StereoImage.legs(ax, ay, width, axis)
+                    // Stage +Y is screen up; the view scale is uniform, one factor for both axes.
+                    fun toCanvas(leg: StereoImage.Vec) = Offset(
+                        anchorPx.x + (leg.x - ax) * pixelsPerMeter,
+                        anchorPx.y - (leg.y - ay) * pixelsPerMeter
+                    )
+                    val leftPx = toCanvas(left)
+                    val rightPx = toCanvas(right)
+
+                    val spreadColour = resolveInputColor(params["inputColour"]?.normalizedValue?.toInt(), id)
+                        .copy(alpha = 0.55f)
+                    drawLine(color = spreadColour, start = leftPx, end = rightPx, strokeWidth = spreadStroke)
+                    // Filled right, hollow left: an axis offset of ±180 swaps the legs, and
+                    // between two identical end dots that swap would be invisible.
+                    drawCircle(color = spreadColour, radius = spreadDotRadius, center = rightPx)
+                    drawCircle(color = spreadColour, radius = spreadDotRadius, center = leftPx, style = spreadRing)
+                }
             }
 
             // Draw composite position indicators (behind markers)
