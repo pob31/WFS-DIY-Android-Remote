@@ -615,12 +615,17 @@ class OscService : Service() {
                     },
                     onVisSelectionReceived = { primary, clusterId, selection ->
                         val current = _visState.value
+                        // Primary 0 means the desktop has no live selected channel (it
+                        // was deleted, or the loaded session lacks it). Keep the one we
+                        // show rather than pointing the bars at nothing; the cluster and
+                        // the set still apply.
+                        val effectivePrimary = if (primary >= 1) primary else current.primaryChannel
                         // Evict rows no longer displayed (selection ∪ primary ∪ pin)
                         val keep = selection.toMutableSet()
-                        keep.add(primary)
+                        keep.add(effectivePrimary)
                         if (_visPinnedChannel.value > 0) keep.add(_visPinnedChannel.value)
                         _visState.value = current.copy(
-                            primaryChannel = primary,
+                            primaryChannel = effectivePrimary,
                             clusterId = clusterId,
                             selectionSet = selection,
                             rows = current.rows.filterKeys { it in keep })

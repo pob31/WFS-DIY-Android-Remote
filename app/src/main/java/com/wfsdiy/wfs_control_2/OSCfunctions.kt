@@ -14,6 +14,7 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.LinkedBlockingQueue
 import kotlin.compareTo
 import kotlin.times
@@ -38,6 +39,12 @@ import kotlin.times
 //     STORED one: 24-bit RGB, or -1 meaning the desktop has no colour set for that
 //     channel, in which case this app keeps deriving the hue from the channel number.
 //     Read-only here -- the picker lives on the desktop and the tablet only follows.
+// Still v4: the /remote/vis/* count checks are sanity caps (VisLimits: 512 outputs,
+//     128 reverbs), not the desktop's config maxima. The old 64/16 literals dropped
+//     config, outputArrays and rows from any larger rig, which left the tab waiting
+//     forever; nothing changes on the wire. A /remote/vis/selection primary of 0 (the
+//     desktop has no live selected channel) is accepted and keeps the previous
+//     primary instead of discarding the whole selection.
 const val REMOTE_PROTOCOL_VERSION = 4
 
 fun getPaddedBytes(input: String, charsets: java.nio.charset.Charset = Charsets.UTF_8): ByteArray {
@@ -1115,6 +1122,23 @@ typealias OscVisRowCallback = (channel: Int, numOutputs: Int, numReverbs: Int, v
 // list is in display order, every number is in 1..MAX_INPUTS and unique.
 typealias OscChannelListCallback = (channels: List<ChannelInfo>) -> Unit
 
+// A dropped /remote/vis/* message used to vanish without a trace, which is how an
+// over-cap rig could leave the tab on "Waiting for data…" with nothing to show why.
+// Log each rejection, but at most once per address every 5 s: rows arrive at up to
+// 10 Hz per displayed channel and a desktop that keeps sending something this app
+// cannot accept would otherwise flood logcat.
+private const val VIS_REJECT_LOG_INTERVAL_NS = 5_000_000_000L
+private val visRejectLoggedAt = ConcurrentHashMap<String, Long>()
+
+private fun logVisRejected(address: String, reason: String) {
+    val now = System.nanoTime()  // monotonic: a wall-clock step must not mute the log
+    val last = visRejectLoggedAt[address]
+    if (last == null || now - last >= VIS_REJECT_LOG_INTERVAL_NS) {
+        visRejectLoggedAt[address] = now
+        android.util.Log.w("OscVis", "Dropped $address: $reason")
+    }
+}
+
 fun parseAndProcessOscPacket(
     context: Context,
     data: ByteArray,
@@ -1577,67 +1601,46 @@ fun parseAndProcessOscPacket(
                 onChannelListReceived?.invoke(channels)
             }
             // Visualisation mirroring (protocol v3): channel counts, per-output array
-            // assignments, desktop selection, and per-channel delay/level rows.
+            // assignments, desktop selection, and per-channel delay/level rows. The
+            // decoding and its bounds live in VisProtocol.kt, where they are unit-tested;
+            // each decoder returns either the whole message or the reason it was dropped
+            // (the `else` arms are unreachable and only make each `when` exhaustive).
             address == "/remote/vis/config" -> {
-                if (!buffer.hasRemaining() || parseOscString(buffer) != ",ii") return
-                if (buffer.remaining() < 8) return
-                val numOutputs = parseOscInt(buffer)
-                val numReverbs = parseOscInt(buffer)
-                if (numOutputs in 0..64 && numReverbs in 0..16) {
-                    onVisConfigReceived?.invoke(numOutputs, numReverbs)
+                when (val d = VisDecoder.config(buffer)) {
+                    is VisDecoded.Config -> onVisConfigReceived?.invoke(d.numOutputs, d.numReverbs)
+                    is VisDecoded.Rejected -> logVisRejected(address, d.reason)
+                    else -> {}
                 }
             }
             address == "/remote/vis/outputArrays" -> {
                 // ",i" + numOutputs ints: count, then per-output array id (0 = Single)
-                if (!buffer.hasRemaining()) return
-                val typeTags = parseOscString(buffer)
-                if (typeTags.length < 2 || typeTags[0] != ',' ||
-                    typeTags.drop(1).any { it != 'i' }) return
-                if (buffer.remaining() < 4) return
-                val numOutputs = parseOscInt(buffer)
-                if (numOutputs !in 0..64) return
-                if (typeTags.length != 2 + numOutputs) return
-                if (buffer.remaining() < numOutputs * 4) return
-                val arrays = IntArray(numOutputs) { parseOscInt(buffer) }
-                onVisOutputArraysReceived?.invoke(arrays)
+                when (val d = VisDecoder.outputArrays(buffer)) {
+                    is VisDecoded.OutputArrays -> onVisOutputArraysReceived?.invoke(d.arrays)
+                    is VisDecoded.Rejected -> logVisRejected(address, d.reason)
+                    else -> {}
+                }
             }
             address == "/remote/vis/selection" -> {
-                // ",iii" + N ints: primary channel, cluster id (0 = none), N, then N channel ids
-                if (!buffer.hasRemaining()) return
-                val typeTags = parseOscString(buffer)
-                if (typeTags.length < 4 || typeTags[0] != ',' ||
-                    typeTags.drop(1).any { it != 'i' }) return
-                if (buffer.remaining() < 12) return
-                val primary = parseOscInt(buffer)
-                val clusterId = parseOscInt(buffer)
-                val count = parseOscInt(buffer)
-                if (primary !in 1..MAX_INPUTS || clusterId !in 0..10) return
-                if (count !in 0..MAX_INPUTS || typeTags.length != 4 + count) return
-                if (buffer.remaining() < count * 4) return
-                val selection = List(count) { parseOscInt(buffer) }
-                onVisSelectionReceived?.invoke(primary, clusterId, selection)
+                // ",iii" + N ints: primary channel (0 = none live), cluster id (0 = none),
+                // N, then N channel ids
+                when (val d = VisDecoder.selection(buffer)) {
+                    is VisDecoded.Selection ->
+                        onVisSelectionReceived?.invoke(d.primary, d.clusterId, d.selection)
+                    is VisDecoded.Rejected -> logVisRejected(address, d.reason)
+                    else -> {}
+                }
             }
             address == "/remote/vis/delays" || address == "/remote/vis/levels" -> {
                 // ",iii" + (numOutputs + numReverbs) floats: channel, counts, then values
                 // (delays in ms; levels display-ready dB clamped [-60, 0])
-                if (!buffer.hasRemaining()) return
-                val typeTags = parseOscString(buffer)
-                if (typeTags.length < 4 || typeTags[0] != ',' ||
-                    typeTags.substring(1, minOf(4, typeTags.length)) != "iii" ||
-                    typeTags.drop(4).any { it != 'f' }) return
-                if (buffer.remaining() < 12) return
-                val channel = parseOscInt(buffer)
-                val numOutputs = parseOscInt(buffer)
-                val numReverbs = parseOscInt(buffer)
-                if (channel !in 1..MAX_INPUTS || numOutputs !in 0..64 || numReverbs !in 0..16) return
-                val valueCount = numOutputs + numReverbs
-                if (typeTags.length != 4 + valueCount) return
-                if (buffer.remaining() < valueCount * 4) return
-                val values = FloatArray(valueCount) { parseOscFloat(buffer) }
-                if (address == "/remote/vis/delays") {
-                    onVisDelaysReceived?.invoke(channel, numOutputs, numReverbs, values)
-                } else {
-                    onVisLevelsReceived?.invoke(channel, numOutputs, numReverbs, values)
+                when (val d = VisDecoder.row(buffer)) {
+                    is VisDecoded.Row -> if (address == "/remote/vis/delays") {
+                        onVisDelaysReceived?.invoke(d.channel, d.numOutputs, d.numReverbs, d.values)
+                    } else {
+                        onVisLevelsReceived?.invoke(d.channel, d.numOutputs, d.numReverbs, d.values)
+                    }
+                    is VisDecoded.Rejected -> logVisRejected(address, d.reason)
+                    else -> {}
                 }
             }
             // XY Pad (virtual Lightpad) messages from JUCE
