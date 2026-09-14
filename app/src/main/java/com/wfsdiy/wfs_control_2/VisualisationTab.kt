@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.wfsdiy.wfs_control_2.localization.loc
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -38,6 +40,14 @@ private val VIS_WARNING_COLOR = Color(0xFFFFA000)
 
 private const val VIS_DELAY_MAX_MS = 350f
 private const val VIS_LEVEL_MIN_DB = -60f
+
+// Bar value labels. Sized in dp, not sp: a label has to fit its bar, and the bar's width
+// does not follow the system font scale, so an sp floor would hide the values on bars
+// that have room for them whenever the font scale is raised.
+private val VIS_LABEL_MAX_SIZE = 13.dp
+private val VIS_LABEL_MIN_SIZE = 8.dp     // legibility floor: below it, bars without values
+private const val VIS_LABEL_FILL = 0.9f   // share of a bar's slot a label may span
+private val VIS_LABEL_STRIP_PAD = 3.dp    // above and below the text, in its own strip
 
 // Pull path (/remote/vis/request). The tab checks its data every 2 s and asks at most
 // 6 times before it waits for fresh rows. A desktop that answers the request also
@@ -136,8 +146,18 @@ fun VisualisationTab(
                 val headerLabel = if (pinnedChannel > 0)
                     "${loc("remote.vis.pinned")} $pinnedChannel" else
                     "${loc("remote.vis.follow")} $headerChannel"
+                // The pinned channel's colour as the map shows it: the one picked on the
+                // desktop, else the derived hue
                 val headerColor = if (pinnedChannel > 0)
-                    getMarkerColor(pinnedChannel, isClusterMarker = false) else Color(0xFF333333)
+                    resolveInputColor(
+                        inputParametersState.getChannel(pinnedChannel)
+                            .parameters["inputColour"]?.normalizedValue?.toInt(),
+                        pinnedChannel
+                    ) else Color(0xFF333333)
+                // A picked colour can be light. Switch where black and white contrast
+                // equally, like the desktop's channel selector (getContrastingTextColor).
+                val headerTextColor =
+                    if (headerColor.luminance() > 0.179f) Color.Black else Color.White
 
                 Box(
                     modifier = Modifier
@@ -147,7 +167,7 @@ fun VisualisationTab(
                 ) {
                     Text(
                         text = if (headerName.isNotEmpty()) "$headerLabel — $headerName" else headerLabel,
-                        color = Color.White,
+                        color = headerTextColor,
                         fontSize = headerFontSize,
                         fontWeight = FontWeight.Bold
                     )
@@ -365,9 +385,10 @@ private fun MetricToggleButton(
 
 /**
  * One bargraph row: a bar per output channel plus a bar per reverb feed (after a
- * double-width gap), filled bottom-up, with the numeric value drawn at the top of
- * each bar. Value labels are tinted by the output's array assignment like the
- * desktop component. Delays span 0-350 ms; levels span -60-0 dB.
+ * double-width gap), filled bottom-up, with the numeric value drawn in a strip above
+ * the fill. Value labels are tinted by the output's array assignment like the
+ * desktop component. Delays span 0-350 ms; levels span -60-0 dB. Every bar always
+ * fits the width; on a rig too wide for legible values the bars are drawn alone.
  */
 @Composable
 private fun BargraphRow(
@@ -378,6 +399,16 @@ private fun BargraphRow(
     outputArrays: IntArray,
     modifier: Modifier = Modifier
 ) {
+    // Bold like the desktop's values, and one Paint for the row's lifetime rather than
+    // one per frame. Only its size and colour change while drawing.
+    val labelPaint = remember {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.CENTER
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+    }
+
     Column(modifier = modifier) {
         Text(title, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 2.dp))
@@ -399,17 +430,34 @@ private fun BargraphRow(
             val unitWidth = size.width / (totalBars + gapUnits)
             val barWidth = unitWidth * 0.85f
 
-            val textPaint = android.graphics.Paint().apply {
-                isAntiAlias = true
-                textAlign = android.graphics.Paint.Align.CENTER
-                textSize = min(unitWidth * 0.55f, 26f)
-            }
-            val drawLabels = unitWidth >= 14f
+            // One text size for the whole row, fitted to the widest value this metric
+            // normally shows, so the values line up and never run into their neighbours.
+            // Below the floor they would be unreadable, so the row shows bars alone.
+            val maxTextPx = VIS_LABEL_MAX_SIZE.toPx()
+            val minTextPx = VIS_LABEL_MIN_SIZE.toPx()
+            val labelRoom = unitWidth * VIS_LABEL_FILL
+            labelPaint.textSize = maxTextPx
+            val templateWidth = labelPaint.measureText(if (useDelays) "888" else "-88")
+            val textPx = min(maxTextPx, maxTextPx * labelRoom / templateWidth)
+            val drawLabels = textPx >= minTextPx
+
+            // The values get a strip of their own and the fill stays below it, as on the
+            // desktop: a full bar used to paint over its own value.
+            val stripHeight = if (drawLabels) textPx + 2f * VIS_LABEL_STRIP_PAD.toPx() else 0f
+            val fillArea = (size.height - stripHeight).coerceAtLeast(0f)
+            labelPaint.textSize = textPx
+            val metrics = labelPaint.fontMetrics
+            // Baseline offset that centres the text on the strip's middle; font metrics
+            // scale with the size, so a shrunk label scales it too.
+            val centringOffset = -(metrics.ascent + metrics.descent) / 2f
 
             for (i in 0 until totalBars) {
                 val x = if (i < row.numOutputs) i * unitWidth
                         else (i + gapUnits) * unitWidth
-                val value = values[i]
+                // A NaN made the rounding throw. Any non-finite value now draws an empty
+                // bar and no label.
+                val raw = values[i]
+                val value = if (raw.isFinite()) raw else 0f
                 val fraction = if (useDelays)
                     (value / VIS_DELAY_MAX_MS).coerceIn(0f, 1f)
                 else
@@ -420,29 +468,51 @@ private fun BargraphRow(
                     topLeft = Offset(x, 0f),
                     size = Size(barWidth, size.height)
                 )
-                val fillHeight = size.height * fraction
+                val fillHeight = fillArea * fraction
                 drawRect(
                     color = color,
                     topLeft = Offset(x, size.height - fillHeight),
                     size = Size(barWidth, fillHeight)
                 )
 
-                if (drawLabels) {
-                    val labelColor = when {
-                        i >= row.numOutputs -> Color.LightGray  // reverb feeds
-                        i < outputArrays.size && outputArrays[i] > 0 ->
-                            getMarkerColor(outputArrays[i], isClusterMarker = true)
-                        else -> Color.White
-                    }
-                    textPaint.color = labelColor.toArgb()
-                    drawContext.canvas.nativeCanvas.drawText(
-                        value.roundToInt().toString(),
-                        x + barWidth / 2f,
-                        textPaint.textSize + 2f,
-                        textPaint
-                    )
+                if (!drawLabels || !raw.isFinite()) continue
+
+                val label = roundHalfAwayFromZero(raw).toString()
+                val labelColor = when {
+                    i >= row.numOutputs -> Color.White  // reverb feeds: text colour, as on the desktop
+                    i < outputArrays.size && outputArrays[i] > 0 ->
+                        getMarkerColor(outputArrays[i], isClusterMarker = true)
+                    else -> Color.White
                 }
+                labelPaint.color = labelColor.toArgb()
+
+                // A value wider than the template (a 4-digit delay, a level below -99 dB)
+                // shrinks on its own instead of shrinking the whole row, and is left out
+                // if that would take it under the floor.
+                var labelPx = textPx
+                val labelWidth = labelPaint.measureText(label)
+                if (labelWidth > labelRoom) {
+                    labelPx = textPx * labelRoom / labelWidth
+                    if (labelPx < minTextPx) continue
+                    labelPaint.textSize = labelPx
+                }
+                drawContext.canvas.nativeCanvas.drawText(
+                    label,
+                    x + barWidth / 2f,
+                    stripHeight / 2f + centringOffset * labelPx / textPx,
+                    labelPaint
+                )
+                labelPaint.textSize = textPx
             }
         }
     }
+}
+
+/**
+ * Rounds halves away from zero like the desktop's std::round, so both apps show the
+ * same integer: roundToInt() rounds halves up, which turns -12.5 dB into -12, not -13.
+ */
+private fun roundHalfAwayFromZero(value: Float): Int {
+    val magnitude = abs(value).roundToInt()
+    return if (value < 0f) -magnitude else magnitude
 }
