@@ -124,7 +124,12 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
     fun sendInputParameterFloat(oscPath: String, inputId: Int, value: Float) {
         oscService.sendInputParameterFloat(oscPath, inputId, value)
     }
-    
+
+    // A map stereo gesture's final width/axis pair, sent unthrottled (see OscService)
+    fun sendStereoImageFinal(inputId: Int, width: Float, axisOffset: Int) {
+        oscService.sendStereoImageFinal(inputId, width, axisOffset)
+    }
+
     fun sendInputParameterString(oscPath: String, inputId: Int, value: String) {
         oscService.sendInputParameterString(oscPath, inputId, value)
     }

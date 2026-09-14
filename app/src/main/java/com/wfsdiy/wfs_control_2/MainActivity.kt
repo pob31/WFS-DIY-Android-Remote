@@ -460,6 +460,11 @@ fun WFSControlApp() {
     // on every tab switch. Session-only: never written to preferences.
     var mapSecondaryTouchEnabled by rememberSaveable { mutableStateOf(true) }
 
+    // Map tab: the second finger's Stereo layer (width/axis on stereo inputs instead of
+    // height/orientation, the tablet's stand-in for the desktop's Shift). Hoisted and
+    // session-only for the same reasons; off by default.
+    var mapStereoTouchEnabled by rememberSaveable { mutableStateOf(false) }
+
     // XY Pad visibility: controlled by JUCE (sampler active + no hardware Lightpads).
     // The tab list grows/shrinks at position 4 (xyPadTabIndex) when this toggles, so
     // selectedTab must be remapped to (a) avoid pointing at a now-missing index — the
@@ -1013,7 +1018,18 @@ fun WFSControlApp() {
                     compositePositions = rememberSmoothedCompositePositions(compositePositions),
                     samplerPlaying = samplerPlaying,
                     secondaryTouchEnabled = mapSecondaryTouchEnabled,
-                    onSecondaryTouchEnabledChange = { mapSecondaryTouchEnabled = it }
+                    onSecondaryTouchEnabledChange = { mapSecondaryTouchEnabled = it },
+                    stereoTouchEnabled = mapStereoTouchEnabled,
+                    onStereoTouchEnabledChange = { mapStereoTouchEnabled = it },
+                    onStereoWidthChanged = { inputId, width ->
+                        viewModel?.sendInputParameterFloat("/remoteInput/stereoWidth", inputId, width)
+                    },
+                    onStereoAxisChanged = { inputId, axisOffset ->
+                        viewModel?.sendInputParameterInt("/remoteInput/stereoAxisOffset", inputId, axisOffset)
+                    },
+                    onStereoGestureEnd = { inputId, width, axisOffset ->
+                        viewModel?.sendStereoImageFinal(inputId, width, axisOffset)
+                    }
                 )
                 1 -> LockingTab(
                     inventory = channelInventory,

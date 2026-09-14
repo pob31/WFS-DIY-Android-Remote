@@ -62,6 +62,18 @@ object OscThrottleManager {
     }
 
     /**
+     * Drop any pending message for a parameter WITHOUT sending it. For a gesture's final
+     * value, which is about to go out directly: a pending left behind would either wait
+     * for a later send on the key to flush it, or be replayed after the final, landing
+     * an older value last.
+     *
+     * @param parameterKey Unique key identifying the parameter
+     */
+    fun clearPending(parameterKey: String) {
+        pendingValues.remove(parameterKey)
+    }
+
+    /**
      * Clear all throttling state (useful for testing or resetting)
      */
     fun clear() {

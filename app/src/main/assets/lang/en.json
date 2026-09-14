@@ -88,7 +88,10 @@
       "fitAllInputs": "Fit All Inputs",
       "secondaryTouchOff": "2nd Finger: OFF (input and cluster edits suspended)",
       "secondaryTouchSuspend": "Suspend 2nd-finger edits",
-      "secondaryTouchResume": "Resume 2nd-finger edits"
+      "secondaryTouchResume": "Resume 2nd-finger edits",
+      "stereoTouchInfo": "2nd Finger STEREO: Stereo(Rotate/Pinch=Axis/Width) Mono(Orient/Height) Cluster(Turn/Scale)",
+      "stereoTouchEnable": "2nd finger on stereo inputs: edit width/axis",
+      "stereoTouchDisable": "2nd finger on stereo inputs: back to orientation/height"
     },
 
     "arrayAdjust": {

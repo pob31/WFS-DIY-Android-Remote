@@ -738,3 +738,31 @@ fun DrawScope.drawHeightRotationLabel(
         drawContext.canvas.nativeCanvas.drawText(label, anchorPosition.x - offset, anchorPosition.y, textPaint)
     }
 }
+
+/**
+ * Draw stereo width and axis offset near the grey reference endpoint while the second
+ * finger's Stereo layer edits a stereo input. Yellow text "W=X.XXm  A=+XX\u00B0", placed like
+ * drawHeightRotationLabel. Tablet-only: the desktop's Shift gesture shows no readout,
+ * only its spread bar.
+ */
+fun DrawScope.drawStereoWidthAxisLabel(
+    anchorPosition: Offset,
+    width: Float,
+    axisDegrees: Int,
+    canvasWidth: Float,
+    textPaint: Paint
+) {
+    val label = "W=${String.format(Locale.US, "%.2f", width)}m  A=${String.format(Locale.US, "%+d", axisDegrees)}\u00B0"
+    textPaint.color = 0xFFFFFF00.toInt()  // Yellow
+    textPaint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+    textPaint.textSize = min(size.width, size.height) / 40f * 0.6f
+
+    val offset = 8f
+    if (anchorPosition.x < canvasWidth / 2f) {
+        textPaint.textAlign = Paint.Align.LEFT
+        drawContext.canvas.nativeCanvas.drawText(label, anchorPosition.x + offset, anchorPosition.y, textPaint)
+    } else {
+        textPaint.textAlign = Paint.Align.RIGHT
+        drawContext.canvas.nativeCanvas.drawText(label, anchorPosition.x - offset, anchorPosition.y, textPaint)
+    }
+}

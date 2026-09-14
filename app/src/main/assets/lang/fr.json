@@ -88,7 +88,10 @@
       "fitAllInputs": "Ajuster toutes les entrées",
       "secondaryTouchOff": "2ème doigt : désactivé (réglages des entrées et clusters suspendus)",
       "secondaryTouchSuspend": "Suspendre les réglages au 2ème doigt",
-      "secondaryTouchResume": "Réactiver les réglages au 2ème doigt"
+      "secondaryTouchResume": "Réactiver les réglages au 2ème doigt",
+      "stereoTouchInfo": "2ème doigt STÉRÉO : Stéréo(Rotation/Pincer=Axe/Largeur) Mono(Orient./Hauteur) Cluster(Tourner/Échelle)",
+      "stereoTouchEnable": "2ème doigt sur les entrées stéréo : régler largeur/axe",
+      "stereoTouchDisable": "2ème doigt sur les entrées stéréo : revenir à orientation/hauteur"
     },
 
     "arrayAdjust": {

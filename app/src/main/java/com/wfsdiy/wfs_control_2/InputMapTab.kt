@@ -18,12 +18,14 @@ import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.DoNotTouch
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Pinch
+import androidx.compose.material.icons.filled.SurroundSound
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -35,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.atan2
@@ -67,6 +70,28 @@ fun calculateDistance(from: Offset, to: Offset): Float {
 fun calculateRelativeDistanceChange(initialDistance: Float, currentDistance: Float): Float {
     return if (initialDistance > 0f) (currentDistance - initialDistance) / initialDistance else 0f
 }
+
+/**
+ * An input's orientation after a second-finger twist of [angleChangeDegrees] on screen,
+ * from [startRotation]: Y points down, so a counter-clockwise twist comes in negative and
+ * raises it. The desktop's own gesture law (MapTab.h, InputRotation): the sum wrapped
+ * into -179..180, then truncated to whole degrees as its static_cast<int> does, which
+ * also brings the (180, 181) its wrap leaves for a sum just under -179 back onto 180.
+ * The desktop rejects an inputRotation outside -179..180 instead of wrapping it, so an
+ * unwrapped sum past +-180 was simply lost. Closed form rather than the desktop's while
+ * loops, so no value can keep them spinning; a non-finite sum passes through, and the
+ * desktop drops it as before.
+ */
+fun secondFingerRotation(startRotation: Float, angleChangeDegrees: Float): Float {
+    val raw = startRotation - angleChangeDegrees
+    if (!raw.isFinite()) return raw
+    val wrapped = raw - 360f * floor((raw + 179f) / 360f)   // [-179, 181)
+    return wrapped.toInt().toFloat()
+}
+
+// The second finger's Stereo layer colour: the desktop's stereo-width dial blue. On the
+// toggle button, the header and a stereo vector control's active line.
+private const val STEREO_LAYER_ARGB = 0xFF4A90D9
 
 /**
  * Find the barycenter position for a cluster if it's in barycenter mode.
@@ -361,7 +386,15 @@ fun InputMapTab(
     compositePositions: Map<Int, Pair<Float, Float>> = emptyMap(),  // inputId -> (deltaX, deltaY) in stage meters
     samplerPlaying: Map<Int, Boolean> = emptyMap(),  // inputId -> true while a sampler cell is playing on that input
     secondaryTouchEnabled: Boolean = true,  // false = second-finger edits suspended (pan/zoom unaffected)
-    onSecondaryTouchEnabledChange: (Boolean) -> Unit = {}  // map toggle button; the caller owns the session-only state
+    onSecondaryTouchEnabledChange: (Boolean) -> Unit = {},  // map toggle button; the caller owns the session-only state
+    // Stereo layer of the second finger, the tablet's stand-in for the desktop's Shift: on a
+    // stereo input the pinch sets the width and the twist the axis offset, instead of height
+    // and orientation. Only while secondaryTouchEnabled; the caller owns this state too.
+    stereoTouchEnabled: Boolean = false,
+    onStereoTouchEnabledChange: (Boolean) -> Unit = {},
+    onStereoWidthChanged: ((inputId: Int, width: Float) -> Unit)? = null,
+    onStereoAxisChanged: ((inputId: Int, axisOffset: Int) -> Unit)? = null,
+    onStereoGestureEnd: ((inputId: Int, width: Float, axisOffset: Int) -> Unit)? = null  // the last pair, sent once more unthrottled
 ) {
     val context = LocalContext.current
     val draggingMarkers = remember { mutableStateMapOf<Long, Int>() }
@@ -377,6 +410,26 @@ fun InputMapTab(
     // Read by the gesture loop for the same reason. Never add it to the pointerInput
     // keys instead: a restart of that block cancels any drag in progress.
     val currentSecondaryTouchEnabled by rememberUpdatedState(secondaryTouchEnabled)
+    val currentStereoTouchEnabled by rememberUpdatedState(stereoTouchEnabled)
+    // The start values a vector control is baselined on (height/orientation, width/axis).
+    // The state is a new object on every OSC update, so a captured one would start a
+    // second pinch from whatever the first touch after the last restart saw, and jump.
+    val currentInputParametersState by rememberUpdatedState(inputParametersState)
+    // Every callback the loop calls, directly or through the helpers below. The caller's
+    // lambdas capture a view model that is null until the service binds, and a captured
+    // lambda would keep sending into that null until the next pan or zoom.
+    val currentOnMarkersInitiallyPositioned by rememberUpdatedState(onMarkersInitiallyPositioned)
+    val currentOnPositionChanged by rememberUpdatedState(onPositionChanged)
+    val currentOnClusterPositionChanged by rememberUpdatedState(onClusterPositionChanged)
+    val currentOnInputHeightChanged by rememberUpdatedState(onInputHeightChanged)
+    val currentOnInputRotationChanged by rememberUpdatedState(onInputRotationChanged)
+    val currentOnClusterScaleRotation by rememberUpdatedState(onClusterScaleRotation)
+    val currentOnClusterDragStart by rememberUpdatedState(onClusterDragStart)
+    val currentOnClusterDragEnd by rememberUpdatedState(onClusterDragEnd)
+    val currentOnClusterMembersSettled by rememberUpdatedState(onClusterMembersSettled)
+    val currentOnStereoWidthChanged by rememberUpdatedState(onStereoWidthChanged)
+    val currentOnStereoAxisChanged by rememberUpdatedState(onStereoAxisChanged)
+    val currentOnStereoGestureEnd by rememberUpdatedState(onStereoGestureEnd)
 
     // The markers list is a fixed 64-entry backing store (id == index + 1) that is
     // never resized, so "which channels exist" is the inventory's answer, not a
@@ -429,18 +482,25 @@ fun InputMapTab(
     var lastViewInitialized by remember { mutableStateOf(false) }
 
     // Vector control state for secondary touches
-    // Target type: 0 = input (height/rotation), 1 = cluster (scale/rotation)
+    // Target type: 0 = input (height/rotation), 1 = cluster (scale/rotation),
+    // 2 = stereo image (width/axis): the Stereo layer, the tablet's stand-in for the desktop's Shift
     data class VectorControl(
-        val markerId: Int,           // inputId for input targets, or reference markerId for clusters
+        val markerId: Int,           // inputId for input and stereo targets, or reference markerId for clusters
         val clusterId: Int = 0,      // clusterId for cluster targets (0 for inputs)
-        val targetType: Int = 0,     // 0 = input, 1 = cluster
+        val targetType: Int = 0,     // 0 = input, 1 = cluster, 2 = stereo image
         val initialMarkerPosition: Offset,
         val initialTouchPosition: Offset,
         val currentTouchPosition: Offset,
         val startZ: Float = 2f,           // For inputs: initial positionZ in meters
         val startRotation: Float = 0f,    // For inputs: initial inputRotation, for clusters: cumulative rotation
         val previousDistance: Float = 0f,  // For clusters: previous frame distance (incremental scale)
-        val previousAngle: Float = 0f     // For clusters: previous frame angle (incremental rotation)
+        val previousAngle: Float = 0f,    // For clusters: previous frame angle (incremental rotation)
+        val startWidth: Float = 0f,       // For stereo images: width (m) at the baseline
+        val startAxis: Int = 0,           // For stereo images: axis offset (°) at the baseline
+        val latestWidth: Float = Float.NaN,     // For stereo images: last computed values,
+        val latestAxis: Int = Int.MIN_VALUE,    // NaN / MIN_VALUE until the finger first moves
+        val sentWidth: Float = Float.NaN,       // For stereo images: last values sent, so an
+        val sentAxis: Int = Int.MIN_VALUE       // unchanged one is not sent again
     )
     val vectorControls = remember { mutableStateMapOf<Long, VectorControl>() }
     var vectorControlsUpdateTrigger: Int by remember { mutableIntStateOf(0) }
@@ -512,7 +572,7 @@ fun InputMapTab(
             currentPivotStageX = pivotStageX,
             currentPivotStageY = pivotStageY
         )
-        onClusterDragStart?.invoke(clusterId)
+        currentOnClusterDragStart?.invoke(clusterId)
     }
 
     fun applyClusterRigidTransform(clusterId: Int) {
@@ -605,7 +665,7 @@ fun InputMapTab(
             markerStagePositions[memberId]?.let { Triple(memberId, it.first, it.second) }
         }
         if (settled.isNotEmpty()) {
-            onClusterMembersSettled?.invoke(clusterId, settled)
+            currentOnClusterMembersSettled?.invoke(clusterId, settled)
         }
         // Clear OscService suppression immediately so the authoritative bundle from
         // JUCE can update inputParametersState. But keep the local snapshot entry
@@ -613,7 +673,7 @@ fun InputMapTab(
         // inputParametersState skips this cluster until the bundle has actually
         // landed — otherwise we'd snap back to the pre-gesture position for the
         // brief window between release and bundle arrival.
-        onClusterDragEnd?.invoke(clusterId)
+        currentOnClusterDragEnd?.invoke(clusterId)
         clusterReleaseScope.launch {
             delay(400L)
             activeClusterTranslations.remove(clusterId)
@@ -626,11 +686,89 @@ fun InputMapTab(
         }
     }
 
+    // Start values an input vector control is baselined on, read through the updated
+    // State (the gesture loop keeps whatever it captured at its last restart).
+    fun heightRotationStart(inputId: Int): Pair<Float, Float> {
+        val channel = currentInputParametersState?.getChannel(inputId)
+        val posZDef = InputParameterDefinitions.allParameters.find { p -> p.variableName == "positionZ" }
+        val rotDef = InputParameterDefinitions.allParameters.find { p -> p.variableName == "rotation" }
+
+        val initialZ = channel?.parameters?.get("positionZ")?.let { param ->
+            posZDef?.let { def -> InputParameterDefinitions.applyFormula(def, param.normalizedValue) } ?: param.normalizedValue * 10f
+        } ?: 2f
+
+        val initialRotation = channel?.parameters?.get("rotation")?.let { param ->
+            rotDef?.let { def -> InputParameterDefinitions.applyFormula(def, param.normalizedValue) } ?: param.normalizedValue * 360f
+        } ?: 0f
+
+        // Whole degrees, as the desktop stores inputRotation: the formula's float round
+        // trip can land a hair under the integer, and secondFingerRotation's truncation
+        // would then turn a finger held still into a one-degree step.
+        return initialZ to (if (initialRotation.isFinite()) initialRotation.roundToInt().toFloat() else initialRotation)
+    }
+
+    // Width and axis offset a stereo vector control is baselined on, through the same
+    // State; the desktop's defaults (4 m, 0) until anything has arrived for the channel.
+    fun stereoStart(inputId: Int): Pair<Float, Int> {
+        val params = currentInputParametersState?.takeIf { it.hasChannel(inputId) }?.getChannel(inputId)?.parameters
+        val defs = InputParameterDefinitions.parametersByVariableName
+        val width = params?.get("stereoWidth")?.let {
+            InputParameterDefinitions.applyFormula(defs["stereoWidth"]!!, it.normalizedValue)
+        }
+        val axis = params?.get("stereoAxisOffset")?.let {
+            InputParameterDefinitions.applyFormula(defs["stereoAxisOffset"]!!, it.normalizedValue)
+        }
+        // Whole degrees, as the desktop stores the offset; roundToInt throws on NaN.
+        return (if (width != null && width.isFinite()) width.coerceIn(0f, StereoImage.WIDTH_MAX) else 4f) to
+               (if (axis != null && axis.isFinite()) StereoImage.wrapAxisDegrees(axis.roundToInt()) else 0)
+    }
+
+    // The Stereo layer's pinch and twist, the desktop's law (StereoImage): the finger's
+    // distance from the marker scales the width, its turn around the marker adds to the
+    // axis offset, both measured from the baseline. Sends only a value that changed, as a
+    // plain value (never inc/dec) that is always in range, and keeps the latest pair for
+    // the gesture end. [pxPerMetre] and [minDistancePx] are the desktop's 50 and 10
+    // logical pixels.
+    fun updateStereoControl(key: Long, vc: VectorControl, pxPerMetre: Float, minDistancePx: Float) {
+        val markerPos = localMarkerPositions[vc.markerId]
+            ?: currentMarkersState.find { it.id == vc.markerId }?.position ?: return
+        val touch = vc.currentTouchPosition
+        val startDistance = calculateDistance(vc.initialMarkerPosition, vc.initialTouchPosition)
+        val width = StereoImage.pinchWidth(vc.startWidth, startDistance, calculateDistance(markerPos, touch),
+            pxPerMetre, minDistancePx)
+        if (width.isNaN()) return
+        val turn = atan2(touch.y - markerPos.y, touch.x - markerPos.x) -
+            atan2(vc.initialTouchPosition.y - vc.initialMarkerPosition.y, vc.initialTouchPosition.x - vc.initialMarkerPosition.x)
+        val axis = StereoImage.twistAxis(vc.startAxis, turn)
+
+        var sentWidth = vc.sentWidth
+        var sentAxis = vc.sentAxis
+        if (sentWidth.isNaN() || abs(width - sentWidth) >= 0.001f) {  // under 1 mm is not a change
+            currentOnStereoWidthChanged?.invoke(vc.markerId, width)
+            sentWidth = width
+        }
+        if (axis != sentAxis) {
+            currentOnStereoAxisChanged?.invoke(vc.markerId, axis)
+            sentAxis = axis
+        }
+        vectorControls[key] = vc.copy(latestWidth = width, latestAxis = axis, sentWidth = sentWidth, sentAxis = sentAxis)
+    }
+
+    // A stereo vector control's end: the send throttle can strand its last width/axis or
+    // replay an older one after it, and the desktop never echoes tablet edits, so nothing
+    // would put that right. Hands the final pair to the service, which sends it once more,
+    // unthrottled, after any send still in flight. Nothing if the finger never moved.
+    fun flushStereoFinal(vc: VectorControl) {
+        if (vc.targetType != 2 || vc.latestWidth.isNaN() || vc.latestAxis == Int.MIN_VALUE) return
+        currentOnStereoGestureEnd?.invoke(vc.markerId, vc.latestWidth, vc.latestAxis)
+    }
+
     // Suspending second-finger edits mid-gesture: end every live vector control the
     // way a secondary-finger release would (cluster ones bake and send the scale=0
-    // gesture end), then drop them. A finger still down stays in the gesture loop's
-    // pointersThatAttemptedGrab, so it is inert until lifted and its release finds
-    // no vector control left to end. The primary finger keeps its drag.
+    // gesture end, stereo ones send their final pair), then drop them. A finger still
+    // down stays in the gesture loop's pointersThatAttemptedGrab, so it is inert until
+    // lifted and its release finds no vector control left to end. The primary finger
+    // keeps its drag.
     LaunchedEffect(secondaryTouchEnabled) {
         if (!secondaryTouchEnabled && vectorControls.isNotEmpty()) {
             val clusterIds = vectorControls.values.filter { it.targetType == 1 }.map { it.clusterId }.toSet()
@@ -640,9 +778,53 @@ fun InputMapTab(
                     onClusterScaleRotation?.invoke(clusterId, 0f, 0f)
                 }
             }
+            vectorControls.values.filter { it.targetType == 2 }.forEach { flushStereoFinal(it) }
             vectorControls.clear()
             vectorControlsUpdateTrigger++
         }
+    }
+
+    // The Stereo layer switched mid-gesture: each live input control on a stereo input
+    // moves to the layer now wanted, re-baselined on where the finger is now and on the
+    // values as they are now, like the desktop's syncSecondaryTouchLayer when Shift
+    // changes, so height -> width -> height within one touch never jumps. A stereo
+    // control leaving the layer sends its final pair first. Cluster controls are left
+    // alone: a stereo cluster reference keeps turn/scale, as on the desktop.
+    LaunchedEffect(stereoTouchEnabled) {
+        var changed = false
+        vectorControls.entries.toList().forEach { (key, vc) ->
+            if (vc.targetType == 1) return@forEach
+            val wantStereo = stereoTouchEnabled && currentInventory.isStereo(vc.markerId)
+            if (wantStereo == (vc.targetType == 2)) return@forEach
+            val markerPos = localMarkerPositions[vc.markerId]
+                ?: currentMarkersState.find { it.id == vc.markerId }?.position ?: return@forEach
+            if (vc.targetType == 2) flushStereoFinal(vc)
+            vectorControls[key] = if (wantStereo) {
+                val (startWidth, startAxis) = stereoStart(vc.markerId)
+                VectorControl(
+                    markerId = vc.markerId,
+                    targetType = 2,
+                    initialMarkerPosition = markerPos,
+                    initialTouchPosition = vc.currentTouchPosition,
+                    currentTouchPosition = vc.currentTouchPosition,
+                    startWidth = startWidth,
+                    startAxis = startAxis
+                )
+            } else {
+                val (startZ, startRotation) = heightRotationStart(vc.markerId)
+                VectorControl(
+                    markerId = vc.markerId,
+                    targetType = 0,
+                    initialMarkerPosition = markerPos,
+                    initialTouchPosition = vc.currentTouchPosition,
+                    currentTouchPosition = vc.currentTouchPosition,
+                    startZ = startZ,
+                    startRotation = startRotation
+                )
+            }
+            changed = true
+        }
+        if (changed) vectorControlsUpdateTrigger++
     }
 
     // Throttle cluster sends directly in touch handler to avoid overloading JUCE
@@ -1096,6 +1278,11 @@ fun InputMapTab(
                 .fillMaxSize()
                 // Combined gesture handling for marker dragging and pan/zoom
                 .pointerInput(stageWidth, stageDepth, panOffsetX, panOffsetY, actualViewWidth, actualViewHeight, pixelsPerMeter) {
+                    // The Stereo layer's pinch in the desktop's logical pixels: 50 per metre
+                    // below 0.1 m, no ratio within 10 of the marker. In dp, so it feels the
+                    // same at every density and zoom.
+                    val stereoPxPerMetre = 50.dp.toPx()
+                    val stereoMinDistancePx = 10.dp.toPx()
                     awaitEachGesture {
                         val pointerIdToCurrentLogicalPosition = mutableMapOf<PointerId, Offset>()
                         val pointersThatAttemptedGrab = mutableSetOf<PointerId>()
@@ -1166,7 +1353,7 @@ fun InputMapTab(
                                                         lastClusterGestureSendTime = now
                                                         // Send combined cumulative values (absolute from gesture start)
                                                         // Negate rotation: screen Y is down, stage Y is up
-                                                        onClusterScaleRotation?.invoke(
+                                                        currentOnClusterScaleRotation?.invoke(
                                                             vectorControl.clusterId, cumulativeScale, -cumulativeRotation
                                                         )
                                                     }
@@ -1174,6 +1361,9 @@ fun InputMapTab(
                                                     // Don't update previousAngle/previousDistance — keep initial values
                                                     // so cumulative computation is always from gesture start
                                                     vectorControls[pointerValue] = updatedVectorControl
+                                                } else if (vectorControl.targetType == 2) {
+                                                    // Stereo secondary touch: pinch = width, twist = axis offset
+                                                    updateStereoControl(pointerValue, updatedVectorControl, stereoPxPerMetre, stereoMinDistancePx)
                                                 } else {
                                                     // Input secondary touch: height and rotation
                                                     val currentMarkerPosition = if (localMarkerPositions.containsKey(vectorControl.markerId)) {
@@ -1183,12 +1373,13 @@ fun InputMapTab(
                                                     }
 
                                                     if (currentMarkerPosition != null) {
-                                                        // Rotation: angle change from initial to current
+                                                        // Rotation: angle change from initial to current, wrapped into the
+                                                        // desktop's range (it rejects anything past it)
                                                         val initialAngle = calculateAngle(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
                                                         val currentAngle = calculateAngle(currentMarkerPosition, change.position)
                                                         val angleChange = currentAngle - initialAngle
-                                                        val newRotation = vectorControl.startRotation - angleChange
-                                                        onInputRotationChanged?.invoke(vectorControl.markerId, newRotation)
+                                                        val newRotation = secondFingerRotation(vectorControl.startRotation, angleChange)
+                                                        currentOnInputRotationChanged?.invoke(vectorControl.markerId, newRotation)
 
                                                         // Height: pinch distance change maps to height delta (additive)
                                                         val initialDistance = calculateDistance(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
@@ -1197,7 +1388,7 @@ fun InputMapTab(
                                                             val distanceRatio = currentDistance / initialDistance
                                                             val heightDelta = (distanceRatio - 1f) * 3f  // 3m per doubling of pinch distance
                                                             val newHeight = (vectorControl.startZ + heightDelta).coerceIn(0f, 20f)
-                                                            onInputHeightChanged?.invoke(vectorControl.markerId, newHeight)
+                                                            currentOnInputHeightChanged?.invoke(vectorControl.markerId, newHeight)
                                                         }
                                                     }
                                                 }
@@ -1211,12 +1402,12 @@ fun InputMapTab(
                                         // Check for barycenter or hidden reference FIRST
                                         // (barycenters overlap with markers, so must be checked before markers)
                                         var clusterTargetFound = false
-                                        if (clusterConfigs.isNotEmpty()) {
+                                        if (currentClusterConfigs.isNotEmpty()) {
                                             for (clusterId in 1..10) {
                                                 if (draggingBarycenters.containsValue(clusterId) || draggingHiddenRefs.containsValue(clusterId)) continue
 
                                                 // Check for barycenter (mode 1)
-                                                val barycenter = findClusterBarycenter(clusterId, liveMarkersNow, clusterConfigs)
+                                                val barycenter = findClusterBarycenter(clusterId, liveMarkersNow, currentClusterConfigs)
                                                 if (barycenter != null && distance(touchPosition, barycenter) <= markerRadius * pickupRadiusMultiplier) {
                                                     if (draggingBarycenters.size + draggingMarkers.size + draggingHiddenRefs.size < 10) {
                                                         draggingBarycenters[pointerValue] = clusterId
@@ -1227,7 +1418,7 @@ fun InputMapTab(
                                                 }
 
                                                 // Check for hidden reference (mode 0)
-                                                val hiddenRef = findHiddenClusterReference(clusterId, liveMarkersNow, clusterConfigs)
+                                                val hiddenRef = findHiddenClusterReference(clusterId, liveMarkersNow, currentClusterConfigs)
                                                 if (hiddenRef != null && distance(touchPosition, hiddenRef) <= markerRadius * pickupRadiusMultiplier) {
                                                     if (draggingBarycenters.size + draggingMarkers.size + draggingHiddenRefs.size < 10) {
                                                         draggingHiddenRefs[pointerValue] = clusterId
@@ -1279,9 +1470,9 @@ fun InputMapTab(
                                                     val closestClusterId = availableClusters.firstOrNull()
                                                     closestClusterId?.let { clusterId ->
                                                         // Find the reference position (barycenter or hidden ref)
-                                                        val barycenterPos = findClusterBarycenter(clusterId, liveMarkersNow, clusterConfigs)
+                                                        val barycenterPos = findClusterBarycenter(clusterId, liveMarkersNow, currentClusterConfigs)
                                                         val hiddenRefPos = if (barycenterPos == null)
-                                                            findHiddenClusterReference(clusterId, liveMarkersNow, clusterConfigs)
+                                                            findHiddenClusterReference(clusterId, liveMarkersNow, currentClusterConfigs)
                                                         else null
                                                         val referencePos = barycenterPos ?: hiddenRefPos
                                                         val pivotMode = if (barycenterPos != null) 1 else 0
@@ -1338,8 +1529,10 @@ fun InputMapTab(
                                                 // Check for secondary touch on dragged input markers
                                                 if (!vectorControlCreated) {
                                                     val draggedMarkers = draggingMarkers.values.toSet()
-                                                    val markersWithVectorControl = (vectorControls.values.filter { it.targetType == 0 }.map { it.markerId } +
-                                                        vectorControls.values.filter { it.targetType == 1 }.map { it.markerId }).toSet()
+                                                    // Every target type: a stereo control counts too, or a third finger
+                                                    // would put a second control on its marker. (Barycenter and hidden
+                                                    // reference controls carry markerId 0, which no marker has.)
+                                                    val markersWithVectorControl = vectorControls.values.map { it.markerId }.toSet()
                                                     val availableMarkers = draggedMarkers - markersWithVectorControl
 
                                                     if (availableMarkers.isNotEmpty()) {
@@ -1354,7 +1547,7 @@ fun InputMapTab(
                                                             marker?.let {
                                                                 // Check if this marker is a cluster reference — if so, use cluster scale/rotation
                                                                 val markerClusterId = it.clusterId
-                                                                val clusterConfig = if (markerClusterId > 0) clusterConfigs.find { c -> c.id == markerClusterId } else null
+                                                                val clusterConfig = if (markerClusterId > 0) currentClusterConfigs.find { c -> c.id == markerClusterId } else null
                                                                 val isClusterReference = clusterConfig != null && (
                                                                     clusterConfig.trackedInputId == markerId ||
                                                                     (clusterConfig.referenceMode == 0 && clusterConfig.trackedInputId == 0 &&
@@ -1405,19 +1598,27 @@ fun InputMapTab(
                                                                             toStage = markerCanvasToStage
                                                                         )
                                                                     }
+                                                                } else if (currentStereoTouchEnabled && currentInventory.isStereo(markerId)) {
+                                                                    // Stereo layer: width/axis instead of height/orientation, and
+                                                                    // only where the plain gesture would be the input one. Cluster
+                                                                    // references, tracked and Shared Position members took the
+                                                                    // cluster branch above, as the desktop's Shift layer skips them.
+                                                                    val (startWidth, startAxis) = stereoStart(markerId)
+                                                                    vectorControls[pointerValue] = VectorControl(
+                                                                        markerId = markerId,
+                                                                        clusterId = 0,
+                                                                        targetType = 2,  // Stereo image target
+                                                                        // The drag's own position, which the moves measure from too:
+                                                                        // the markers list can lag it, and the gap would read as a pinch.
+                                                                        initialMarkerPosition = localMarkerPositions[markerId] ?: it.position,
+                                                                        initialTouchPosition = touchPosition,
+                                                                        currentTouchPosition = touchPosition,
+                                                                        startWidth = startWidth,
+                                                                        startAxis = startAxis
+                                                                    )
                                                                 } else {
                                                                     // Regular input: create input vector control (height/rotation)
-                                                                    val channel = inputParametersState?.getChannel(markerId)
-                                                                    val posZDef = InputParameterDefinitions.allParameters.find { p -> p.variableName == "positionZ" }
-                                                                    val rotDef = InputParameterDefinitions.allParameters.find { p -> p.variableName == "rotation" }
-
-                                                                    val initialZ = channel?.parameters?.get("positionZ")?.let { param ->
-                                                                        posZDef?.let { def -> InputParameterDefinitions.applyFormula(def, param.normalizedValue) } ?: param.normalizedValue * 10f
-                                                                    } ?: 2f
-
-                                                                    val initialRotation = channel?.parameters?.get("rotation")?.let { param ->
-                                                                        rotDef?.let { def -> InputParameterDefinitions.applyFormula(def, param.normalizedValue) } ?: param.normalizedValue * 360f
-                                                                    } ?: 0f
+                                                                    val (initialZ, initialRotation) = heightRotationStart(markerId)
 
                                                                     vectorControls[pointerValue] = VectorControl(
                                                                         markerId = markerId,
@@ -1469,7 +1670,7 @@ fun InputMapTab(
                                                         newFullListForWFS[originalGlobalIndex] = updatedMarker
                                                         
                                                         withContext(Dispatchers.Main) {
-                                                            onMarkersInitiallyPositioned(newFullListForWFS.toList())
+                                                            currentOnMarkersInitiallyPositioned(newFullListForWFS.toList())
                                                         }
                                                     }
 
@@ -1477,7 +1678,7 @@ fun InputMapTab(
                                                     if (initialLayoutDone) {
                                                         // Check if this marker is a cluster reference
                                                         val markerClusterId = updatedMarker.clusterId
-                                                        val clusterConfig = if (markerClusterId > 0) clusterConfigs.find { it.id == markerClusterId } else null
+                                                        val clusterConfig = if (markerClusterId > 0) currentClusterConfigs.find { it.id == markerClusterId } else null
                                                         val isClusterReference = clusterConfig != null && (
                                                             clusterConfig.trackedInputId == updatedMarker.id ||
                                                             (clusterConfig.referenceMode == 0 && clusterConfig.trackedInputId == 0 &&
@@ -1538,26 +1739,28 @@ fun InputMapTab(
                                                             val nowRef = System.currentTimeMillis()
                                                             if (nowRef - lastClusterPositionSendTime >= 40L) {
                                                                 lastClusterPositionSendTime = nowRef
-                                                                onClusterPositionChanged?.invoke(markerClusterId, stageX, stageY)
+                                                                currentOnClusterPositionChanged?.invoke(markerClusterId, stageX, stageY)
                                                             }
                                                         } else {
                                                             // Individual marker move
-                                                            onPositionChanged?.invoke(updatedMarker.id, stageX, stageY)
+                                                            currentOnPositionChanged?.invoke(updatedMarker.id, stageX, stageY)
                                                         }
 
                                                         // Check if this marker has vector control (secondary touch)
-                                                        // When primary finger moves, update secondary touch calculations
-                                                        vectorControls.values.forEach { vectorControl ->
+                                                        // When primary finger moves, update secondary touch calculations.
+                                                        // A copy of the entries: a stereo update writes its control back.
+                                                        vectorControls.entries.toList().forEach { (vectorControlKey, vectorControl) ->
                                                             if (vectorControl.targetType == 0 && vectorControl.markerId == updatedMarker.id) {
                                                                 // Use local position for consistent calculations
                                                                 val currentMarkerPosition = localMarkerPositions[updatedMarker.id] ?: updatedMarker.position
 
-                                                                // Rotation: angle change from initial to current
+                                                                // Rotation: angle change from initial to current, wrapped into the
+                                                                // desktop's range (it rejects anything past it)
                                                                 val initialAngle = calculateAngle(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
                                                                 val currentAngle = calculateAngle(currentMarkerPosition, vectorControl.currentTouchPosition)
                                                                 val angleChange = currentAngle - initialAngle
-                                                                val newRotation = vectorControl.startRotation - angleChange
-                                                                onInputRotationChanged?.invoke(vectorControl.markerId, newRotation)
+                                                                val newRotation = secondFingerRotation(vectorControl.startRotation, angleChange)
+                                                                currentOnInputRotationChanged?.invoke(vectorControl.markerId, newRotation)
 
                                                                 // Height: pinch distance change maps to height delta (additive)
                                                                 val initialDistance = calculateDistance(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
@@ -1566,8 +1769,12 @@ fun InputMapTab(
                                                                     val distanceRatio = currentDistance / initialDistance
                                                                     val heightDelta = (distanceRatio - 1f) * 3f  // 3m per doubling of pinch distance
                                                                     val newHeight = (vectorControl.startZ + heightDelta).coerceIn(0f, 20f)
-                                                                    onInputHeightChanged?.invoke(vectorControl.markerId, newHeight)
+                                                                    currentOnInputHeightChanged?.invoke(vectorControl.markerId, newHeight)
                                                                 }
+                                                            } else if (vectorControl.targetType == 2 && vectorControl.markerId == updatedMarker.id) {
+                                                                // Stereo: moving the marker under a still second finger changes the
+                                                                // pinch and the twist too, so it re-applies them like type 0 above
+                                                                updateStereoControl(vectorControlKey, vectorControl, stereoPxPerMetre, stereoMinDistancePx)
                                                             }
                                                         }
                                                     }
@@ -1640,7 +1847,7 @@ fun InputMapTab(
                                                     val now2 = System.currentTimeMillis()
                                                     if (now2 - lastClusterPositionSendTime >= 40L) {
                                                         lastClusterPositionSendTime = now2
-                                                        onClusterPositionChanged?.invoke(clusterIdBeingDragged, stageX, stageY)
+                                                        currentOnClusterPositionChanged?.invoke(clusterIdBeingDragged, stageX, stageY)
                                                     }
                                                 }
 
@@ -1710,7 +1917,7 @@ fun InputMapTab(
                                                         val now3 = System.currentTimeMillis()
                                                         if (now3 - lastClusterPositionSendTime >= 40L) {
                                                             lastClusterPositionSendTime = now3
-                                                            onClusterPositionChanged?.invoke(hiddenRefClusterId, stageX, stageY)
+                                                            currentOnClusterPositionChanged?.invoke(hiddenRefClusterId, stageX, stageY)
                                                         }
                                                     }
 
@@ -1737,10 +1944,14 @@ fun InputMapTab(
                                         endClusterTranslation(releasedClusterIdForMarker)
                                     }
 
-                                    // Send gesture-end for any cluster vector controls on this marker
+                                    // Send gesture-end for any cluster vector controls on this marker,
+                                    // and the final width/axis for a stereo one
                                     vectorControls.values.forEach { vc ->
                                         if (vc.markerId == releasedMarkerId && vc.targetType == 1 && initialLayoutDone) {
-                                            onClusterScaleRotation?.invoke(vc.clusterId, 0f, 0f)
+                                            currentOnClusterScaleRotation?.invoke(vc.clusterId, 0f, 0f)
+                                        }
+                                        if (vc.markerId == releasedMarkerId && vc.targetType == 2) {
+                                            flushStereoFinal(vc)
                                         }
                                     }
                                     // Clean up any vector controls associated with this marker
@@ -1771,7 +1982,7 @@ fun InputMapTab(
                                             actualViewWidth = actualViewWidth,
                                             actualViewHeight = actualViewHeight
                                         )
-                                        onPositionChanged?.invoke(releasedMarkerId, stageX, stageY)
+                                        currentOnPositionChanged?.invoke(releasedMarkerId, stageX, stageY)
                                     }
                                 } else if (vectorControls.containsKey(pointerValue)) {
                                     // Send gesture-end for cluster vector controls
@@ -1782,7 +1993,11 @@ fun InputMapTab(
                                         // finger continues to drag it.
                                         bakeClusterScaleRotation(releasedVc.clusterId)
                                         // Send scale=0 to signal gesture end (JUCE clears snapshot)
-                                        onClusterScaleRotation?.invoke(releasedVc.clusterId, 0f, 0f)
+                                        currentOnClusterScaleRotation?.invoke(releasedVc.clusterId, 0f, 0f)
+                                    }
+                                    // A stereo control ends with its final width/axis
+                                    if (releasedVc != null && releasedVc.targetType == 2) {
+                                        flushStereoFinal(releasedVc)
                                     }
                                     // Remove vector control when secondary touch is released
                                     vectorControls.remove(pointerValue)
@@ -1799,7 +2014,7 @@ fun InputMapTab(
                                         // Send gesture-end for any cluster vector controls and clean up
                                         val hasClusterVc = vectorControls.values.any { it.targetType == 1 && it.clusterId == releasedClusterId }
                                         if (hasClusterVc && initialLayoutDone) {
-                                            onClusterScaleRotation?.invoke(releasedClusterId, 0f, 0f)
+                                            currentOnClusterScaleRotation?.invoke(releasedClusterId, 0f, 0f)
                                         }
                                         vectorControls.entries.removeAll { (_, vc) ->
                                             vc.targetType == 1 && vc.clusterId == releasedClusterId
@@ -1818,7 +2033,7 @@ fun InputMapTab(
                                         // Send gesture-end for any cluster vector controls and clean up
                                         val hasClusterVc = vectorControls.values.any { it.targetType == 1 && it.clusterId == releasedClusterId }
                                         if (hasClusterVc && initialLayoutDone) {
-                                            onClusterScaleRotation?.invoke(releasedClusterId, 0f, 0f)
+                                            currentOnClusterScaleRotation?.invoke(releasedClusterId, 0f, 0f)
                                         }
                                         vectorControls.entries.removeAll { (_, vc) ->
                                             vc.targetType == 1 && vc.clusterId == releasedClusterId
@@ -1908,15 +2123,26 @@ fun InputMapTab(
         ) { // DrawScope
             drawRect(Color.Black) // Background for the canvas
 
-            // Draw secondary touch info above the grid (amber notice while suspended).
-            // Reading the State here makes the canvas redraw when the toggle flips.
+            // Draw secondary touch info above the grid (amber notice while suspended, blue
+            // while the Stereo layer is live). Reading the States here makes the canvas
+            // redraw when either toggle flips. The Stereo layer only acts under a live 2nd
+            // Finger, and is only worth announcing when there is a stereo input to use it on.
             val secondaryTouchOn = currentSecondaryTouchEnabled
+            val stereoLayerOn = secondaryTouchOn && currentStereoTouchEnabled && inventory.channels.any { it.isStereo }
             val secondaryTouchText = locStatic(
-                if (secondaryTouchOn) "remote.map.secondaryTouchInfo" else "remote.map.secondaryTouchOff"
+                when {
+                    !secondaryTouchOn -> "remote.map.secondaryTouchOff"
+                    stereoLayerOn -> "remote.map.stereoTouchInfo"
+                    else -> "remote.map.secondaryTouchInfo"
+                }
             )
 
             val headerPaint = Paint().apply {
-                color = if (secondaryTouchOn) android.graphics.Color.WHITE else 0xFFFF9800.toInt()  // Material Orange 500
+                color = when {
+                    !secondaryTouchOn -> 0xFFFF9800.toInt()  // Material Orange 500
+                    stereoLayerOn -> STEREO_LAYER_ARGB.toInt()
+                    else -> android.graphics.Color.WHITE
+                }
                 textSize = canvasHeight / 60f
                 textAlign = Paint.Align.CENTER
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
@@ -1995,8 +2221,8 @@ fun InputMapTab(
 
             // Draw vector control lines for secondary touches
             vectorControls.values.forEach { vectorControl ->
-                val currentReferencePosition = if (vectorControl.targetType == 0) {
-                    // Input target: use local position if available, otherwise global
+                val currentReferencePosition = if (vectorControl.targetType != 1) {
+                    // Input or stereo target: use local position if available, otherwise global
                     if (localMarkerPositions.containsKey(vectorControl.markerId)) {
                         localMarkerPositions[vectorControl.markerId]!!
                     } else {
@@ -2022,8 +2248,12 @@ fun InputMapTab(
                     )
 
                     // Draw active line (current position to current touch position)
-                    // For clusters, use cyan to distinguish from input white
-                    val lineColor = if (vectorControl.targetType == 1) Color.Cyan else Color.White
+                    // For clusters, use cyan to distinguish from input white; the Stereo layer is blue
+                    val lineColor = when (vectorControl.targetType) {
+                        1 -> Color.Cyan
+                        2 -> Color(STEREO_LAYER_ARGB)
+                        else -> Color.White
+                    }
                     drawLine(
                         color = lineColor,
                         start = currentReferencePosition,
@@ -2035,7 +2265,7 @@ fun InputMapTab(
                     if (vectorControl.targetType == 0) {
                         val initialAngle = calculateAngle(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
                         val currentAngle = calculateAngle(currentReferencePosition, vectorControl.currentTouchPosition)
-                        val newRotation = vectorControl.startRotation - (currentAngle - initialAngle)
+                        val newRotation = secondFingerRotation(vectorControl.startRotation, currentAngle - initialAngle)
 
                         val initialDistance = calculateDistance(vectorControl.initialMarkerPosition, vectorControl.initialTouchPosition)
                         val currentDistance = calculateDistance(currentReferencePosition, vectorControl.currentTouchPosition)
@@ -2050,6 +2280,18 @@ fun InputMapTab(
                             anchorPosition = greyLineEnd,
                             height = newHeight,
                             rotationDegrees = newRotation,
+                            canvasWidth = canvasWidth,
+                            textPaint = textPaint
+                        )
+                    } else if (vectorControl.targetType == 2) {
+                        // Width/axis label for stereo targets: the pair the gesture last
+                        // computed (the one its end sends), or the baseline until the finger
+                        // moves. Explicit sentinel checks: ?: on a non-null Float/Int never
+                        // falls back.
+                        drawStereoWidthAxisLabel(
+                            anchorPosition = greyLineEnd,
+                            width = if (vectorControl.latestWidth.isNaN()) vectorControl.startWidth else vectorControl.latestWidth,
+                            axisDegrees = if (vectorControl.latestAxis == Int.MIN_VALUE) vectorControl.startAxis else vectorControl.latestAxis,
                             canvasWidth = canvasWidth,
                             textPaint = textPaint
                         )
@@ -2248,7 +2490,7 @@ fun InputMapTab(
             }
         }
 
-            // Floating buttons for fit-to-screen and the 2nd-finger toggle (top right)
+            // Floating buttons for fit-to-screen and the 2nd-finger and Stereo toggles (top right)
             Column(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -2291,6 +2533,29 @@ fun InputMapTab(
                         ),
                         modifier = Modifier.size(24.dp)
                     )
+                }
+                // Stereo layer toggle, only when some input is stereo; the description names
+                // the action a tap performs. A layer of the 2nd Finger: while that is
+                // suspended it is dimmed and a tap does nothing, and its own state waits.
+                if (inventory.channels.any { it.isStereo }) {
+                    FloatingActionButton(
+                        onClick = { if (secondaryTouchEnabled) onStereoTouchEnabledChange(!stereoTouchEnabled) },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .alpha(if (secondaryTouchEnabled) 1f else 0.4f),
+                        containerColor = if (stereoTouchEnabled) Color(STEREO_LAYER_ARGB)
+                                         else MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (stereoTouchEnabled) Color.White
+                                       else MaterialTheme.colorScheme.onSurfaceVariant
+                    ) {
+                        Icon(
+                            Icons.Default.SurroundSound,
+                            contentDescription = loc(
+                                if (stereoTouchEnabled) "remote.map.stereoTouchDisable" else "remote.map.stereoTouchEnable"
+                            ),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
             }
         }  // End Box (Canvas + floating buttons)

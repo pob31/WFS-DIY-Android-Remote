@@ -59,6 +59,13 @@ import kotlin.times
 //     axis offset alone. The desktop has sent and routed it since WFS-DIY 1.0.0beta46;
 //     until now this tablet dropped it for want of a definition. A v4 desktop older
 //     than beta46 rejects the write (and logs it) with no other effect.
+// Still v4: the map's Stereo layer sends /remoteInput/stereoWidth (",if") and
+//     /remoteInput/stereoAxisOffset (",ii") from a second-finger pinch/twist: the
+//     addresses and tags the stereo row's dials already use, always in range, never
+//     inc/dec. A gesture's last pair goes out once more, unthrottled, 60 ms after it
+//     ends. The second finger's /remoteInput/rotation is now wrapped into -179..180 in
+//     whole degrees, as the desktop's own gesture sets it; a twist past +-180 used to
+//     be sent as it was and rejected.
 const val REMOTE_PROTOCOL_VERSION = 4
 
 fun getPaddedBytes(input: String, charsets: java.nio.charset.Charset = Charsets.UTF_8): ByteArray {
@@ -704,11 +711,15 @@ fun sendOscMarkerRadialChange(context: Context, markerId: Int, modeNumber: Int, 
 /**
  * Send input parameter value via OSC
  * All parameters send inputId first, then the value
+ *
+ * [throttled] = false sends at once, for a gesture's final value: it neither waits
+ * behind the per-key throttle nor gets parked as a pending that only a later send on
+ * the key would flush.
  */
-fun sendOscInputParameterInt(context: Context, oscPath: String, inputId: Int, value: Int) {
+fun sendOscInputParameterInt(context: Context, oscPath: String, inputId: Int, value: Int, throttled: Boolean = true) {
     val throttleKey = OscThrottleManager.inputParameterKey(oscPath, inputId)
 
-    if (!OscThrottleManager.shouldSend(throttleKey)) {
+    if (throttled && !OscThrottleManager.shouldSend(throttleKey)) {
         OscThrottleManager.storePending(throttleKey) {
             sendOscInputParameterInt(context, oscPath, inputId, value)
         }
@@ -819,10 +830,11 @@ fun sendOscVisRequest(context: Context, pinnedChannel: Int) {
     }
 }
 
-fun sendOscInputParameterFloat(context: Context, oscPath: String, inputId: Int, value: Float) {
+/** Float twin of [sendOscInputParameterInt], [throttled] included. */
+fun sendOscInputParameterFloat(context: Context, oscPath: String, inputId: Int, value: Float, throttled: Boolean = true) {
     val throttleKey = OscThrottleManager.inputParameterKey(oscPath, inputId)
 
-    if (!OscThrottleManager.shouldSend(throttleKey)) {
+    if (throttled && !OscThrottleManager.shouldSend(throttleKey)) {
         OscThrottleManager.storePending(throttleKey) {
             sendOscInputParameterFloat(context, oscPath, inputId, value)
         }

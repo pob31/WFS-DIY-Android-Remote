@@ -144,6 +144,9 @@ class OscService : Service() {
         // declared unable to hear us. It pings every 2 s, so this is 4-6 s; a working
         // handshake needs one ping, two if a pong is lost.
         private const val DESKTOP_NOT_HEARING_PINGS = 3
+        // How long a map stereo gesture's final pair waits before going out: longer than
+        // the 20 ms throttle replay, so any send still in flight lands first.
+        private const val STEREO_FINAL_SEND_DELAY_MS = 60L
     }
 
     // Service state tracking
@@ -800,7 +803,43 @@ class OscService : Service() {
             sendOscInputParameterFloat(this@OscService, oscPath, inputId, value)
         }
     }
-    
+
+    /**
+     * The final width and axis offset of a map stereo gesture, sent when it ends.
+     *
+     * The gesture's own sends go through the per-key throttle, which can lose the last
+     * one: a value arriving within 20 ms of the previous send is parked as a pending that
+     * only a LATER send on the same key flushes, so it strands when the finger lifts, and
+     * a pending already picked up is replayed 20 ms after a send, possibly behind a newer
+     * value. The desktop never echoes tablet edits, so nothing would put either right.
+     * Runs in the service scope, so switching tabs cannot cancel it: wait until any send
+     * still in flight has landed, drop what is pending, then send both unthrottled.
+     */
+    fun sendStereoImageFinal(inputId: Int, width: Float, axisOffset: Int) {
+        serviceScope.launch {
+            delay(STEREO_FINAL_SEND_DELAY_MS)
+            val widthPath = "/remoteInput/stereoWidth"
+            val axisPath = "/remoteInput/stereoAxisOffset"
+            OscThrottleManager.clearPending(OscThrottleManager.inputParameterKey(widthPath, inputId))
+            OscThrottleManager.clearPending(OscThrottleManager.inputParameterKey(axisPath, inputId))
+            sendInputParameterFloatNow(widthPath, inputId, width)
+            sendInputParameterIntNow(axisPath, inputId, axisOffset)
+        }
+    }
+
+    // Unthrottled twins of sendInputParameterInt/Float, for a gesture's final value: the
+    // same local update first, then a send that neither waits behind the throttle nor is
+    // parked as a pending.
+    private fun sendInputParameterIntNow(oscPath: String, inputId: Int, value: Int) {
+        updateInputParameterFromOsc(oscPath, inputId, intValue = value)
+        sendOscInputParameterInt(this, oscPath, inputId, value, throttled = false)
+    }
+
+    private fun sendInputParameterFloatNow(oscPath: String, inputId: Int, value: Float) {
+        updateInputParameterFromOsc(oscPath, inputId, floatValue = value)
+        sendOscInputParameterFloat(this, oscPath, inputId, value, throttled = false)
+    }
+
     fun sendInputParameterString(oscPath: String, inputId: Int, value: String) {
         // Update local state immediately to keep it in sync with what we're sending
         updateInputParameterFromOsc(oscPath, inputId, stringValue = value)
