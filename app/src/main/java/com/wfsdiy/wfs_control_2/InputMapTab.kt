@@ -52,11 +52,8 @@ import kotlin.math.sqrt
 import com.wfsdiy.wfs_control_2.localization.loc
 import com.wfsdiy.wfs_control_2.localization.locStatic
 import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 // Helper functions for vector control calculations
 fun calculateAngle(from: Offset, to: Offset): Float {
@@ -1698,15 +1695,10 @@ fun InputMapTab(
                                                     // Update local state immediately for smooth visual feedback
                                                     localMarkerPositions[updatedMarker.id] = newLogicalPosition
                                                     
-                                                    // Update global state asynchronously to avoid blocking
-                                                    CoroutineScope(Dispatchers.Default).launch {
-                                                        val newFullListForWFS = currentMarkersState.toMutableList()
-                                                        newFullListForWFS[originalGlobalIndex] = updatedMarker
-                                                        
-                                                        withContext(Dispatchers.Main) {
-                                                            currentOnMarkersInitiallyPositioned(newFullListForWFS.toList())
-                                                        }
-                                                    }
+                                                    // Only the dragged marker: the callback merges positions by
+                                                    // number into the current list, so a copy of the rest of this
+                                                    // composition's (possibly stale) list must not ride along.
+                                                    currentOnMarkersInitiallyPositioned(listOf(updatedMarker))
 
                                                     // Send OSC messages asynchronously to avoid blocking
                                                     if (currentInitialLayoutDone) {

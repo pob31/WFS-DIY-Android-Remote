@@ -199,6 +199,23 @@ data class Marker(
         }
 }
 
+/**
+ * The Map's positions merged by channel number into the current markers, which keep
+ * everything else. The Map builds its lists from the markers it last composed with,
+ * which can predate a name or cluster that arrived since; taking its list whole wrote
+ * that stale copy back over the fresh name, so a newly added channel kept a blank label
+ * until some later update. A marker the Map did not send is left as it is, and one
+ * whose position did not change stays the same object.
+ */
+internal fun mergeMarkerPositions(current: List<Marker>, positioned: List<Marker>): List<Marker> {
+    val positionsById = positioned.associateBy({ it.id }) { it.positionX to it.positionY }
+    return current.map { marker ->
+        val (x, y) = positionsById[marker.id] ?: return@map marker
+        if (x == marker.positionX && y == marker.positionY) marker
+        else marker.copy(positionX = x, positionY = y)
+    }
+}
+
 // Cluster configuration received from server
 @Parcelize
 data class ClusterConfig(
@@ -962,8 +979,11 @@ fun WFSControlApp() {
                     inventory = channelInventory,
                     markers = markers,
                     refreshTrigger = mapTabVisitCount,
-                    onMarkersInitiallyPositioned = { newMarkerList ->
-                        markers = newMarkerList
+                    onMarkersInitiallyPositioned = { positioned ->
+                        // Positions only, into the CURRENT list: the name sync above runs
+                        // off the same revision bump that re-positions the map, so the
+                        // map's list can predate the name it just brought.
+                        markers = mergeMarkerPositions(markers, positioned)
                     },
                     onCanvasSizeChanged = { width, height ->
                         currentCanvasPixelWidth = width

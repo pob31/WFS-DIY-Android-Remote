@@ -159,7 +159,7 @@ class OscService : Service() {
     private var resyncJob: kotlinx.coroutines.Job? = null
     private var resyncFallbackJob: kotlinx.coroutines.Job? = null
     private var inventoryRefreshJob: kotlinx.coroutines.Job? = null
-    private var stereoImageJob: kotlinx.coroutines.Job? = null
+    private var channelStateJob: kotlinx.coroutines.Job? = null
 
     companion object {
         private const val NOTIFICATION_ID = 1
@@ -184,13 +184,13 @@ class OscService : Service() {
         // desktop having missed our /remote/disconnect. Its heartbeats are 2 s apart, and
         // one already in flight when that disconnect landed arrives within this.
         private const val REHANDSHAKE_GRACE_MS = 1000L
-        // Stereo-image recovery after an inventory change (scheduleStereoImageCheck):
-        // how long the desktop's own push gets to land before a check, how many
+        // Channel-state recovery after an inventory change (scheduleChannelStateCheck):
+        // how long the desktop's own sends get to land before a check, how many
         // requests one change may make, and how many checks it may take while dumps
         // are still running.
-        private const val STEREO_IMAGE_SETTLE_MS = 1500L
-        private const val STEREO_IMAGE_MAX_REQUESTS = 3
-        private const val STEREO_IMAGE_MAX_CHECKS = 10
+        private const val CHANNEL_STATE_SETTLE_MS = 1500L
+        private const val CHANNEL_STATE_MAX_REQUESTS = 3
+        private const val CHANNEL_STATE_MAX_CHECKS = 10
     }
 
     // Service state tracking
@@ -771,8 +771,12 @@ class OscService : Service() {
                         // outright is correct — including a snapshot with no channels.
                         inventoryReceivedThisDump = true
                         inventoryFromCurrentConnection = true
-                        applyChannelInventory(ChannelInventory(channels, inferred = false))
-                        scheduleStereoImageCheck()
+                        val inventory = ChannelInventory(channels, inferred = false)
+                        // WFS-DIY 1.0.0beta50 repeats its inventory every 2 s; only a
+                        // change can bring channels whose own state is still to come.
+                        val changed = inventory != _channelInventory.value
+                        applyChannelInventory(inventory)
+                        if (changed) scheduleChannelStateCheck()
                     },
                     onArrayMuteReceived = { states ->
                         if (!_arrayMutes.value.contentEquals(states)) _arrayMutes.value = states
@@ -1316,28 +1320,29 @@ class OscService : Service() {
     }
 
     /**
-     * After every inventory change, make sure each stereo pair's stereo image arrived,
-     * and ask for the channel dumps of those that did not (stereoChannelsMissingImage).
-     * A desktop from 1.0.0beta50 pushes a new or retyped channel's dump right after the
-     * inventory, so this usually finds nothing; it covers an older desktop, which never
-     * sends it, and a push lost on the way. Waits out a dump in progress, whose own body
-     * carries every channel's image, and gives up after a few requests so a desktop
-     * that cannot answer is not asked forever.
+     * After an inventory change, make sure every listed channel's own state arrived: a
+     * name and a position (what the dump verifier checks after a dump), and for a stereo
+     * pair its stereo image (stereoChannelsMissingImage) — and ask for the channel dumps
+     * of whatever is still missing. A channel added on the desktop reaches this tablet
+     * as the inventory, a burst of names and positions and, from WFS-DIY 1.0.0beta50,
+     * its whole channel dump; all of it is UDP, and older desktops never send that dump.
+     * Waits out a dump in progress, whose own verifier covers it, and gives up after a
+     * few requests so a desktop that cannot answer is not asked forever.
      */
-    private fun scheduleStereoImageCheck() {
-        stereoImageJob?.cancel()
-        stereoImageJob = serviceScope.launch {
+    private fun scheduleChannelStateCheck() {
+        channelStateJob?.cancel()
+        channelStateJob = serviceScope.launch {
             var requests = 0
-            repeat(STEREO_IMAGE_MAX_CHECKS) {
-                delay(STEREO_IMAGE_SETTLE_MS)
+            repeat(CHANNEL_STATE_MAX_CHECKS) {
+                delay(CHANNEL_STATE_SETTLE_MS)
                 if (_connectionState.value != RemoteConnectionState.CONNECTED) return@launch
                 if (dumpCycleInProgress()) return@repeat
-                val missing = stereoChannelsMissingImage(
-                    _channelInventory.value, _inputParametersState.value)
-                if (missing.isEmpty() || requests >= STEREO_IMAGE_MAX_REQUESTS) return@launch
+                val missing = (computeMissingChannels() + stereoChannelsMissingImage(
+                    _channelInventory.value, _inputParametersState.value)).distinct()
+                if (missing.isEmpty() || requests >= CHANNEL_STATE_MAX_REQUESTS) return@launch
                 requests++
                 android.util.Log.d("OscService",
-                    "No stereo image yet for $missing - requesting their channel dumps")
+                    "Channel state still missing for $missing - requesting their channel dumps")
                 sendOscRequestResync(this@OscService, missing)
             }
         }

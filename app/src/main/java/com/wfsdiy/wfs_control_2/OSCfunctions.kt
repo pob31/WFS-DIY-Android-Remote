@@ -83,11 +83,13 @@ import kotlin.times
 //     change and every 2 s. The mute is desktop session state, never saved. An older
 //     desktop never sends it, so the column stays disabled, and counts the write as a
 //     parse error with no side effect.
-// Still v4: a stereo pair in the inventory whose width or axis offset never arrived
-//     (added while connected: before WFS-DIY 1.0.0beta50 the desktop announced a new
-//     channel with its name and position only) gets /remote/requestResync <numbers>,
-//     the v2 per-channel request, a few times after each inventory change, so its
-//     spread bar appears. Nothing new on the wire.
+// Still v4: after each inventory change, a listed channel whose name or position never
+//     arrived, or a stereo pair missing its width or axis offset (added while connected:
+//     before WFS-DIY 1.0.0beta50 the desktop announced a new channel with its name and
+//     position only, all of it UDP), gets /remote/requestResync <numbers>, the v2
+//     per-channel request, a few times, so its label and spread bar appear. WFS-DIY
+//     1.0.0beta50 also repeats /remote/channelList every 2 s; an unchanged repeat is
+//     applied as a no-op. Nothing new on the wire.
 const val REMOTE_PROTOCOL_VERSION = 4
 
 fun getPaddedBytes(input: String, charsets: java.nio.charset.Charset = Charsets.UTF_8): ByteArray {
