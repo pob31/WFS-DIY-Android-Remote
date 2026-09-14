@@ -23,6 +23,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import com.wfsdiy.wfs_control_2.localization.locStatic
@@ -957,30 +958,36 @@ class OscService : Service() {
             else -> return
         }
 
-        // Get current state and update the parameter
-        val currentState = _inputParametersState.value
-        val channel = currentState.getChannel(inputId)
+        // Read-modify-write as one compare-and-set loop. Two threads write here: the OSC
+        // processing coroutine (every inbound value) and the UI thread (the local echo of
+        // every tablet edit). A plain read-then-assign let one overwrite the state the
+        // other had just published, and the lost value stayed stale until that
+        // parameter next changed. update {} retries against the fresh state instead;
+        // the lambda may therefore run more than once, so it only builds the new state.
+        _inputParametersState.update { currentState ->
+            val channel = currentState.getChannel(inputId)
 
-        // Create a new parameter map for this channel with the updated parameter
-        val updatedParameters = channel.parameters.toMutableMap()
-        updatedParameters[definition.variableName] = paramValue
+            // Create a new parameter map for this channel with the updated parameter
+            val updatedParameters = channel.parameters.toMutableMap()
+            updatedParameters[definition.variableName] = paramValue
 
-        // Create a new channel with the updated parameters
-        val updatedChannel = InputChannelState(
-            inputId = inputId,
-            parameters = updatedParameters
-        )
+            // Create a new channel with the updated parameters
+            val updatedChannel = InputChannelState(
+                inputId = inputId,
+                parameters = updatedParameters
+            )
 
-        // Create a new channels map with the updated channel
-        val updatedChannels = currentState.channels.toMutableMap()
-        updatedChannels[inputId] = updatedChannel
+            // Create a new channels map with the updated channel
+            val updatedChannels = currentState.channels.toMutableMap()
+            updatedChannels[inputId] = updatedChannel
 
-        // Force StateFlow emission by creating a completely new state object with incremented revision
-        _inputParametersState.value = InputParametersState(
-            channels = updatedChannels,
-            selectedInputId = currentState.selectedInputId,
-            revision = currentState.revision + 1  // Increment to force Compose change detection
-        )
+            // Force StateFlow emission by creating a completely new state object with incremented revision
+            InputParametersState(
+                channels = updatedChannels,
+                selectedInputId = currentState.selectedInputId,
+                revision = currentState.revision + 1  // Increment to force Compose change detection
+            )
+        }
 
         // Note: cluster assignment (clusterId) is synced to markers via
         // inputParametersState -> LaunchedEffect in MainActivity, not directly here.
@@ -1310,11 +1317,16 @@ class OscService : Service() {
     }
     
     fun setSelectedInput(inputId: Int) {
-        val currentState = _inputParametersState.value
-        _inputParametersState.value = currentState.copy(
-            selectedInputId = inputId,
-            revision = currentState.revision + 1
-        )
+        // Same compare-and-set as updateInputParameterFromOsc: this runs on the UI thread
+        // while inbound values land from the OSC coroutine, so a plain copy-and-assign
+        // could drop a value that arrived in between, or be undone by an inbound write
+        // that started from the state before the new selection.
+        _inputParametersState.update { currentState ->
+            currentState.copy(
+                selectedInputId = inputId,
+                revision = currentState.revision + 1
+            )
+        }
     }
 
     override fun onDestroy() {
