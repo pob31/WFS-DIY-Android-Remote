@@ -23,12 +23,19 @@ object CoordinateConverter {
 
     private const val EPSILON = 0.0001f
 
-    /** Normalize angle to -180 to 180 degrees range (matching JUCE normalizeAngle) */
+    /**
+     * Normalize angle to the (-180, 180] degrees range (matching JUCE normalizeAngle).
+     *
+     * IEEEremainder is exact at any size. The subtract-360 loop it replaces
+     * stopped moving above about 8.6e9, where 360 is less than half a float
+     * step, so a ten-digit azimuth typed in cylindrical or spherical mode froze
+     * the UI thread for good (desktop re-audit 2026-09-29, F1). An angle that
+     * is not finite has no direction and reads as 0.
+     */
     fun normalizeAngle(degrees: Float): Float {
-        var d = degrees
-        while (d > 180f) d -= 360f
-        while (d <= -180f) d += 360f
-        return d
+        if (!degrees.isFinite()) return 0f
+        val wrapped = Math.IEEEremainder(degrees.toDouble(), 360.0).toFloat()
+        return if (wrapped <= -180f) wrapped + 360f else wrapped
     }
 
     /** Clamp elevation to -90 to 90 degrees range */
