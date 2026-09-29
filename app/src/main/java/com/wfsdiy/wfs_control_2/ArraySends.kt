@@ -41,14 +41,8 @@ object ArraySends {
      * A typed-in level: the number with or without its unit, a comma accepted as the
      * decimal point, clamped into -60..0 dB. Null when there is no number to read.
      */
-    fun parseDbCommit(text: String): Float? {
-        var cleaned = text.trim().replace('−', '-').replace(',', '.')
-        if (cleaned.endsWith("db", ignoreCase = true))
-            cleaned = cleaned.dropLast(2).trim()
-        val value = cleaned.toFloatOrNull() ?: return null
-        if (!value.isFinite()) return null
-        return value.coerceIn(MIN_DB, MAX_DB)
-    }
+    fun parseDbCommit(text: String): Float? =
+        TypedNumber.parse(text)?.coerceIn(MIN_DB, MAX_DB)
 
     /** One decimal, like the desktop's value labels; never "-0.0". */
     fun formatDb(db: Float): String {

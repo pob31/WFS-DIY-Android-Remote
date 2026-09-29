@@ -541,7 +541,7 @@ private fun RenderInputSection(
                 isValueEditable = true,
                 onDisplayedValueChange = { /* Typing handled internally */ },
                 onValueCommit = { committedValue ->
-                    committedValue.toFloatOrNull()?.let { value ->
+                    TypedNumber.parse(committedValue)?.let { value ->
                         val definition = InputParameterDefinitions.parametersByVariableName["attenuation"]!!
                         val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                         val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -585,7 +585,7 @@ private fun RenderInputSection(
                 isValueEditable = true,
                 onDisplayedValueChange = { /* Typing handled internally */ },
                 onValueCommit = { committedValue ->
-                    committedValue.toFloatOrNull()?.let { value ->
+                    TypedNumber.parse(committedValue)?.let { value ->
                         val coercedValue = value.coerceIn(-100f, 100f)
                         delayLatencyValue = coercedValue
                         delayLatencyDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
@@ -687,7 +687,7 @@ private fun RenderInputSection(
                     isValueEditable = true,
                     onDisplayedValueChange = { /* Typing handled internally */ },
                     onValueCommit = { committedValue ->
-                        committedValue.toFloatOrNull()?.let { value ->
+                        TypedNumber.parse(committedValue)?.let { value ->
                             val definition = InputParameterDefinitions.parametersByVariableName["attenuation"]!!
                             val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                             val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -731,7 +731,7 @@ private fun RenderInputSection(
                     isValueEditable = true,
                     onDisplayedValueChange = { /* Typing handled internally */ },
                     onValueCommit = { committedValue ->
-                        committedValue.toFloatOrNull()?.let { value ->
+                        TypedNumber.parse(committedValue)?.let { value ->
                             val coercedValue = value.coerceIn(-100f, 100f)
                             delayLatencyValue = coercedValue
                             delayLatencyDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
@@ -987,7 +987,7 @@ private fun RenderInputSection(
                             positionXValue = newValue
                         },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 commitPositionValue(0, value)
                             }
                         },
@@ -1011,7 +1011,7 @@ private fun RenderInputSection(
                             positionYValue = newValue
                         },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 commitPositionValue(1, value)
                             }
                         },
@@ -1035,7 +1035,7 @@ private fun RenderInputSection(
                             positionZValue = newValue
                         },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 commitPositionValue(2, value)
                             }
                         },
@@ -1067,7 +1067,7 @@ private fun RenderInputSection(
                             offsetXValue = newValue
                         },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val coerced = value.coerceIn(-50f, 50f)
                                 offsetXValue = String.format(Locale.US, "%.2f", coerced)
                                 selectedChannel.setParameter("offsetX", InputParameterValue(
@@ -1098,7 +1098,7 @@ private fun RenderInputSection(
                             offsetYValue = newValue
                         },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val coerced = value.coerceIn(-50f, 50f)
                                 offsetYValue = String.format(Locale.US, "%.2f", coerced)
                                 selectedChannel.setParameter("offsetY", InputParameterValue(
@@ -1129,7 +1129,7 @@ private fun RenderInputSection(
                             offsetZValue = newValue
                         },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val coerced = value.coerceIn(-50f, 50f)
                                 offsetZValue = String.format(Locale.US, "%.2f", coerced)
                                 selectedChannel.setParameter("offsetZ", InputParameterValue(
@@ -1255,7 +1255,7 @@ private fun RenderInputSection(
                                 positionXValue = newValue
                             },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     commitPositionValue(0, value)
                                 }
                             },
@@ -1284,7 +1284,7 @@ private fun RenderInputSection(
                                 positionYValue = newValue
                             },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     commitPositionValue(1, value)
                                 }
                             },
@@ -1313,7 +1313,7 @@ private fun RenderInputSection(
                                 positionZValue = newValue
                             },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     commitPositionValue(2, value)
                                 }
                             },
@@ -1348,7 +1348,7 @@ private fun RenderInputSection(
                                 offsetXValue = newValue
                             },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val coerced = value.coerceIn(-50f, 50f)
                                     offsetXValue = String.format(Locale.US, "%.2f", coerced)
                                     selectedChannel.setParameter("offsetX", InputParameterValue(
@@ -1384,7 +1384,7 @@ private fun RenderInputSection(
                                 offsetYValue = newValue
                             },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val coerced = value.coerceIn(-50f, 50f)
                                     offsetYValue = String.format(Locale.US, "%.2f", coerced)
                                     selectedChannel.setParameter("offsetY", InputParameterValue(
@@ -1420,7 +1420,7 @@ private fun RenderInputSection(
                                 offsetZValue = newValue
                             },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val coerced = value.coerceIn(-50f, 50f)
                                     offsetZValue = String.format(Locale.US, "%.2f", coerced)
                                     selectedChannel.setParameter("offsetZ", InputParameterValue(
@@ -1905,7 +1905,7 @@ private fun RenderInputSection(
                 isValueEditable = true,
                 onDisplayedValueChange = {},
                 onValueCommit = { committedValue ->
-                    committedValue.toFloatOrNull()?.let { value ->
+                    TypedNumber.parse(committedValue)?.let { value ->
                         val coercedValue = value.coerceIn(0.1f, 10f)
                         val definition = InputParameterDefinitions.parametersByVariableName["sidelinesFringe"]!!
                         val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -1953,7 +1953,7 @@ private fun RenderInputSection(
                 isValueEditable = true,
                 onDisplayedValueChange = {},
                 onValueCommit = { committedValue ->
-                    committedValue.toFloatOrNull()?.let { value ->
+                    TypedNumber.parse(committedValue)?.let { value ->
                         val roundedValue = value.roundToInt()
                         val coercedValue = roundedValue.coerceIn(0, 100)
                         val normalized = coercedValue / 100f
@@ -2006,7 +2006,7 @@ private fun RenderInputSection(
                 isValueEditable = true,
                 onDisplayedValueChange = {},
                 onValueCommit = { committedValue ->
-                    committedValue.toFloatOrNull()?.let { value ->
+                    TypedNumber.parse(committedValue)?.let { value ->
                         val definition = InputParameterDefinitions.parametersByVariableName["maxSpeed"]!!
                         val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                         val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -2054,7 +2054,7 @@ private fun RenderInputSection(
                 isValueEditable = true,
                 onDisplayedValueChange = {},
                 onValueCommit = { committedValue ->
-                    committedValue.toFloatOrNull()?.let { value ->
+                    TypedNumber.parse(committedValue)?.let { value ->
                         val roundedValue = value.roundToInt()
                         val coercedValue = roundedValue.coerceIn(0, 100)
                         val normalized = coercedValue / 100f
@@ -2104,7 +2104,7 @@ private fun RenderInputSection(
                     isValueEditable = true,
                     onDisplayedValueChange = {},
                     onValueCommit = { committedValue ->
-                        committedValue.toFloatOrNull()?.let { value ->
+                        TypedNumber.parse(committedValue)?.let { value ->
                             val coercedValue = value.coerceIn(-6f, 0f)
                             val definition = InputParameterDefinitions.parametersByVariableName["distanceAttenuation"]!!
                             val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -2149,7 +2149,7 @@ private fun RenderInputSection(
                     isValueEditable = true,
                     onDisplayedValueChange = {},
                     onValueCommit = { committedValue ->
-                        committedValue.toFloatOrNull()?.let { value ->
+                        TypedNumber.parse(committedValue)?.let { value ->
                             val coercedValue = value.coerceIn(0.1f, 10f)
                             val definition = InputParameterDefinitions.parametersByVariableName["distanceRatio"]!!
                             val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -2198,7 +2198,7 @@ private fun RenderInputSection(
                 isValueEditable = true,
                 onDisplayedValueChange = {},
                 onValueCommit = { committedValue ->
-                    committedValue.toFloatOrNull()?.let { value ->
+                    TypedNumber.parse(committedValue)?.let { value ->
                         val roundedValue = value.roundToInt()
                         val coercedValue = roundedValue.coerceIn(0, 100)
                         val normalized = coercedValue / 100f
@@ -2302,7 +2302,7 @@ private fun RenderInputSection(
                     isValueEditable = true,
                     onDisplayedValueChange = {},
                     onValueCommit = { committedValue ->
-                        committedValue.toFloatOrNull()?.let { value ->
+                        TypedNumber.parse(committedValue)?.let { value ->
                             val coercedValue = value.coerceIn(0f, 50f)
                             val definition = InputParameterDefinitions.parametersByVariableName["stereoWidth"]!!
                             val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -2762,7 +2762,7 @@ private fun RenderDirectivitySection(
                         displayedValue = directivityDisplayValue,
                         isValueEditable = true,
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 // Round to nearest integer
                                 val roundedValue = value.roundToInt().toFloat()
                                 val coercedValue = roundedValue.coerceIn(2f, 360f)
@@ -2807,7 +2807,7 @@ private fun RenderDirectivitySection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val definition = InputParameterDefinitions.parametersByVariableName["HFshelf"]!!
                                 val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                 val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -2885,7 +2885,7 @@ private fun RenderDirectivitySection(
                         displayedValue = tiltDisplayValue,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 // Round to nearest integer
                                 val roundedValue = value.roundToInt().toFloat()
                                 val coercedValue = roundedValue.coerceIn(-90f, 90f)
@@ -2937,7 +2937,7 @@ private fun RenderDirectivitySection(
                             displayedValue = directivityDisplayValue,
                             isValueEditable = true,
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val roundedValue = value.roundToInt().toFloat()
                                     val coercedValue = roundedValue.coerceIn(2f, 360f)
                                     val expansionValue = (coercedValue - 2f) / 358f
@@ -3006,7 +3006,7 @@ private fun RenderDirectivitySection(
                             displayedValue = tiltDisplayValue,
                             onDisplayedValueChange = { /* Typing handled internally */ },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val roundedValue = value.roundToInt().toFloat()
                                     val coercedValue = roundedValue.coerceIn(-90f, 90f)
                                     tiltValue = coercedValue
@@ -3051,7 +3051,7 @@ private fun RenderDirectivitySection(
                             isValueEditable = true,
                             onDisplayedValueChange = { /* Typing handled internally */ },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val definition = InputParameterDefinitions.parametersByVariableName["HFshelf"]!!
                                     val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                     val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -3327,7 +3327,7 @@ private fun RenderLiveSourceSection(
                             isValueEditable = true,
                             onDisplayedValueChange = { /* Typing handled internally */ },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val coercedValue = value.coerceIn(0f, 50f)
                                     val expansionValue = coercedValue / 50f
                                     radiusValue = expansionValue
@@ -3371,7 +3371,7 @@ private fun RenderLiveSourceSection(
                             isValueEditable = true,
                             onDisplayedValueChange = { /* Typing handled internally */ },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val definition = InputParameterDefinitions.parametersByVariableName["liveSourceAttenuation"]!!
                                     val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                     val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -3424,7 +3424,7 @@ private fun RenderLiveSourceSection(
                             isValueEditable = true,
                             onDisplayedValueChange = { /* Typing handled internally */ },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val definition = InputParameterDefinitions.parametersByVariableName["liveSourcePeakThreshold"]!!
                                     val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                     val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -3468,7 +3468,7 @@ private fun RenderLiveSourceSection(
                             isValueEditable = true,
                             onDisplayedValueChange = {},
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val definition = InputParameterDefinitions.parametersByVariableName["liveSourcePeakRatio"]!!
                                     val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                     val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -3522,7 +3522,7 @@ private fun RenderLiveSourceSection(
                             isValueEditable = true,
                             onDisplayedValueChange = { /* Typing handled internally */ },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val definition = InputParameterDefinitions.parametersByVariableName["liveSourceSlowThreshold"]!!
                                     val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                     val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -3566,7 +3566,7 @@ private fun RenderLiveSourceSection(
                             isValueEditable = true,
                             onDisplayedValueChange = {},
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val definition = InputParameterDefinitions.parametersByVariableName["liveSourceSlowRatio"]!!
                                     val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                     val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -3640,7 +3640,7 @@ private fun RenderLiveSourceSection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val coercedValue = value.coerceIn(0f, 50f)
                                 val expansionValue = coercedValue / 50f
                                 radiusValue = expansionValue
@@ -3704,7 +3704,7 @@ private fun RenderLiveSourceSection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val definition = InputParameterDefinitions.parametersByVariableName["liveSourceAttenuation"]!!
                                 val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                 val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -3757,7 +3757,7 @@ private fun RenderLiveSourceSection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val definition = InputParameterDefinitions.parametersByVariableName["liveSourcePeakThreshold"]!!
                                 val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                 val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -3801,7 +3801,7 @@ private fun RenderLiveSourceSection(
                         isValueEditable = true,
                         onDisplayedValueChange = {},
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val definition = InputParameterDefinitions.parametersByVariableName["liveSourcePeakRatio"]!!
                                 val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                 val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -3846,7 +3846,7 @@ private fun RenderLiveSourceSection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val definition = InputParameterDefinitions.parametersByVariableName["liveSourceSlowThreshold"]!!
                                 val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                 val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -3890,7 +3890,7 @@ private fun RenderLiveSourceSection(
                         isValueEditable = true,
                         onDisplayedValueChange = {},
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val definition = InputParameterDefinitions.parametersByVariableName["liveSourceSlowRatio"]!!
                                 val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                 val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -4149,7 +4149,7 @@ private fun RenderFloorReflectionsSection(
                             isValueEditable = true,
                             onDisplayedValueChange = { /* Typing handled internally */ },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val definition = InputParameterDefinitions.parametersByVariableName["FRattenuation"]!!
                                     val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                     val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -4223,7 +4223,7 @@ private fun RenderFloorReflectionsSection(
                             isValueEditable = true,
                             onDisplayedValueChange = { /* Typing handled internally */ },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val roundedValue = value.roundToInt()
                                     val coercedValue = roundedValue.coerceIn(20, 20000)
                                     val definition = InputParameterDefinitions.parametersByVariableName["FRlowCutFreq"]!!
@@ -4298,7 +4298,7 @@ private fun RenderFloorReflectionsSection(
                             isValueEditable = true,
                             onDisplayedValueChange = { /* Typing handled internally */ },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val roundedValue = value.roundToInt()
                                     val coercedValue = roundedValue.coerceIn(20, 20000)
                                     val definition = InputParameterDefinitions.parametersByVariableName["FRhighShelfFreq"]!!
@@ -4351,7 +4351,7 @@ private fun RenderFloorReflectionsSection(
                             isValueEditable = true,
                             onDisplayedValueChange = { /* Typing handled internally */ },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val definition = InputParameterDefinitions.parametersByVariableName["FRhighShelfGain"]!!
                                     val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                     val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -4395,7 +4395,7 @@ private fun RenderFloorReflectionsSection(
                             isValueEditable = true,
                             onDisplayedValueChange = { /* Typing handled internally */ },
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val coercedValue = value.coerceIn(0.1f, 0.9f)
                                     val definition = InputParameterDefinitions.parametersByVariableName["FRhighShelfSlope"]!!
                                     val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -4446,7 +4446,7 @@ private fun RenderFloorReflectionsSection(
                             isValueEditable = true,
                             onDisplayedValueChange = {},
                             onValueCommit = { committedValue ->
-                                committedValue.toFloatOrNull()?.let { value ->
+                                TypedNumber.parse(committedValue)?.let { value ->
                                     val roundedValue = value.roundToInt()
                                     val coercedValue = roundedValue.coerceIn(0, 100)
                                     val normalized = coercedValue / 100f
@@ -4519,7 +4519,7 @@ private fun RenderFloorReflectionsSection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val definition = InputParameterDefinitions.parametersByVariableName["FRattenuation"]!!
                                 val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                 val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -4585,7 +4585,7 @@ private fun RenderFloorReflectionsSection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val roundedValue = value.roundToInt()
                                 val coercedValue = roundedValue.coerceIn(20, 20000)
                                 val definition = InputParameterDefinitions.parametersByVariableName["FRlowCutFreq"]!!
@@ -4661,7 +4661,7 @@ private fun RenderFloorReflectionsSection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val roundedValue = value.roundToInt()
                                 val coercedValue = roundedValue.coerceIn(20, 20000)
                                 val definition = InputParameterDefinitions.parametersByVariableName["FRhighShelfFreq"]!!
@@ -4706,7 +4706,7 @@ private fun RenderFloorReflectionsSection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val definition = InputParameterDefinitions.parametersByVariableName["FRhighShelfGain"]!!
                                 val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                 val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -4750,7 +4750,7 @@ private fun RenderFloorReflectionsSection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val coercedValue = value.coerceIn(0.1f, 0.9f)
                                 val definition = InputParameterDefinitions.parametersByVariableName["FRhighShelfSlope"]!!
                                 val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -4801,7 +4801,7 @@ private fun RenderFloorReflectionsSection(
                         isValueEditable = true,
                         onDisplayedValueChange = {},
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val roundedValue = value.roundToInt()
                                 val coercedValue = roundedValue.coerceIn(0, 100)
                                 val normalized = coercedValue / 100f
@@ -4941,7 +4941,7 @@ private fun RenderJitterSection(
             isValueEditable = true,
             onDisplayedValueChange = { /* Typing handled internally */ },
             onValueCommit = { committedValue ->
-                committedValue.toFloatOrNull()?.let { value ->
+                TypedNumber.parse(committedValue)?.let { value ->
                     val coercedValue = value.coerceIn(0f, 10f)
                     // Reverse the formula: x = sqrt(actualValue/10)
                     val expansionValue = if (coercedValue > 0) kotlin.math.sqrt(coercedValue / 10f) else 0f
@@ -5289,7 +5289,7 @@ private fun RenderLFOSection(
                         isValueEditable = true,
                         onDisplayedValueChange = {},
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val definition = InputParameterDefinitions.parametersByVariableName["LFOperiod"]!!
                                 val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                 val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -5418,7 +5418,7 @@ private fun RenderLFOSection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val coercedValue = value.coerceIn(0f, 50f)
                                 LFOamplitudeXValue = coercedValue
                                 LFOamplitudeXDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
@@ -5461,7 +5461,7 @@ private fun RenderLFOSection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val definition = InputParameterDefinitions.parametersByVariableName["LFOrateX"]!!
                                 val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                 val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -5570,7 +5570,7 @@ private fun RenderLFOSection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val coercedValue = value.coerceIn(0f, 50f)
                                 LFOamplitudeYValue = coercedValue
                                 LFOamplitudeYDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
@@ -5613,7 +5613,7 @@ private fun RenderLFOSection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val definition = InputParameterDefinitions.parametersByVariableName["LFOrateY"]!!
                                 val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                 val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)
@@ -5722,7 +5722,7 @@ private fun RenderLFOSection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val coercedValue = value.coerceIn(0f, 50f)
                                 LFOamplitudeZValue = coercedValue
                                 LFOamplitudeZDisplayValue = String.format(Locale.US, "%.2f", coercedValue)
@@ -5765,7 +5765,7 @@ private fun RenderLFOSection(
                         isValueEditable = true,
                         onDisplayedValueChange = { /* Typing handled internally */ },
                         onValueCommit = { committedValue ->
-                            committedValue.toFloatOrNull()?.let { value ->
+                            TypedNumber.parse(committedValue)?.let { value ->
                                 val definition = InputParameterDefinitions.parametersByVariableName["LFOrateZ"]!!
                                 val coercedValue = value.coerceIn(definition.minValue, definition.maxValue)
                                 val normalized = InputParameterDefinitions.reverseFormula(definition, coercedValue)

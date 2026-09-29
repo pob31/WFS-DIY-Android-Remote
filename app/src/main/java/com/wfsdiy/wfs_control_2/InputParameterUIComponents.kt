@@ -211,12 +211,9 @@ fun ParameterNumberBox(
                 value = value,
                 onValueChange = { newValue ->
                     if (enabled) {
-                        // Filter to allow only valid numbers
-                        val filtered = if (isDecimal) {
-                            newValue.filter { it.isDigit() || it == '.' || it == '-' }
-                        } else {
-                            newValue.filter { it.isDigit() || it == '-' }
-                        }
+                        // Filter to allow only valid numbers. A comma becomes the point:
+                        // dropping it turned "-2,5" into -25.
+                        val filtered = TypedNumber.filterTyping(newValue, allowDecimal = isDecimal)
                         onValueChange(filtered)
                     }
                 },

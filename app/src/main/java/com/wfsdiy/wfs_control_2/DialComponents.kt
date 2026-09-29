@@ -668,7 +668,7 @@ fun AngleDial(
                             onDone = {
                                 // Apply modulo operation when Done is pressed
                                 try {
-                                    val parsedValue = textFieldValue.text.toFloatOrNull()
+                                    val parsedValue = TypedNumber.parse(textFieldValue.text)
                                     if (parsedValue != null) {
                                         // Round to nearest integer and apply modulo operation: ((x+540)%360)-180
                                         val roundedValue = parsedValue.roundToInt().toFloat()
@@ -695,7 +695,7 @@ fun AngleDial(
                                 } else {
                                     // Apply rounding and modulo when focus is lost
                                     try {
-                                        val parsedValue = textFieldValue.text.toFloatOrNull()
+                                        val parsedValue = TypedNumber.parse(textFieldValue.text)
                                         if (parsedValue != null) {
                                             // Round to nearest integer and apply modulo operation: ((x+540)%360)-180
                                             val roundedValue = parsedValue.roundToInt().toFloat()
@@ -876,7 +876,7 @@ fun PhaseDial(
                             onDone = {
                                 // Clamp value to -179..180 when Done is pressed
                                 try {
-                                    val parsedValue = textFieldValue.text.toFloatOrNull()
+                                    val parsedValue = TypedNumber.parse(textFieldValue.text)
                                     if (parsedValue != null) {
                                         onValueChange(parsedValue.coerceIn(-179f, 180f))
                                     }
@@ -900,7 +900,7 @@ fun PhaseDial(
                                 } else {
                                     // Clamp value to -179..180 when focus is lost
                                     try {
-                                        val parsedValue = textFieldValue.text.toFloatOrNull()
+                                        val parsedValue = TypedNumber.parse(textFieldValue.text)
                                         if (parsedValue != null) {
                                             onValueChange(parsedValue.coerceIn(-179f, 180f))
                                         }

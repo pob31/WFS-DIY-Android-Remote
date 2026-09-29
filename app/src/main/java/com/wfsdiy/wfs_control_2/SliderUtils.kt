@@ -1047,7 +1047,12 @@ fun EditableValueBox(
             ),
             keyboardActions = KeyboardActions(
                 onDone = {
-                    onValueCommit(textFieldValue.text)
+                    // Nothing a number can be read from: show the value again rather
+                    // than leave the typed text standing as if it had been taken.
+                    if (TypedNumber.parse(textFieldValue.text) == null)
+                        textFieldValue = TextFieldValue(displayedValue, selection = TextRange(displayedValue.length))
+                    else
+                        onValueCommit(textFieldValue.text)
                     focusManager.clearFocus()
                 }
             ),
