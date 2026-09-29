@@ -225,15 +225,6 @@ class OscService : Service() {
         val timestamp: Long = System.currentTimeMillis()
     )
     
-    data class OscInputParameterUpdate(
-        val oscPath: String,
-        val inputId: Int,
-        val intValue: Int? = null,
-        val floatValue: Float? = null,
-        val stringValue: String? = null,
-        val timestamp: Long = System.currentTimeMillis()
-    )
-
     data class OscClusterConfigUpdate(
         val clusterId: Int,
         val referenceMode: Int? = null,
@@ -253,7 +244,6 @@ class OscService : Service() {
     private val normalizedMarkerUpdates = ConcurrentLinkedQueue<OscNormalizedMarkerUpdate>()
     private val stageUpdates = ConcurrentLinkedQueue<OscStageUpdate>()
     private val inputsUpdates = ConcurrentLinkedQueue<OscInputsUpdate>()
-    private val inputParameterUpdates = ConcurrentLinkedQueue<OscInputParameterUpdate>()
     private val clusterConfigUpdates = ConcurrentLinkedQueue<OscClusterConfigUpdate>()
     private val compositePositionUpdates = ConcurrentLinkedQueue<OscCompositePositionUpdate>()
 
@@ -503,17 +493,14 @@ class OscService : Service() {
                         scheduleInferredInventoryRefresh()
                     },
                     onInputParameterIntReceived = { oscPath, inputId, value ->
-                        inputParameterUpdates.offer(OscInputParameterUpdate(oscPath, inputId, intValue = value))
                         updateInputParameterFromOsc(oscPath, inputId, intValue = value)
                     },
                     onInputParameterFloatReceived = { oscPath, inputId, value ->
-                        inputParameterUpdates.offer(OscInputParameterUpdate(oscPath, inputId, floatValue = value))
                         updateInputParameterFromOsc(oscPath, inputId, floatValue = value)
                         if (oscPath == "/remoteInput/positionX" || oscPath == "/remoteInput/positionY")
                             receivedPositions.add(inputId)
                     },
                     onInputParameterStringReceived = { oscPath, inputId, value ->
-                        inputParameterUpdates.offer(OscInputParameterUpdate(oscPath, inputId, stringValue = value))
                         updateInputParameterFromOsc(oscPath, inputId, stringValue = value)
                         if (oscPath == "/remoteInput/inputName")
                             receivedNames.add(inputId)
@@ -1483,14 +1470,6 @@ class OscService : Service() {
         val updates = mutableListOf<OscInputsUpdate>()
         while (inputsUpdates.isNotEmpty()) {
             inputsUpdates.poll()?.let { updates.add(it) }
-        }
-        return updates
-    }
-
-    fun getBufferedInputParameterUpdates(): List<OscInputParameterUpdate> {
-        val updates = mutableListOf<OscInputParameterUpdate>()
-        while (inputParameterUpdates.isNotEmpty()) {
-            inputParameterUpdates.poll()?.let { updates.add(it) }
         }
         return updates
     }

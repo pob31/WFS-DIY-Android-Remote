@@ -160,10 +160,6 @@ class MainActivityViewModel(private val oscService: OscService) : ViewModel() {
         oscService.setSelectedInput(inputId)
     }
     
-    fun getBufferedInputParameterUpdates(): List<OscService.OscInputParameterUpdate> {
-        return oscService.getBufferedInputParameterUpdates()
-    }
-    
     fun syncInputParametersState(state: InputParametersState) {
         oscService.syncInputParametersState(state)
     }
