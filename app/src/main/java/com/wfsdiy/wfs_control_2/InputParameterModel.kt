@@ -466,9 +466,9 @@ object InputParameterDefinitions {
             uiType = UIComponentType.DROPDOWN,
             dataType = ParameterType.INT,
             minValue = 1f,
-            maxValue = 64f,
-            enumValues = (1..64).map { it.toString() },
-            note = "Tracking marker ID to follow (1-64)",
+            maxValue = 32f,
+            enumValues = (1..32).map { it.toString() },
+            note = "Tracking marker ID to follow (1-32, the desktop's inputTrackingIDMax)",
             locKey = "inputs.labels.trackingId"
         ),
         InputParameterDefinition(
@@ -945,7 +945,7 @@ object InputParameterDefinitions {
             dataType = ParameterType.INT,
             minValue = 20f,
             maxValue = 20000f,
-            formula = "20*pow(10,4*x)",
+            formula = "20*pow(10,3*x)",
             unit = "Hz",
             conditionalEnable = "FRactive==1&&FRlowCutActive==1",
             locKey = "inputs.labels.lowCutFreq"
@@ -976,7 +976,7 @@ object InputParameterDefinitions {
             dataType = ParameterType.INT,
             minValue = 20f,
             maxValue = 20000f,
-            formula = "20*pow(10,4*x)",
+            formula = "20*pow(10,3*x)",
             unit = "Hz",
             conditionalEnable = "FRactive==1&&FRhighShelfActive==1",
             locKey = "inputs.labels.highShelfFreq"
@@ -1472,7 +1472,10 @@ object InputParameterDefinitions {
                         "(x*6.0)-0.6" -> (x * 6f) - 0.6f
                         "pow(10.0,(x*2.0)-1.0)" -> 10f.pow((x * 2f) - 1f)
                         "(x*9.0)+1" -> (x * 9f) + 1f
-                        "20*pow(10,4*x)" -> 20f * 10f.pow(4f * x)
+                        // 20 Hz to 20 kHz, as the desktop's sliders map it (InputsTab.h).
+                        // 4*x reached 200 kHz, and the top quarter of the travel sent
+                        // frequencies the desktop refuses.
+                        "20*pow(10,3*x)" -> 20f * 10f.pow(3f * x)
                         "(x*0.8)+0.1" -> (x * 0.8f) + 0.1f
                         "10*pow(x,2)" -> 10f * x.pow(2)
                         "pow(10.0,sqrt(x)*4.0-2.0)" -> 10f.pow(kotlin.math.sqrt(x) * 4f - 2f)
@@ -1547,7 +1550,7 @@ object InputParameterDefinitions {
                         "(x*6.0)-0.6" -> (y + 0.6f) / 6f
                         "pow(10.0,(x*2.0)-1.0)" -> (log10(y) + 1f) / 2f
                         "(x*9.0)+1" -> (y - 1f) / 9f
-                        "20*pow(10,4*x)" -> log10(y / 20f) / 4f
+                        "20*pow(10,3*x)" -> log10(y / 20f) / 3f
                         "(x*0.8)+0.1" -> (y - 0.1f) / 0.8f
                         "10*pow(x,2)" -> kotlin.math.sqrt(y / 10f)
                         "pow(10.0,sqrt(x)*4.0-2.0)" -> ((log10(y) + 2f) / 4f).pow(2)

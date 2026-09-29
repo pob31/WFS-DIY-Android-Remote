@@ -43,9 +43,9 @@ Live Source Attenuation;Slow Ratio;liveSourceSlowRatio;/remoteInput/liveSourceSl
 Floor Reflections;Active;FRactive;/remoteInput/FRactive;YES;YES;Text button;INT;0;1;;;"ON; OFF";
 Floor Reflections;Attenuation;FRattenuation;/remoteInput/FRattenuation;YES;YES;V Slider;FLOAT;-60.0;0.0;20*log10(pow(10,-60./20.)+((1-pow(10,-60./20.))*pow(x,2)));dB;;Greyed out but editable when FRactive == 0
 Floor Reflections;Low Cut Active;FRlowCutActive;/remoteInput/FRlowCutActive;YES;YES;Text button;INT;0;1;;;"ON; OFF";Greyed out but editable when FRactive == 0
-Floor Reflections;Low Cut Freq;FRlowCutFreq;/remoteInput/FrlowCutFreq;YES;YES;H Slider;INT;20;20000;20*pow(10,4*x);Hz;;Greyed out but editable when FRactive == 0 or FRlowCutActive == 0
+Floor Reflections;Low Cut Freq;FRlowCutFreq;/remoteInput/FrlowCutFreq;YES;YES;H Slider;INT;20;20000;20*pow(10,3*x);Hz;;Greyed out but editable when FRactive == 0 or FRlowCutActive == 0
 Floor Reflections;High Shelf Active;FRhighShelfActive;/remoteInput/FRhighShelfActive;YES;YES;Text button;INT;0;1;;;"ON; OFF";Greyed out but editable when FRactive == 0
-Floor Reflections;High Shelf Freq;FRhighShelfFreq;/remoteInput/FRhighShelfFreq;YES;YES;H Slider;INT;20;20000;20*pow(10,4*x);Hz;;Greyed out but editable when FRactive == 0 or FRhighShelfActive == 0
+Floor Reflections;High Shelf Freq;FRhighShelfFreq;/remoteInput/FRhighShelfFreq;YES;YES;H Slider;INT;20;20000;20*pow(10,3*x);Hz;;Greyed out but editable when FRactive == 0 or FRhighShelfActive == 0
 Floor Reflections;High Shelf Gain;FRhighShelfGain;/remoteInput/FRhighShelfGain;YES;YES;V Slider;FLOAT;-24.0;0.0;20*log10(pow(10,-24./20.)+((1-pow(10,-24./20.))*pow(x,2)));dB;;Greyed out but editable when FRactive == 0 or FRhighShelfActive == 0
 Floor Reflections;High Shelf Slope;FRhighShelfSlope;/remoteInput/FRhighShelfSlope;YES;YES;H Slider;FLOAT;0.1;0.9;(x*0.8)+0.1;;;Greyed out but editable when FRactive == 0 or FRhighShelfActive == 0
 Floor Reflections;Diffusion;FRdiffusion;/remoteInput/FRdiffusion;YES;YES;Dial;INT;0;100;x*100;%;;Greyed out but editable when FRactive == 0

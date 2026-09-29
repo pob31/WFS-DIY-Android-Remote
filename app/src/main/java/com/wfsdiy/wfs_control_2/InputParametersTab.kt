@@ -1804,7 +1804,7 @@ private fun RenderInputSection(
                 color = Color.White,
                 modifier = Modifier.padding(end = 6.dp)
             )
-            val trackingIDOptions = (1..64).map { it.toString() }
+            val trackingIDOptions = (1..32).map { it.toString() }   // inputTrackingIDMax on the desktop
             ParameterDropdown(
                 label = "",
                 selectedIndex = trackingIDIndex,
@@ -2839,15 +2839,18 @@ private fun RenderDirectivitySection(
                     AngleDial(
                         value = rotationValue,
                         onValueChange = { newValue ->
-                            // Clamp to -180 to 180 using ((x+540)%360)-180
-                            val clamped = ((newValue + 540f) % 360f) - 180f
-                            rotationValue = clamped
+                            // Wrapped into [-180,180), but the parameter runs -179..180: the
+                            // dial's top and a typed 180 came out as -180, which the desktop
+                            // refuses. -180 names the same direction as +180, so fold it up.
+                            val wrapped = ((newValue + 540f) % 360f) - 180f
+                            val degrees = wrapped.roundToInt().let { if (it <= -180) 180 else it }
+                            rotationValue = degrees.toFloat()
                             selectedChannel.setParameter("rotation", InputParameterValue(
-                                normalizedValue = (clamped + 180f) / 360f,
+                                normalizedValue = (degrees + 180f) / 360f,
                                 stringValue = "",
-                                displayValue = "${clamped.toInt()}°"
+                                displayValue = "${degrees}°"
                             ))
-                            viewModel.sendInputParameterInt("/remoteInput/rotation", inputId, clamped.toInt())
+                            viewModel.sendInputParameterInt("/remoteInput/rotation", inputId, degrees)
                         },
                         dialColor = Color.DarkGray,
                         indicatorColor = Color.White,
@@ -2959,14 +2962,16 @@ private fun RenderDirectivitySection(
                         AngleDial(
                             value = rotationValue,
                             onValueChange = { newValue ->
-                                val clamped = ((newValue + 540f) % 360f) - 180f
-                                rotationValue = clamped
+                                // -180 folded up to +180 (see the other layout's rotation dial).
+                                val wrapped = ((newValue + 540f) % 360f) - 180f
+                                val degrees = wrapped.roundToInt().let { if (it <= -180) 180 else it }
+                                rotationValue = degrees.toFloat()
                                 selectedChannel.setParameter("rotation", InputParameterValue(
-                                    normalizedValue = (clamped + 180f) / 360f,
+                                    normalizedValue = (degrees + 180f) / 360f,
                                     stringValue = "",
-                                    displayValue = "${clamped.toInt()}°"
+                                    displayValue = "${degrees}°"
                                 ))
-                                viewModel.sendInputParameterInt("/remoteInput/rotation", inputId, clamped.toInt())
+                                viewModel.sendInputParameterInt("/remoteInput/rotation", inputId, degrees)
                             },
                             dialColor = Color.DarkGray,
                             indicatorColor = Color.White,
