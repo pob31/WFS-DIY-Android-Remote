@@ -433,6 +433,39 @@ All input parameter messages follow this pattern:
 - A desktop that never sends it predates the feature: the Array Adjust MUTE column stays disabled
 - **Example**: `/remote/array/mute 10 0 0 1 0 0 0 0 0 0 0` (array 3 muted)
 
+### Map Geometry (Speakers and Drawn Shapes)
+
+Read-only: the speakers and the outline shapes drawn on the desktop Map, drawn under the
+input markers. All coordinates are origin-relative stage metres, like the input positions.
+Each set is committed only once every chunk / part of one revision has arrived. Sent in
+the state dump, on change and on request (`/remote/map/request`). A desktop that never
+sends them predates the feature: the map simply shows no speakers or shapes. The
+Settings tab can hide either.
+
+```
+/remote/map/speakers <rev:i> <chunk:i> <chunkCount:i> <total:i> [<number:i> <array:i> <x:f> <y:f> <orientation:f>]...
+```
+- Only the outputs the desktop shows on its map (a single speaker by its own map
+  visibility, an array member by its array's); at most 32 per chunk
+- **array**: 0 = single speaker (drawn light grey), 1-10 = array (drawn in the array colour)
+- **orientation**: degrees, 0 = facing the audience (up on screen)
+- An empty set is one chunk with total 0
+
+```
+/remote/map/shapes <rev:i> <count:i>
+/remote/map/shape <rev:i> <index:i> <part:i> <partCount:i> <closed:i> <colourARGB:i> <dashed:i> <lineWidth:f> <labelX:f> <labelY:f> <label:s> [<x:f> <y:f>]...
+```
+- `shapes` is the manifest; each shape comes as one or more `shape` parts of at most 80 points
+- The outline is already flattened (rectangle 4 points, ellipse 48); `closed` 0 = open line
+- **lineWidth**: dp, the same at every zoom; dashes are max(4, 3w) on, max(3, 2w) off
+- **label**: in part 0 only, drawn centred 4 dp above (labelX, labelY)
+
+```
+/remote/map/rev <speakersRev:i> <shapesRev:i>
+```
+- Closes every push and repeats every 2 s; a revision the app does not hold is asked for
+  with `/remote/map/request`
+
 ### Special Commands
 
 #### Find Device
@@ -562,6 +595,15 @@ These messages are sent by the joystick and Z slider controls:
 - Requests server to send all parameters for specified input
 - Sent when user taps "Request" button
 - **Example**: `/remoteInput/inputNumber 5`
+
+### Request Map Geometry
+```
+/remote/map/request <mask:i>
+```
+- **mask**: 1 = speakers, 2 = shapes, 3 = both
+- Sent when `/remote/map/rev` names a set the app does not hold, at most once a second;
+  the desktop answers this tablet only, without a full dump
+- **Example**: `/remote/map/request 3`
 
 ---
 

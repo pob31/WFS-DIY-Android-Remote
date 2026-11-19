@@ -165,6 +165,8 @@ class OscService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val NOTIFICATION_CHANNEL_ID = "OscServiceChannel"
         private const val CONNECTION_TIMEOUT_MS = 6000L
+        // At most one /remote/map/request a second (MapProtocol)
+        private const val MAP_REQUEST_MIN_INTERVAL_MS = 1000L
         // Re-request tuning for a dropped state dump.
         private const val MAX_RESYNC_ATTEMPTS = 3
         private const val RESYNC_SETTLE_MS = 400L   // let trailing bundles land before first check
@@ -363,6 +365,15 @@ class OscService : Service() {
     val arrayMutes: StateFlow<IntArray> = _arrayMutes.asStateFlow()
     private val _arrayMuteKnown = MutableStateFlow(false)
     val arrayMuteKnown: StateFlow<Boolean> = _arrayMuteKnown.asStateFlow()
+
+    // Map geometry from the desktop (MapProtocol): speakers + drawn shapes, read-only.
+    // Kept across a dropped connection (the rig has not moved), cleared with the socket
+    // (the next peer may be another desktop). The assembler runs on the OSC processing
+    // loop only.
+    private val mapAssembler = MapAssembler()
+    private var lastMapRequestMs = 0L
+    private val _mapGeometry = MutableStateFlow(MapGeometry())
+    val mapGeometry: StateFlow<MapGeometry> = _mapGeometry.asStateFlow()
 
     // Visualisation mirroring (protocol v3). Rows arrive throttled to <=10 Hz
     // server-side, so direct StateFlow copy-replace is fine — no queue buffering
@@ -768,6 +779,20 @@ class OscService : Service() {
                     onArrayMuteReceived = { states ->
                         if (!_arrayMutes.value.contentEquals(states)) _arrayMutes.value = states
                         _arrayMuteKnown.value = true
+                    },
+                    onMapReceived = { decoded ->
+                        val now = SystemClock.elapsedRealtime()
+                        if (decoded is MapDecoded.Rev) {
+                            // The 2 s revision repeat: ask for whatever set we do not hold,
+                            // at most once a second (a request answers within ~0.1 s).
+                            val mask = mapAssembler.requestMask(decoded.speakersRev, decoded.shapesRev, now)
+                            if (mask != 0 && now - lastMapRequestMs >= MAP_REQUEST_MIN_INTERVAL_MS) {
+                                lastMapRequestMs = now
+                                sendOscMapRequest(this@OscService, mask)
+                            }
+                        } else if (mapAssembler.accept(decoded, now)) {
+                            _mapGeometry.value = mapAssembler.geometry
+                        }
                     }
                 )
             } catch (e: Exception) {
@@ -1441,6 +1466,9 @@ class OscService : Service() {
             _serverProtocolVersion.value = 0
             endConnectionScopedVisState()
             endConnectionScopedArrayMute()
+            mapAssembler.reset()
+            lastMapRequestMs = 0L
+            _mapGeometry.value = MapGeometry()
             startServer()
         }
     }

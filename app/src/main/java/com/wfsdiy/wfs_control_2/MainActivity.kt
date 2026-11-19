@@ -68,6 +68,8 @@ internal const val KEY_VISIBILITY_STATES_BY_NUMBER = "visibility_states_by_numbe
 internal const val KEY_FIND_DEVICE_PASSWORD = "find_device_password"
 internal const val KEY_PRESSURE_CAL_MIN = "pressure_cal_min"
 internal const val KEY_PRESSURE_CAL_MAX = "pressure_cal_max"
+internal const val KEY_MAP_SHOW_SHAPES = "map_show_shapes"
+internal const val KEY_MAP_SHOW_SPEAKERS = "map_show_speakers"
 
 // Maximum number of inputs the system can handle
 internal const val MAX_INPUTS = 64
@@ -282,6 +284,22 @@ fun loadPressureCalibration(context: Context): Pair<Float, Float> {
     val min = sharedPrefs.getFloat(KEY_PRESSURE_CAL_MIN, 0.1f)
     val max = sharedPrefs.getFloat(KEY_PRESSURE_CAL_MAX, 5.0f)
     return Pair(min, max)
+}
+
+/** Map display switches (Settings tab): the desktop's drawn shapes and its speakers. */
+fun saveMapDisplaySettings(context: Context, showShapes: Boolean, showSpeakers: Boolean) {
+    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    with(sharedPrefs.edit()) {
+        putBoolean(KEY_MAP_SHOW_SHAPES, showShapes)
+        putBoolean(KEY_MAP_SHOW_SPEAKERS, showSpeakers)
+        apply()
+    }
+}
+
+fun loadMapDisplaySettings(context: Context): Pair<Boolean, Boolean> {
+    val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    return Pair(sharedPrefs.getBoolean(KEY_MAP_SHOW_SHAPES, true),
+                sharedPrefs.getBoolean(KEY_MAP_SHOW_SPEAKERS, true))
 }
 
 fun saveAppSettings(context: Context, numberOfInputs: Int, markers: List<Marker>) {
@@ -540,6 +558,13 @@ fun WFSControlApp() {
     var arrayMuteKnown by remember { mutableStateOf(false) }
     LaunchedEffect(viewModel) { viewModel?.arrayMutes?.collect { arrayMutes = it } }
     LaunchedEffect(viewModel) { viewModel?.arrayMuteKnown?.collect { arrayMuteKnown = it } }
+
+    // The desktop's speakers and drawn shapes for the map, and the local switches
+    var mapGeometry by remember { mutableStateOf(MapGeometry()) }
+    LaunchedEffect(viewModel) { viewModel?.mapGeometry?.collect { mapGeometry = it } }
+    val initialMapDisplay = remember { loadMapDisplaySettings(context) }
+    var showMapShapes by remember { mutableStateOf(initialMapDisplay.first) }
+    var showMapSpeakers by remember { mutableStateOf(initialMapDisplay.second) }
 
     val tabs = buildList {
         add(loc("remote.tabs.map"))
@@ -976,6 +1001,9 @@ fun WFSControlApp() {
 
             when (selectedTab) {
                 0 -> InputMapTab(
+                    mapGeometry = mapGeometry,
+                    showMapShapes = showMapShapes,
+                    showMapSpeakers = showMapSpeakers,
                     inventory = channelInventory,
                     markers = markers,
                     refreshTrigger = mapTabVisitCount,
@@ -1131,6 +1159,13 @@ fun WFSControlApp() {
                     } ?: Text(loc("common.loading"), color = Color.White)
                 }
                 settingsTabIndex -> SettingsTab(
+                    showMapShapes = showMapShapes,
+                    showMapSpeakers = showMapSpeakers,
+                    onMapDisplayChange = { shapes, speakers ->
+                        showMapShapes = shapes
+                        showMapSpeakers = speakers
+                        saveMapDisplaySettings(context, shapes, speakers)
+                    },
                     onResetToDefaults = resetToDefaults,
                     onShutdownApp = {
                         // Stop OSC service

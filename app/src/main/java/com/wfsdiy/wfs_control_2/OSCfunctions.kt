@@ -90,6 +90,12 @@ import kotlin.times
 //     per-channel request, a few times, so its label and spread bar appear. WFS-DIY
 //     1.0.0beta50 also repeats /remote/channelList every 2 s; an unchanged repeat is
 //     applied as a no-op. Nothing new on the wire.
+// Still v4: the map shows the desktop's speakers and the outline shapes drawn on its
+//     Map (MapProtocol), read-only: /remote/map/speakers, /remote/map/shapes and
+//     /remote/map/shape in the dump, on change and on request, /remote/map/rev every
+//     2 s; a revision we do not hold gets /remote/map/request (",i" mask: 1 speakers,
+//     2 shapes), at most once a second. An older desktop sends none of it, so the map
+//     simply has no speakers or shapes, and would drop the request at its catch-all.
 const val REMOTE_PROTOCOL_VERSION = 4
 
 fun getPaddedBytes(input: String, charsets: java.nio.charset.Charset = Charsets.UTF_8): ByteArray {
@@ -1209,6 +1215,10 @@ typealias OscChannelListCallback = (channels: List<ChannelInfo>) -> Unit
 // /remote/array/mute, already decoded: exactly ArrayMuteProtocol.NUM_ARRAYS states, 1 = muted.
 typealias OscArrayMuteCallback = (states: IntArray) -> Unit
 
+// /remote/map/* (MapProtocol), already decoded: a revision, a speaker chunk, a shape
+// manifest or a shape part.
+typealias OscMapCallback = (decoded: MapDecoded) -> Unit
+
 // A dropped /remote/vis/* message used to vanish without a trace, which is how an
 // over-cap rig could leave the tab on "Waiting for data…" with nothing to show why.
 // Log each rejection, but at most once per address every 5 s: rows arrive at up to
@@ -1270,7 +1280,8 @@ fun parseAndProcessOscPacket(
     onVisDelaysReceived: OscVisRowCallback? = null,
     onVisLevelsReceived: OscVisRowCallback? = null,
     onChannelListReceived: OscChannelListCallback? = null,
-    onArrayMuteReceived: OscArrayMuteCallback? = null
+    onArrayMuteReceived: OscArrayMuteCallback? = null,
+    onMapReceived: OscMapCallback? = null
 ) {
     if (data.isEmpty()) {
         return
@@ -1317,7 +1328,8 @@ fun parseAndProcessOscPacket(
                     onVisConfigReceived, onVisOutputArraysReceived,
                     onVisSelectionReceived, onVisDelaysReceived, onVisLevelsReceived,
                     onChannelListReceived,
-                    onArrayMuteReceived
+                    onArrayMuteReceived,
+                    onMapReceived
                 )
             }
         } catch (e: Exception) {
@@ -1799,6 +1811,12 @@ fun parseAndProcessOscPacket(
                 // ",i" + N ints: count, then 0/1 per array (desktop session state)
                 ArrayMuteProtocol.decode(buffer)?.let { onArrayMuteReceived?.invoke(it) }
             }
+            MapProtocol.isMapAddress(address) -> {
+                // Speakers and drawn shapes for the map (read-only)
+                val decoded = MapProtocol.decode(address, buffer)
+                if (decoded != null) onMapReceived?.invoke(decoded)
+                else logVisRejected(address, "malformed map geometry")
+            }
             else -> {
 
             }
@@ -1850,7 +1868,8 @@ suspend fun startOscServer(
     onVisDelaysReceived: OscVisRowCallback? = null,
     onVisLevelsReceived: OscVisRowCallback? = null,
     onChannelListReceived: OscChannelListCallback? = null,
-    onArrayMuteReceived: OscArrayMuteCallback? = null
+    onArrayMuteReceived: OscArrayMuteCallback? = null,
+    onMapReceived: OscMapCallback? = null
 ) {
     var serverSocket: DatagramSocket? = null
     try {
@@ -1949,7 +1968,8 @@ suspend fun startOscServer(
                         onVisDelaysReceived,
                         onVisLevelsReceived,
                         onChannelListReceived,
-                        onArrayMuteReceived
+                        onArrayMuteReceived,
+                        onMapReceived
                     )
                 } catch (e: Exception) {
                     // Ignore malformed packets
@@ -2194,6 +2214,24 @@ fun sendOscArrayMute(context: Context, arrayId: Int, muted: Boolean) {
                 return@launch
             val oscPacketBytes = getPaddedBytes(ArrayMuteProtocol.OUTGOING) +
                     getPaddedBytes(",ii") + arrayId.toBytesBigEndian() + (if (muted) 1 else 0).toBytesBigEndian()
+            DatagramSocket().use { socket ->
+                socket.send(DatagramPacket(oscPacketBytes, oscPacketBytes.size,
+                    InetAddress.getByName(ipAddressStr), outgoingPort))
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+}
+
+/** /remote/map/request ",i": ask the desktop for the map sets in [mask] (MapProtocol). */
+fun sendOscMapRequest(context: Context, mask: Int) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val (_, outgoingPortStr, ipAddressStr) = loadNetworkParameters(context)
+            val outgoingPort = outgoingPortStr.toIntOrNull() ?: return@launch
+            if (!isValidPort(outgoingPortStr) || ipAddressStr.isBlank() || !isValidIpAddress(ipAddressStr))
+                return@launch
+            val oscPacketBytes = getPaddedBytes(MapProtocol.REQUEST) +
+                    getPaddedBytes(",i") + mask.toBytesBigEndian()
             DatagramSocket().use { socket ->
                 socket.send(DatagramPacket(oscPacketBytes, oscPacketBytes.size,
                     InetAddress.getByName(ipAddressStr), outgoingPort))

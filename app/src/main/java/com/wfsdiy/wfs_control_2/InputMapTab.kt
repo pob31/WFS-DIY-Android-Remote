@@ -396,7 +396,12 @@ fun InputMapTab(
     onStereoTouchEnabledChange: (Boolean) -> Unit = {},
     onStereoWidthChanged: ((inputId: Int, width: Float) -> Unit)? = null,
     onStereoAxisChanged: ((inputId: Int, axisOffset: Int) -> Unit)? = null,
-    onStereoGestureEnd: ((inputId: Int, width: Float, axisOffset: Int) -> Unit)? = null  // the last pair, sent once more unthrottled
+    onStereoGestureEnd: ((inputId: Int, width: Float, axisOffset: Int) -> Unit)? = null,  // the last pair, sent once more unthrottled
+    // The desktop's speakers and drawn shapes (MapProtocol), read-only, drawn under the
+    // markers; each can be hidden from the Settings tab. Plain draw inputs: never keys.
+    mapGeometry: MapGeometry = MapGeometry(),
+    showMapShapes: Boolean = true,
+    showMapSpeakers: Boolean = true
 ) {
     val context = LocalContext.current
     val draggingMarkers = remember { mutableStateMapOf<Long, Int>() }
@@ -2248,6 +2253,21 @@ fun InputMapTab(
                 actualViewWidth = actualViewWidth,
                 actualViewHeight = actualViewHeight
             )
+
+            // The desktop's drawn shapes, then its speakers, both under every marker
+            // (as on the desktop Map). Origin-relative stage metres, like the inputs.
+            if ((showMapShapes && mapGeometry.shapes.isNotEmpty()) ||
+                (showMapSpeakers && mapGeometry.speakers.isNotEmpty())) {
+                val mapToCanvas: (Float, Float) -> Offset = { x, y ->
+                    stageToCanvasPosition(
+                        x, y, stageWidth, stageDepth, stageOriginX, stageOriginY,
+                        canvasWidth, canvasHeight, markerRadius, panOffsetX, panOffsetY,
+                        actualViewWidth, actualViewHeight
+                    )
+                }
+                if (showMapShapes) drawMapShapes(mapGeometry.shapes, mapToCanvas)
+                if (showMapSpeakers) drawMapSpeakers(mapGeometry.speakers, markerRadius, mapToCanvas)
+            }
 
             // Draw vector control lines for secondary touches
             vectorControls.values.forEach { vectorControl ->

@@ -71,7 +71,10 @@
       "calibrate": "Calibrer",
       "save": "Enregistrer",
       "cancel": "Annuler",
-      "reset": "Réinitialiser"
+      "reset": "Réinitialiser",
+      "mapDisplay": "Affichage de la carte",
+      "mapShowShapes": "Formes dessinées",
+      "mapShowSpeakers": "Haut-parleurs"
     },
 
     "lock": {

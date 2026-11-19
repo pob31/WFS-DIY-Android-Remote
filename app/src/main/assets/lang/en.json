@@ -71,7 +71,10 @@
       "calibrate": "Calibrate",
       "save": "Save",
       "cancel": "Cancel",
-      "reset": "Reset"
+      "reset": "Reset",
+      "mapDisplay": "Map display",
+      "mapShowShapes": "Drawn shapes",
+      "mapShowSpeakers": "Speakers"
     },
 
     "lock": {

@@ -10,6 +10,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -28,7 +29,10 @@ import com.wfsdiy.wfs_control_2.localization.loc
 fun SettingsTab(
     onResetToDefaults: () -> Unit,
     onShutdownApp: () -> Unit,
-    onNetworkParametersChanged: (() -> Unit)? = null
+    onNetworkParametersChanged: (() -> Unit)? = null,
+    showMapShapes: Boolean = true,
+    showMapSpeakers: Boolean = true,
+    onMapDisplayChange: (shapes: Boolean, speakers: Boolean) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     var showResetDialog by remember { mutableStateOf(false) }
@@ -111,6 +115,35 @@ fun SettingsTab(
                         LocalizationManager.loadLanguage(context, code)
                     }
                 )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Map display: the desktop's drawn shapes and speakers (local choice, saved)
+            Column(modifier = Modifier.fillMaxWidth(0.8f)) {
+                Text(loc("remote.settings.mapDisplay"), color = Color.White)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Switch(
+                            checked = showMapShapes,
+                            onCheckedChange = { onMapDisplayChange(it, showMapSpeakers) }
+                        )
+                        Text(loc("remote.settings.mapShowShapes"), color = Color.White,
+                            modifier = Modifier.padding(start = 8.dp))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Switch(
+                            checked = showMapSpeakers,
+                            onCheckedChange = { onMapDisplayChange(showMapShapes, it) }
+                        )
+                        Text(loc("remote.settings.mapShowSpeakers"), color = Color.White,
+                            modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
