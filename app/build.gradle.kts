@@ -8,8 +8,8 @@ plugins {
 // places to state it and they drifted: archivesName was still saying beta_10 after
 // versionName moved to beta_11, so a correctly-versioned build shipped under the old
 // name. Deriving the archive name means that cannot happen again.
-val appVersionCode = 14
-val appVersionName = "1.0-beta_14"
+val appVersionCode = 15
+val appVersionName = "1.0-beta_15"
 
 base {
     archivesName.set("wfs-control-$appVersionName")
